@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>com.heliosapm.jmx</groupId>
+	<artifactId>helios-jmx</artifactId>
+	<packaging>jar</packaging>
+	<version>1.0-SNAPSHOT</version>
+	<name>HeliosJMX</name>
+	<properties>
+  	<!-- Misc -->
+ 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+ 		<compiler-source.version>1.7</compiler-source.version>
+ 		<compiler-target.version>1.7</compiler-target.version>
+ 		<!-- Dependencies -->
+		<chronicle.version>1.2-SNAPSHOT</chronicle.version>
+		<json.version>20090211</json.version>
+		<junit.version>4.8.2</junit.version>
+		<snmp4j.version>1.9.1f</snmp4j.version>
+		<netty.version>3.9.4.Final</netty.version>
+		<nash.version>1.0-SNAPSHOT</nash.version>
+		<sigar.version>1.6.4</sigar.version>
+		<rrd4j.version>2.2-SNAPSHOT</rrd4j.version>
+		<h2.version>1.3.168</h2.version>
+		<spring.version>3.0.7.RELEASE</spring.version>
+		<gson.version>2.2.2</gson.version>
+		<groovy.version>2.0.1</groovy.version>
+		<spring.version>2.5.6</spring.version>
+		<jmx-optional.version>1.0-b02-SNAPSHOT</jmx-optional.version>
+		<high-scale-lib.version>1.1.4</high-scale-lib.version>
+		<log4j.version>1.2.16</log4j.version>
+		<javassist.version>3.18.0-GA</javassist.version>
+		<ganymed.version>262</ganymed.version>
+		<slf4j.version>1.7.2</slf4j.version>
+		<logback.version>1.1.2</logback.version>
+
+		<!-- Plugin Versions -->
+		<jar-plugin.version>2.3</jar-plugin.version>
+		<source-plugin.version>2.2</source-plugin.version>
+		<javadoc-plugin.version>2.9</javadoc-plugin.version>
+		<jar-plugin.version>2.4</jar-plugin.version>
+		<eclipse-plugin.version>2.9</eclipse-plugin.version>
+		<surefire.version>2.16</surefire.version>
+		<cobertura.version>2.5.1</cobertura.version>
+		<shade.version>2.1</shade.version>
+	</properties>
+	
+	
+	<dependencies>
+		<!--   TEST   -->
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>${junit.version}</version>
+		</dependency>
+
+		<!-- Runtime -->
+			<dependency>
+			  <groupId>com.sun.jdmk</groupId>
+			  <artifactId>jmx-optional</artifactId>
+			  <version>${jmx-optional.version}</version>
+			</dependency>
+
+
+			<dependency>
+			  <groupId>ch.ethz.ganymed</groupId>
+			  <artifactId>ganymed-ssh2</artifactId>
+			  <version>${ganymed.version}</version>
+			</dependency>
+
+			<dependency>
+			  <groupId>com.github.stephenc.high-scale-lib</groupId>
+			  <artifactId>high-scale-lib</artifactId>
+			  <version>${high-scale-lib.version}</version>
+			</dependency>
+
+		
+		<dependency>
+		  <groupId>org.slf4j</groupId>
+		  <artifactId>slf4j-api</artifactId>
+		  <version>${slf4j.version}</version>
+		</dependency>
+		
+		<dependency>
+		  <groupId>ch.qos.logback</groupId>
+		  <artifactId>logback-core</artifactId>
+		  <version>${logback.version}</version>
+		</dependency>
+
+		<dependency>
+		  <groupId>ch.qos.logback</groupId>
+		  <artifactId>logback-classic</artifactId>
+		  <version>${logback.version}</version>
+		</dependency>
+			
+      <dependency>
+		<groupId>io.netty</groupId>
+		<artifactId>netty</artifactId>
+		<version>${netty.version}</version>
+      </dependency>
+			
+		
+	</dependencies>
+	<build>
+		<defaultGoal>install</defaultGoal>
+		<plugins>
+
+		    <plugin>
+			<groupId>org.apache.maven.plugins</groupId>
+			<artifactId>maven-eclipse-plugin</artifactId>
+			<version>${eclipse-plugin.version}</version>
+			<configuration>
+			    <downloadJavadocs>true</downloadJavadocs>
+			    <downloadSources>true</downloadSources>
+			    <classpathContainers>
+				<classpathContainer>
+			org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.7
+				</classpathContainer>
+			    </classpathContainers>
+			</configuration>
+		    </plugin>
+			
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>2.0.2</version>
+				<configuration>
+					<source>1.7</source>
+					<target>1.7</target>
+				</configuration>
+			</plugin>
+		       <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-eclipse-plugin</artifactId>
+                </plugin>
+		
+		
+		
+		
+		            	<plugin>
+		  <groupId>org.apache.maven.plugins</groupId>
+		  <artifactId>maven-jar-plugin</artifactId>		
+		  <configuration>
+		      <archive>
+			  <manifest>
+			      <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+			      <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+			      <addClasspath>true</addClasspath>
+			  </manifest>
+			  <manifestEntries>
+			  		<!--
+				    		<Main-Class>org.helios.apmrouter.Agent</Main-Class> 
+				    		<Premain-Class>org.helios.apmrouter.Agent</Premain-Class>
+			            	<Agent-Class>org.helios.apmrouter.Agent</Agent-Class>
+			            	<Can-Redefine-Classes>true</Can-Redefine-Classes>
+			            	<Can-Retransform-Classes>true</Can-Retransform-Classes>
+			            	<Can-Set-Native-Method-Prefix>true</Can-Set-Native-Method-Prefix>				    
+			        -->
+			  </manifestEntries>
+		      </archive>
+		  </configuration>
+            	</plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>${shade.version}</version>
+            <executions>
+                <execution>
+                  <phase>package</phase>
+                  <goals>
+                    <goal>shade</goal>
+                  </goals>
+                  <configuration>
+                    <artifactSet>
+                      <excludes>
+                      	<exclude>log4j:log4j:jar:</exclude>
+                      	<exclude>org.javassist:javassist:jar:</exclude>
+                      </excludes>
+                      <includes>
+                        
+                      </includes>
+                    </artifactSet>
+              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+              <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+            <includePluginDependencies>false</includePluginDependencies>
+            <transformers>
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">                        
+                      </transformer>
+                    </transformers>
+                  </configuration>
+                </execution>
+              </executions>
+            </plugin>     
+            	
+			
+		</plugins>
+	</build>
+</project>

@@ -1,0 +1,5 @@
+prstat -p <PID> 1 1
+vmstat
+mpstat
+
+
