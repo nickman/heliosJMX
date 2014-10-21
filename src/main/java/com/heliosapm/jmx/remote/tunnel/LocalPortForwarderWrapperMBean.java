@@ -24,6 +24,8 @@
  */
 package com.heliosapm.jmx.remote.tunnel;
 
+import javax.management.MXBean;
+
 /**
  * <p>Title: LocalPortForwarderWrapperMBean</p>
  * <p>Description: JMX MBean interface for {@link LocalPortForwarderWrapper}s</p> 
@@ -31,7 +33,7 @@ package com.heliosapm.jmx.remote.tunnel;
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.jmx.remote.tunnel.LocalPortForwarderWrapperMBean</code></p>
  */
-
+@MXBean
 public interface LocalPortForwarderWrapperMBean {
 	
 	/**

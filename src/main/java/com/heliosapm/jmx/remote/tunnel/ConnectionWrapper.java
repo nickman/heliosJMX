@@ -39,6 +39,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.management.ObjectName;
+
 import ch.ethz.ssh2.Connection;
 import ch.ethz.ssh2.ConnectionInfo;
 import ch.ethz.ssh2.ConnectionMonitor;
@@ -52,6 +54,8 @@ import ch.ethz.ssh2.Session;
 import ch.ethz.ssh2.auth.AgentProxy;
 import ch.ethz.ssh2.transport.ClientTransportManager;
 
+import com.heliosapm.SimpleLogger;
+import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.remote.CloseListener;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 
@@ -82,6 +86,11 @@ public class ConnectionWrapper implements ConnectionWrapperMBean, Closeable, Con
 	protected final Set<CloseListener<ConnectionWrapper>> closeListeners = new CopyOnWriteArraySet<CloseListener<ConnectionWrapper>>();
 	/** The usage count */
 	protected final AtomicInteger usage = new AtomicInteger(0);
+	
+	private static final SLogger LOG = SimpleLogger.logger(ConnectionWrapper.class);
+	
+	/** The JMX ObjectName this connection is registered as */
+	final ObjectName objectName;
 	
 	
 	/** The connection's transport manager field name */
@@ -123,6 +132,7 @@ public class ConnectionWrapper implements ConnectionWrapperMBean, Closeable, Con
 		host = null;
 		connection = null;
 		closeOnZeroUsage = false;
+		objectName = null;
 	}
 	
 	
@@ -153,15 +163,17 @@ public class ConnectionWrapper implements ConnectionWrapperMBean, Closeable, Con
 			if(o instanceof ClientTransportManager) {
 				ClientTransportManager ctm = (ClientTransportManager)o;
 				socket = (Socket)sock.get(ctm);
-				JMXHelper.registerMBean(this, JMXHelper.objectName(new StringBuilder(getClass().getPackage().getName()).append(":")
+				objectName = JMXHelper.objectName(new StringBuilder(getClass().getPackage().getName()).append(":")
 						.append("service=").append("SSHConnection")
 						.append(",host=").append(getHostname())
 						.append(",port=").append(getPort())
-				));
+				);
+				JMXHelper.registerMBean(this, objectName);
 			} else {
 				// this only happens if an older version of ganymed snuck into the classpath
 				log("CTM Class Source: %s", o.getClass().getProtectionDomain().getCodeSource().getLocation());
 				socket = null;
+				objectName = null;
 			}
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to get connection socket", ex);
@@ -208,17 +220,18 @@ public class ConnectionWrapper implements ConnectionWrapperMBean, Closeable, Con
 		final LocalPortForwarderWrapper lpfw = localPortForwarderWrapper;
 		this.incrUsage();
 		lpfw.incrUsage();
-		return new TunnelHandle() {
-			@Override
-			public void close() throws IOException {
-				lpfw.decrUsage();
-				self.decrUsage();					
-			}
-			@Override
-			public int getLocalPort() {
-				return lpfw.getLocalPort();
-			}
-		};
+		return lpfw;
+//		return new TunnelHandle() {
+//			@Override
+//			public void close() throws IOException {
+//				lpfw.decrUsage();
+//				self.decrUsage();					
+//			}
+//			@Override
+//			public int getLocalPort() {
+//				return lpfw.getLocalPort();
+//			}
+//		};
 		
 	}
 	
@@ -291,7 +304,10 @@ public class ConnectionWrapper implements ConnectionWrapperMBean, Closeable, Con
 			try {
 				connection.close();
 			} catch (Exception ex) {/* No Op */}
-		}		
+		}	
+		try {
+			JMXHelper.unregisterMBean(objectName);
+		} catch (Exception ex) {/* No Op */}
 	}
 	
 	/**
@@ -347,10 +363,13 @@ public class ConnectionWrapper implements ConnectionWrapperMBean, Closeable, Con
 		if(reason!=null) {
 			reason.printStackTrace(System.err);
 		}
+		int closedTunnels = 0;
 		for(LocalPortForwarderWrapper lpfw: tunnels.values()) {
 			try { lpfw.close(); } catch (Exception x) {/* No Op */}
+			closedTunnels++;
 		}
 		tunnels.clear();
+		LOG.log("\n\t===============================\n\tCleared [%s] Tunnels\n\t===============================\n", closedTunnels);
 	}
 
 	/**
@@ -440,7 +459,7 @@ public class ConnectionWrapper implements ConnectionWrapperMBean, Closeable, Con
 	 * @return a handle to the local port forwarder
 	 * @throws IOException thrown on any IO error
 	 */
-	public TunnelHandle createLocalPortForwarder(int local_port,
+	public TunnelHandle localPortForwarder(int local_port,
 			String host_to_connect, int port_to_connect) throws IOException {
 		return tunnel(host_to_connect, port_to_connect, local_port);
 	}
@@ -453,10 +472,17 @@ public class ConnectionWrapper implements ConnectionWrapperMBean, Closeable, Con
 	 * @return a handle to the local port forwarder
 	 * @throws IOException thrown on any IO error
 	 */
-	public TunnelHandle createLocalPortForwarder(InetSocketAddress addr,
+	public TunnelHandle localPortForwarder(InetSocketAddress addr,
 			String host_to_connect, int port_to_connect) throws IOException {
 		return tunnel(host_to_connect, port_to_connect, addr.getPort());
 	}
+	
+	
+	
+	
+	
+	
+	
 
 	public LocalStreamForwarder createLocalStreamForwarder(
 			String host_to_connect, int port_to_connect) throws IOException {

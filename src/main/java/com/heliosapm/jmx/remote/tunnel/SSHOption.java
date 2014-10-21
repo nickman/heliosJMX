@@ -77,9 +77,9 @@ public enum SSHOption {
 	/** The delegate-protocol, which for right now is only "jmxmp" */
 	DELPROTO("delproto", ClientProvider.PROTOCOL_NAME + ".delproto", "jmxmp", OptionReaders.STRING_READER),
 	/** The SSH connection timeout, non-negative, in millisecondsm where zero is no timeout */
-	SSHTO("to", ClientProvider.PROTOCOL_NAME + ".timeout", 1000, OptionReaders.INT_READER),
+	SSHTO("to", ClientProvider.PROTOCOL_NAME + ".timeout", 10000, OptionReaders.INT_READER),
 	/** The SSH key exchange timeout, non-negative, in millisecondsm where zero is no timeout */
-	SSHKTO("kto", ClientProvider.PROTOCOL_NAME + ".kextimeout", 1000, OptionReaders.INT_READER);
+	SSHKTO("kto", ClientProvider.PROTOCOL_NAME + ".kextimeout", 2000, OptionReaders.INT_READER);
 	
 	
 	/**

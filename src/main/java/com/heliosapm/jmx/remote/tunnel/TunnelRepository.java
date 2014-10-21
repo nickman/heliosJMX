@@ -165,13 +165,8 @@ public class TunnelRepository {
 					if(tunnel == null) {
 						ConnectionWrapper cw = _connect(tunnelConnector);
 						try {
-							
-							LocalPortForwarder lpw = cw.connection.createLocalPortForwarder(localPort, jmxHost, jmxPort); 
-							tunnel = new LocalPortForwarderWrapper(
-									lpw,
-									jmxHost, jmxPort, true
-							);
-							localPort = lpw.getLocalSocketAddress().getPort();
+							tunnel = (LocalPortForwarderWrapper) cw.localPortForwarder(localPort, jmxHost, jmxPort);
+							localPort = tunnel.getLocalSocketAddress().getPort();
 							LOG.log("Created Tunnel [%s:%s:%s]", tunnel.getLocalPort(), jmxHost, jmxPort);
 							registerTunnel(tunnel);
 						} catch (IOException e) {
@@ -189,10 +184,7 @@ public class TunnelRepository {
 					if(tunnel == null) {
 						ConnectionWrapper cw = _connect(tunnelConnector);
 						try {
-							tunnel = new LocalPortForwarderWrapper(
-									cw.connection.createLocalPortForwarder(localPort, jmxHost, jmxPort),
-									jmxHost, jmxPort, true
-							);
+							tunnel = (LocalPortForwarderWrapper) cw.localPortForwarder(localPort, jmxHost, jmxPort);
 							registerTunnel(tunnel);
 						} catch (IOException e) {
 							throw new RuntimeException("Failed to tunnel to [" + jmxHost + ":" + jmxPort + "] with local port [" + localPort + "]", e);
@@ -212,13 +204,17 @@ public class TunnelRepository {
 	 * Registers a newly established connection
 	 * @param conn the connection to register
 	 */
-	protected void registerConnection(ConnectionWrapper conn) {
-		connectionsByAddress.put(addressKey(conn), conn);
+	protected void registerConnection(final ConnectionWrapper conn) {
+		final String key = addressKey(conn);
+		connectionsByAddress.put(key, conn);
 		conn.addConnectionMonitor(new ConnectionMonitor() {
 			@Override
-			public void connectionLost(Throwable reason) {
-				// TODO Auto-generated method stub
-				
+			public void connectionLost(final Throwable reason) {
+				LOG.loge("Connection Lost.\nConnection:%s\nReason: %s", conn, reason);
+				conn.connectionLost(reason);
+				try { conn.close(); } catch (Exception x) {/* No Op */}
+				Object rem = connectionsByAddress.remove(key);
+				LOG.loge("Removed Connection [%s]", rem);
 			}
 		});
 	}

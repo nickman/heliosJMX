@@ -25,16 +25,22 @@
 package com.heliosapm.jmx.remote.service;
 
 import java.lang.management.ManagementFactory;
+import java.util.Date;
+import java.util.concurrent.CountDownLatch;
 
 import javax.management.MBeanServerConnection;
+import javax.management.MBeanServerInvocationHandler;
+import javax.management.Notification;
+import javax.management.NotificationListener;
 import javax.management.ObjectName;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
-import javax.management.remote.JMXConnectorServerFactory;
 import javax.management.remote.JMXServiceURL;
+import javax.management.timer.TimerMBean;
 
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
+import com.heliosapm.jmx.util.helpers.JMXHelper;
 
 /**
  * <p>Title: TestClient</p>
@@ -139,17 +145,58 @@ public class TestClient {
 		JMXConnector connector = null;
 		MBeanServerConnection conn = null;
 		//JMXMPConnectorServer server  = new JMXMPConnectorServer(ManagementFactory.getPlatformMBeanServer());
-		
+		final ObjectName CLIENT_TIMER = JMXHelper.objectName("com.onexchange.jmx.remote:service=Timer");
 		try {
-			JMXConnectorServerFactory.newJMXConnectorServer(new JMXServiceURL("service:jmx:jmxmp://0.0.0.0:8010"), null, ManagementFactory.getPlatformMBeanServer()).start();
-//			JMXServiceURL surl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18089/ssh/jmxmp:");
+//			JMXConnectorServerFactory.newJMXConnectorServer(new JMXServiceURL("service:jmx:jmxmp://0.0.0.0:8010"), null, ManagementFactory.getPlatformMBeanServer()).start();
+			JMXServiceURL surl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18088/ssh/jmxmp:");
+			final CountDownLatch latch = new CountDownLatch(1);
 //			JMXServiceURL surl = new JMXServiceURL("service:jmx:tunnel://njwmintx:8006/ssh/jmxmp:");
-			JMXServiceURL surl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:u=nwhitehe,p=mysol!1");
+//			JMXServiceURL surl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:u=nwhitehe,p=mysol!1");
 		    connector = JMXConnectorFactory.connect(surl);
+		    connector.addConnectionNotificationListener(new NotificationListener(){
+		    	/**
+		    	 * {@inheritDoc}
+		    	 * @see javax.management.NotificationListener#handleNotification(javax.management.Notification, java.lang.Object)
+		    	 */
+		    	@Override
+		    	public void handleNotification(Notification notification, Object handback) {
+		    		LOG.loge("Notification at [%s]. Notif:\n%s", new Date(), notification);
+		    		latch.countDown();
+		    	}
+		    }, null, null);
 		    conn = connector.getMBeanServerConnection();
 		    String runtime = conn.getAttribute(new ObjectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name").toString();
-		    LOG.log("Runtime: [%s]", runtime);
-		    Thread.currentThread().join();
+		    LOG.log("Connected at [%s]. Runtime: [%s]", new Date(), runtime);
+		    if(!conn.isRegistered(CLIENT_TIMER)) {
+		    	conn.createMBean("javax.management.timer.Timer", CLIENT_TIMER);
+		    	conn.invoke(CLIENT_TIMER, "start", new Object[]{}, new String[]{});
+		    }
+		    TimerMBean timer = MBeanServerInvocationHandler.newProxyInstance(conn, CLIENT_TIMER, TimerMBean.class, true);
+		    int timerId =  	timer.addNotification("jmx.remote.keepalive", "keepalive", null, new Date(System.currentTimeMillis()+10000), 10000, Long.MAX_VALUE, true);
+		    conn.addNotificationListener(CLIENT_TIMER, new NotificationListener(){
+		    	public void handleNotification(Notification n, Object handback) {
+		    		LOG.log("Timer Notif [type: %s, class: %s, msg: %s, seq: %s, src: %s]", 
+		    			n.getType(),
+		    			n.getClass().getName(),
+		    			n.getMessage(),
+		    			n.getSequenceNumber(),
+		    			n.getSource()
+		    		);
+		    	}
+		    }, null, null);
+		    latch.await();
+		    LOG.loge("DISCONNECTED");
+		    Thread.currentThread().join(2000);
+		    LOG.log("Attempting Reconnect....");
+		    try {
+		    	connector.close();
+		    } catch (Exception x) {/* No Op */}
+		    connector = JMXConnectorFactory.connect(surl);
+		    conn = connector.getMBeanServerConnection();
+		    runtime = conn.getAttribute(new ObjectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name").toString();
+		    LOG.log("Connected at [%s]. Runtime: [%s]", new Date(), runtime);
+		    
+//		    Thread.currentThread().join();
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
 		} finally {

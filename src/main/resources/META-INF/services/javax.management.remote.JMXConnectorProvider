@@ -1,4 +1,4 @@
 com.heliosapm.jmx.remote.protocol.tunnel.ClientProvider
-com.sun.jmx.remote.protocol.jmxmp.ClientProvider
 com.heliosapm.jmx.remote.protocol.local.ClientProvider
 com.heliosapm.jmx.remote.protocol.attach.ClientProvider
+com.sun.jmx.remote.protocol.jmxmp.ClientProvider

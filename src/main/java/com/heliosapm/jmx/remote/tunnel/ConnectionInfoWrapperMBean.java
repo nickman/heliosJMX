@@ -1,5 +1,8 @@
 package com.heliosapm.jmx.remote.tunnel;
 
+import javax.management.MXBean;
+
+@MXBean
 public interface ConnectionInfoWrapperMBean {
 
 	/**
