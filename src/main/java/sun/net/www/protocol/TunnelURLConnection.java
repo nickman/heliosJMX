@@ -28,9 +28,9 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLConnection;
 
-import org.helios.jmx.remote.tunnel.SSHTunnelConnector;
-import org.helios.jmx.remote.tunnel.TunnelHandle;
-import org.helios.jmx.remote.tunnel.TunnelRepository;
+import com.heliosapm.jmx.remote.tunnel.SSHTunnelConnector;
+import com.heliosapm.jmx.remote.tunnel.TunnelHandle;
+import com.heliosapm.jmx.remote.tunnel.TunnelRepository;
 
 /**
  * <p>Title: TunnelURLConnection</p>

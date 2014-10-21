@@ -34,7 +34,7 @@ import java.net.Socket;
  * <p>Description: </p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>org.helios.jmx.remote.tunnel.instrument.InstrumentedStreamForwarder</code></p>
+ * <p><code>com.heliosapm.jmx.remote.tunnel.instrument.InstrumentedStreamForwarder</code></p>
  */
 
 public class InstrumentedStreamForwarder extends Thread {

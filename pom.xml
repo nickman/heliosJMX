@@ -15,6 +15,7 @@
 		<chronicle.version>1.2-SNAPSHOT</chronicle.version>
 		<json.version>20090211</json.version>
 		<junit.version>4.8.2</junit.version>
+		<trove.version>3.0.0</trove.version>
 		<snmp4j.version>1.9.1f</snmp4j.version>
 		<netty.version>3.9.4.Final</netty.version>
 		<nash.version>1.0-SNAPSHOT</nash.version>
@@ -72,6 +73,13 @@
 			  <artifactId>high-scale-lib</artifactId>
 			  <version>${high-scale-lib.version}</version>
 			</dependency>
+			
+			<dependency>
+				<groupId>trove</groupId>
+				<artifactId>trove</artifactId>
+				<version>${trove.version}</version>
+			</dependency>
+			
 
 		
 		<dependency>
@@ -128,17 +136,10 @@
 					<target>1.7</target>
 				</configuration>
 			</plugin>
-		       <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-eclipse-plugin</artifactId>
-                </plugin>
-		
-		
-		
-		
-		            	<plugin>
+       	<plugin>
 		  <groupId>org.apache.maven.plugins</groupId>
-		  <artifactId>maven-jar-plugin</artifactId>		
+		  <artifactId>maven-jar-plugin</artifactId>
+		  <version>${jar-plugin.version}</version>		
 		  <configuration>
 		      <archive>
 			  <manifest>

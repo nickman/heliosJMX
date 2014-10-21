@@ -4,12 +4,12 @@
  */
 package com.heliosapm.jmx.util.helpers;
 
-import org.helios.jmx.remote.tunnel.TunnelRepository;
 import org.w3c.dom.*;
 import org.xml.sax.InputSource;
 
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
+import com.heliosapm.jmx.remote.tunnel.TunnelRepository;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;

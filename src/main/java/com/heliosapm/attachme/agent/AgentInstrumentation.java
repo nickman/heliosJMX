@@ -40,10 +40,9 @@ import javax.management.MBeanServer;
 import javax.management.NotificationBroadcasterSupport;
 import javax.management.ObjectName;
 
-import org.helios.jmx.remote.service.TestClient;
-
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
+import com.heliosapm.jmx.remote.service.TestClient;
 
 /**
  * <p>Title: AgentInstrumentation</p>
