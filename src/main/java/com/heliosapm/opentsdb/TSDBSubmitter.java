@@ -39,6 +39,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -56,7 +57,6 @@ import org.jboss.netty.buffer.DirectChannelBufferFactory;
 
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
-import com.heliosapm.jmx.remote.service.TestClient;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.StringHelper;
 
@@ -134,6 +134,8 @@ public class TSDBSubmitter {
 	protected InputStream is = null;
 	/** The buffer for incoming data */
 	protected final ChannelBuffer dataBuffer = ChannelBuffers.dynamicBuffer(bufferFactory);
+	/** A counter of traces between each flush */
+	protected final AtomicInteger traceCount = new AtomicInteger(0);
 	
 	/** The default socket send buffer size in bytes */
 	public static final int DEFAULT_SEND_BUFFER_SIZE;
@@ -315,6 +317,7 @@ public class TSDBSubmitter {
 		final byte[] trace = b.deleteCharAt(b.length()-1).append("\n").toString().getBytes(CHARSET);
 		synchronized(dataBuffer) {
 			dataBuffer.writeBytes(trace);
+			traceCount.incrementAndGet();
 		}
 	}
 	
@@ -337,6 +340,7 @@ public class TSDBSubmitter {
 		final byte[] trace = s.getBytes(CHARSET);		
 		synchronized(dataBuffer) {
 			dataBuffer.writeBytes(trace);
+			traceCount.incrementAndGet();
 		}
 	}
 	
@@ -377,6 +381,7 @@ public class TSDBSubmitter {
 		final byte[] trace = s.getBytes(CHARSET);
 		synchronized(dataBuffer) {
 			dataBuffer.writeBytes(trace);
+			traceCount.incrementAndGet();
 		}
 	}
 	
@@ -398,6 +403,7 @@ public class TSDBSubmitter {
 		final byte[] trace = s.getBytes(CHARSET);
 		synchronized(dataBuffer) {
 			dataBuffer.writeBytes(trace);
+			traceCount.incrementAndGet();
 		}
 	}
 	
@@ -525,7 +531,8 @@ public class TSDBSubmitter {
 				os.flush();
 				dataBuffer.clear();
 				bytesWritten[0] = r;
-				LOG.log("Flushed %s bytes", r);
+				bytesWritten[1] = traceCount.getAndSet(0);
+				LOG.log("Flushed %s traces in %s bytes", bytesWritten[1], r);
 			} catch (Exception ex) {
 				LOG.log("Failed to flush. Stack trace follows...");
 				ex.printStackTrace(System.err);

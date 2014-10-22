@@ -2,7 +2,6 @@
 package com.heliosapm.jmx.batch;
 
 import java.io.Serializable;
-import java.lang.management.ManagementFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -13,8 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
-import javax.management.MBeanInfo;
 import javax.management.MBeanRegistration;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
@@ -49,7 +48,7 @@ public class BulkJMXService implements BulkJMXServiceMBean, MBeanRegistration {
 	private static final Object lock = new Object();
 	
 	/** This MBean's ObjectName */
-	protected final ObjectName myObjectName = JMXHelper.objectName("com.cpex.ecs.gateway.jmx:service=BulkJMXService");
+	protected final ObjectName myObjectName = JMXHelper.objectName("com.heliosapm.jmx:service=BulkJMXService");
 	/** The MBeanServer this service is registered in */
 	protected MBeanServer server = null;
 	/** Indicates if registration has started on this instance */
@@ -136,6 +135,8 @@ public class BulkJMXService implements BulkJMXServiceMBean, MBeanRegistration {
 	public Object script(String source, Object[] args) {
 		return script(source, null, args);
 	}	
+	
+	
 
 	/**
 	 * {@inheritDoc}
@@ -152,6 +153,15 @@ public class BulkJMXService implements BulkJMXServiceMBean, MBeanRegistration {
 		for(ObjectName on: resolved) { map.put(on, new HashMap<String, Object>()); }
 		for(ObjectName on: resolved) {
 			Map<String, Object> onMap = map.get(on);
+			if(attributeNames.size()==1 && attributeNames.get(0).contains("*")) {
+				Pattern p = Pattern.compile(attributeNames.get(0));
+				attributeNames.clear();
+				for(String attrName: JMXHelper.getAttributeNames(on, server)) {
+					if(p.matcher(attrName).matches()) {
+						attributeNames.add(attrName);
+					}
+				}
+			}
 			for(String attr: attributeNames) {
 				try {
 					Object value = server.getAttribute(on, attr);
