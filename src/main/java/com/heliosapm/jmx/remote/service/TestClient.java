@@ -28,17 +28,19 @@ import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Set;
 
 import javax.management.MBeanServerConnection;
 import javax.management.MBeanServerInvocationHandler;
 import javax.management.ObjectName;
+import javax.management.Query;
+import javax.management.StringValueExp;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
-import com.heliosapm.jmx.batch.BulkJMXService;
 import com.heliosapm.jmx.batch.BulkJMXServiceMBean;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.opentsdb.TSDBSubmitter;
@@ -197,13 +199,21 @@ public class TestClient {
 //		    conn = connector.getMBeanServerConnection();
 //		    runtime = conn.getAttribute(new ObjectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name").toString();
 //		    LOG.log("Connected at [%s]. Runtime: [%s]", new Date(), runtime);
-			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:k=/home/nwhitehead/.ssh/np_dsa,u=nwhitehe");
-			tsdbSubmitter = new TSDBSubmitter("localhost", 4242).setTracingDisabled(true).setLogTraces(true).connect();
+//			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:k=/home/nwhitehead/.ssh/np_dsa,u=nwhitehe");
+//			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://njwmintx:8006/ssh/jmxmp:");
+			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:jmxmp://localhost:8007");
+//			tsdbSubmitter = new TSDBSubmitter("localhost", 4242).setTracingDisabled(true).setLogTraces(true).connect();
+			tsdbSubmitter = new TSDBSubmitter("opentsdb", 8080).setTracingDisabled(true).setLogTraces(true).connect();
 		    connector = JMXConnectorFactory.connect(jmxUrl);
 		    conn = connector.getMBeanServerConnection();
 		    String runtime = (String)conn.getAttribute(JMXHelper.objectName("java.lang:type=Runtime"), "Name");
 		    LOG.log("Connected to [%s]", runtime);
-		    BulkJMXServiceMBean bulkService = MBeanServerInvocationHandler.newProxyInstance(conn, BulkJMXService.OBJECT_NAME, BulkJMXServiceMBean.class, false);
+		    Set<ObjectName> bulks = conn.queryNames(null, Query.isInstanceOf(new StringValueExp("com.heliosapm.jmx.batch.BulkJMXServiceMBean")));
+		    if(bulks.isEmpty()) {
+		    	throw new RuntimeException("Bulk JMX Service Not Installed");
+		    }
+		    final ObjectName BULK_ON = bulks.iterator().next(); 
+		    BulkJMXServiceMBean bulkService = MBeanServerInvocationHandler.newProxyInstance(conn, BULK_ON, BulkJMXServiceMBean.class, false);
 		    long start = System.currentTimeMillis();
 		    Map<ObjectName, Map<String, Object>> map = bulkService.getAttributes(new ArrayList<String>(Arrays.asList(".*")), JMXHelper.ALL_MBEANS_FILTER);
 		    long elapsed = System.currentTimeMillis() - start;
@@ -215,7 +225,8 @@ public class TestClient {
 		    	}
 		    	LOG.log(b);
 		    }
-		    //tsdbSubmitter.trace(map);
+		    tsdbSubmitter.trace(map);
+		    LOG.log("Flush: %s", Arrays.toString(tsdbSubmitter.flush()));
 //		    Thread.currentThread().join();
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);

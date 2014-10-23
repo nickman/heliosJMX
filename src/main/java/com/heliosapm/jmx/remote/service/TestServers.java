@@ -31,8 +31,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
-import java.rmi.server.RMIClientSocketFactory;
-import java.rmi.server.RMIServerSocketFactory;
 import java.rmi.server.RMISocketFactory;
 
 import javax.management.MBeanServer;
@@ -43,6 +41,7 @@ import javax.management.remote.JMXServiceURL;
 
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
+import com.heliosapm.jmx.batch.BulkJMXService;
 
 /**
  * <p>Title: TestServers</p>
@@ -104,14 +103,28 @@ public class TestServers {
 	 */
 	public static void main(String[] args) {
 		LOG.log("Starting Test Servers.....");
-		String rmiHost = System.getProperty("java.rmi.server.hostname", "127.0.0.1");
-		new TestServers("service:jmx:rmi://localhost:8003/jndi/rmi://localhost:8004/jmxrmi", "localhost", 8004, "localhost");
-		new TestServers("service:jmx:rmi://localhost:8005/jndi/rmi://localhost:8009/jmxrmi", "localhost", 8009, "0.0.0.0");
-		// service:jmx:rmi://njwmintx:8005/jndi/rmi://njwmintx:8009/jmxrmi
-		new TestServers("service:jmx:jmxmp://localhost:8007", "localhost", -1, null);
-		// service:jmx:jmxmp://njwmintx:8007
-		new TestServers("service:jmx:jmxmp://0.0.0.0:8008", "0.0.0.0", -1, null);
-		//"service:jmx:jmxmp://njwmintx:8008
+//		String rmiHost = System.getProperty("java.rmi.server.hostname", "127.0.0.1");
+//		new TestServers("service:jmx:rmi://localhost:8003/jndi/rmi://localhost:8004/jmxrmi", "localhost", 8004, "localhost");
+//		new TestServers("service:jmx:rmi://localhost:8005/jndi/rmi://localhost:8009/jmxrmi", "localhost", 8009, "0.0.0.0");
+//		// service:jmx:rmi://njwmintx:8005/jndi/rmi://njwmintx:8009/jmxrmi
+//		new TestServers("service:jmx:jmxmp://localhost:8007", "localhost", -1, null);
+//		// service:jmx:jmxmp://njwmintx:8007
+//		new TestServers("service:jmx:jmxmp://0.0.0.0:8008", "0.0.0.0", -1, null);
+//		//"service:jmx:jmxmp://njwmintx:8008
+		JMXConnectorServer connector = null;
+		try {
+			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:jmxmp://localhost:8007");
+			connector = JMXConnectorServerFactory.newJMXConnectorServer(jmxUrl, null, ManagementFactory.getPlatformMBeanServer());
+			BulkJMXService.getInstance();
+			connector.start();
+			LOG.log("Connector started at [%s]", jmxUrl);
+			Thread.currentThread().join();
+		} catch (Exception x) {
+			x.printStackTrace(System.err);
+		} finally {
+			if(connector!=null) try { connector.stop(); } catch (Exception x) {}
+		}
+		
 	}
 	
 

@@ -142,7 +142,20 @@ public class BulkJMXService implements BulkJMXServiceMBean, MBeanRegistration {
 	 * @see com.heliosapm.jmx.batch.BulkJMXServiceMBean#getAttributes(java.util.List, javax.management.ObjectName[])
 	 */
 	@Override
-	public Map<ObjectName, Map<String, Object>> getAttributes(List<String> attributeNames, ObjectName ...objectNames) {
+	public Map<ObjectName, Map<String, Object>> getAttributes(final List<String> attrNames, final ObjectName ...objectNames) {
+		final String expr;
+		final boolean all;
+		if(attrNames !=null && attrNames.size()==1 && attrNames.get(0).contains("*")) {
+			expr = attrNames.get(0).trim();
+			all = ".*".equals(expr) || "*".equals(expr);
+		} else if(attrNames==null || attrNames.isEmpty()) {
+			all = true;
+			expr = ".*";
+		} else {
+			all = false;
+			expr = null;
+		}
+		
 		Map<ObjectName, Map<String, Object>> map = null;
 		Set<ObjectName> resolved = new HashSet<ObjectName>();
 		for(ObjectName on: objectNames) {
@@ -151,22 +164,18 @@ public class BulkJMXService implements BulkJMXServiceMBean, MBeanRegistration {
 		map = new HashMap<ObjectName, Map<String, Object>>(resolved.size());
 		for(ObjectName on: resolved) { map.put(on, new HashMap<String, Object>()); }
 		for(ObjectName on: resolved) {
+			final List<String> attributeNames = new ArrayList<String>();
+			if(all) {
+				Collections.addAll(attributeNames, JMXHelper.getAttributeNames(on, server));
+			} else {
+				Pattern p = Pattern.compile(attributeNames.get(0));
+				for(String attrName: JMXHelper.getAttributeNames(on, server)) {
+					if(p.matcher(attrName).matches()) {
+						attributeNames.add(attrName);
+					}
+				}					
+			}			
 			Map<String, Object> onMap = map.get(on);
-			if(attributeNames.size()==1 && attributeNames.get(0).contains("*")) {
-				final String expr = attributeNames.get(0).trim();
-				final boolean all = ".*".equals(expr) || "*".equals(expr);
-				if(all) {
-					attributeNames.clear();
-					Collections.addAll(attributeNames, JMXHelper.getAttributeNames(on, server));
-				} else {
-					Pattern p = Pattern.compile(attributeNames.get(0));
-					for(String attrName: JMXHelper.getAttributeNames(on, server)) {
-						if(p.matcher(attrName).matches()) {
-							attributeNames.add(attrName);
-						}
-					}					
-				}
-			}
 			for(String attr: attributeNames) {
 				try {
 					Object value = server.getAttribute(on, attr);

@@ -15,7 +15,7 @@
 		<chronicle.version>1.2-SNAPSHOT</chronicle.version>
 		<json.version>20090211</json.version>
 		<junit.version>4.8.2</junit.version>
-		<trove.version>3.0.0</trove.version>
+		<trove.version>3.0.3</trove.version>
 		<snmp4j.version>1.9.1f</snmp4j.version>
 		<netty.version>3.9.4.Final</netty.version>
 		<nash.version>1.0-SNAPSHOT</nash.version>
@@ -75,8 +75,8 @@
 			</dependency>
 			
 			<dependency>
-				<groupId>trove</groupId>
-				<artifactId>trove</artifactId>
+				<groupId>net.sf.trove4j</groupId>
+				<artifactId>trove4j</artifactId>
 				<version>${trove.version}</version>
 			</dependency>
 			
