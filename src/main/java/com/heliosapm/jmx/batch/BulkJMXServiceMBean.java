@@ -7,6 +7,8 @@ import java.util.Map;
 import javax.management.ObjectName;
 import javax.management.QueryExp;
 
+import com.heliosapm.jmx.util.helpers.JMXHelper;
+
 /**
  * <p>Title: BulkJMXServiceMBean</p>
  * <p>Description: JMX MBean interface for {@link BulkJMXService}</p> 
@@ -15,6 +17,10 @@ import javax.management.QueryExp;
  * <p><code>com.heliosapm.jmx.batch.aggregate.BulkJMXServiceMBean</code></p>
  */
 public interface BulkJMXServiceMBean {
+	
+	/** This MBean's ObjectName */
+	public static final ObjectName OBJECT_NAME = JMXHelper.objectName("com.heliosapm.jmx:service=BulkJMXService");
+	
 
 	/**
 	 * Executes a SQL query and returns the result set as a CachedRowSet

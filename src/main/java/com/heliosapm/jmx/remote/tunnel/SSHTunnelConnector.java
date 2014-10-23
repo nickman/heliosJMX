@@ -56,7 +56,6 @@ import ch.ethz.ssh2.signature.RSAPrivateKey;
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.remote.InetAddressCache;
-import com.heliosapm.jmx.remote.service.TestClient;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
@@ -67,6 +66,7 @@ import com.heliosapm.jmx.util.helpers.URLHelper;
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.jmx.remote.tunnel.SSHTunnelConnector</code></p>
+ * TODO: default names system prop override
  */
 
 public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMonitor {
@@ -115,14 +115,21 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	protected static final Map<String, KnownHosts> KNOWN_HOSTS = new ConcurrentHashMap<String, KnownHosts>();
 	
 	
+	/** Simple static class logger */
 	static final SLogger LOG = SimpleLogger.logger(SSHTunnelConnector.class);
 	
 	/** The message returned by the PEMDecoder if the pk is encrypted but we supplied no passphrase */
-	public static final String NO_PASSPHRASE_MESSAGE = "PEM is encrypted, but no password was specified";	
+	public static final String NO_PASSPHRASE_MESSAGE = "PEM is encrypted, but no password was specified";
+	/** The default DSA Private Key file name */
+	public static final String DEFAULT_DSA_FILE = "id_dsa";
+	/** The default RSA Private Key file name */
+	public static final String DEFAULT_RSA_FILE = "id_rsa";	
+	/** The default user SSH key directory */
+	public static final String DEFAULT_SSH_HOME = String.format("%s%s.ssh%s", System.getProperty("user.home"), File.separator, File.separator);
 	/** The default DSA Private Key location and file name */
-	public static final String DEFAULT_DSA = String.format("%s%s.ssh%sid_dsa", System.getProperty("user.home"), File.separator, File.separator);
+	public static final String DEFAULT_DSA = DEFAULT_SSH_HOME + DEFAULT_DSA_FILE;
 	/** The default RSA Private Key location and file name */
-	public static final String DEFAULT_RSA = String.format("%s%s.ssh%sid_rsa", System.getProperty("user.home"), File.separator, File.separator);
+	public static final String DEFAULT_RSA = DEFAULT_SSH_HOME + DEFAULT_RSA_FILE;
 	/** The default TSSH property config location and file name */
 	public static final String DEFAULT_PROPS = String.format("%s%s.ssh%stunnel.properties", System.getProperty("user.home"), File.separator, File.separator);
 	
@@ -262,10 +269,16 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 					if(optionValue instanceof char[]) {
 						privateKey = (char[])optionValue;
 					} else {
-						final String urlStr = optionValue.toString().trim();
+						String urlStr = optionValue.toString().trim();
 						if(URLHelper.isFile(urlStr) || URLHelper.isValidURL(urlStr)) {
 							privateKey = URLHelper.getCharsFromURL(urlStr);
 							LOG.log("PrivateKey read from [%s]", urlStr);
+						} else {
+							urlStr = DEFAULT_SSH_HOME + urlStr;
+							if(URLHelper.isFile(urlStr) || URLHelper.isValidURL(urlStr)) {
+								privateKey = URLHelper.getCharsFromURL(urlStr);
+								LOG.log("PrivateKey read from [%s]", urlStr);
+							}
 						}
 					}
 				}						 
@@ -327,7 +340,12 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	 * jmxConnectorHost/jmxConnectorPort:  option [jmxh] specified, the SSH bridge sshHost. If not specified, is the same as the sshHost 
 	 */
 	
-	public static Map<?, Object> tunnel(JMXServiceURL jmxServiceURL) {
+	/**
+	 * Creates the required tunnel for the passed JMXServiceURL
+	 * @param jmxServiceURL The tunnel JMXServiceURL
+	 * @return the modified environment map
+	 */
+	public static Map<?, Object> tunnel(final JMXServiceURL jmxServiceURL) {
 		return tunnel(jmxServiceURL, null);
 	}
 	
@@ -339,7 +357,8 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	 * @param env The JMX environment map
 	 * @return the modified environment map
 	 */
-	public static Map<?, Object> tunnel(JMXServiceURL jmxServiceURL, Map<String, Object> env) {
+	@SuppressWarnings("resource")
+	public static Map<?, Object> tunnel(final JMXServiceURL jmxServiceURL, Map<String, Object> env) {
 		SSHTunnelConnector tc = new SSHTunnelConnector(jmxServiceURL, env);
 		TunnelRepository.getInstance().connect(tc);
 		TunnelHandle tunnelHandle = TunnelRepository.getInstance().tunnel(tc);

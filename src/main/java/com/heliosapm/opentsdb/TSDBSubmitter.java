@@ -170,6 +170,10 @@ public class TSDBSubmitter {
 		this.host = host;
 		this.port = port;
 		socket = new Socket();
+		Map<String, String> tags = new LinkedHashMap<String, String>();
+		tags.put("app", "groovy");
+		tags.put("host", "tpsolaris");
+		transformCache.register(JMXHelper.objectName("*:*"), new com.heliosapm.opentsdb.Transformers.DefaultTransformer(tags, null));
 	}
 	
 	/**
@@ -407,6 +411,10 @@ public class TSDBSubmitter {
 		}
 	}
 	
+	public void registerTransformer(final TSDBJMXResultTransformer transformer, final ObjectName on) {
+		transformCache.register(on, transformer);
+	}
+	
 	/**
 	 * Traces raw JMX BatchService lookup results
 	 * @param batchResults A map of JMX attribute values keyed by the attribute name within a map keyed by the ObjectName
@@ -415,9 +423,10 @@ public class TSDBSubmitter {
 		if(batchResults==null || batchResults.isEmpty()) return;
 		for(Map.Entry<ObjectName, Map<String, Object>> entry: batchResults.entrySet()) {
 			final ObjectName on = entry.getKey();
+			final Map<String, Object> keyValuePairs = entry.getValue();
 			TSDBJMXResultTransformer transformer = transformCache.getTransformer(on);
 			if(transformer!=null) {
-				 Map<ObjectName, Number> transformed = transformer.transform(on, entry.getValue());
+				 Map<ObjectName, Number> transformed = transformer.transform(on, keyValuePairs);
 				 for(Map.Entry<ObjectName, Number> t: transformed.entrySet()) {
 					 final Number v = t.getValue();
 					 if(v==null) continue;

@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,8 +48,6 @@ public class BulkJMXService implements BulkJMXServiceMBean, MBeanRegistration {
 	/** The BulkJMXService singleton instance ctor lock */
 	private static final Object lock = new Object();
 	
-	/** This MBean's ObjectName */
-	protected final ObjectName myObjectName = JMXHelper.objectName("com.heliosapm.jmx:service=BulkJMXService");
 	/** The MBeanServer this service is registered in */
 	protected MBeanServer server = null;
 	/** Indicates if registration has started on this instance */
@@ -85,7 +84,7 @@ public class BulkJMXService implements BulkJMXServiceMBean, MBeanRegistration {
 	 * Creates a new BulkJMXService
 	 */
 	BulkJMXService() {
-		JMXHelper.registerMBean(myObjectName, this);
+		JMXHelper.registerMBean(OBJECT_NAME, this);
 		log.log("Registered BulkJMXService MBean");
 	}
 	
@@ -154,12 +153,18 @@ public class BulkJMXService implements BulkJMXServiceMBean, MBeanRegistration {
 		for(ObjectName on: resolved) {
 			Map<String, Object> onMap = map.get(on);
 			if(attributeNames.size()==1 && attributeNames.get(0).contains("*")) {
-				Pattern p = Pattern.compile(attributeNames.get(0));
-				attributeNames.clear();
-				for(String attrName: JMXHelper.getAttributeNames(on, server)) {
-					if(p.matcher(attrName).matches()) {
-						attributeNames.add(attrName);
-					}
+				final String expr = attributeNames.get(0).trim();
+				final boolean all = ".*".equals(expr) || "*".equals(expr);
+				if(all) {
+					attributeNames.clear();
+					Collections.addAll(attributeNames, JMXHelper.getAttributeNames(on, server));
+				} else {
+					Pattern p = Pattern.compile(attributeNames.get(0));
+					for(String attrName: JMXHelper.getAttributeNames(on, server)) {
+						if(p.matcher(attrName).matches()) {
+							attributeNames.add(attrName);
+						}
+					}					
 				}
 			}
 			for(String attr: attributeNames) {
@@ -288,10 +293,10 @@ public class BulkJMXService implements BulkJMXServiceMBean, MBeanRegistration {
 	 * @see javax.management.MBeanRegistration#preRegister(javax.management.MBeanServer, javax.management.ObjectName)
 	 */
 	@Override
-	public ObjectName preRegister(MBeanServer server, ObjectName name) throws Exception {
+	public ObjectName preRegister(final MBeanServer server, final ObjectName name) throws Exception {
 		this.server = server;
 		se.getBindings(ScriptContext.ENGINE_SCOPE).put("server", server);
-		return myObjectName;
+		return OBJECT_NAME;
 	}
 
 	/**

@@ -113,10 +113,42 @@ public class Transformers {
 		}
 		
 		protected void defaultAttribute(final Map<ObjectName, Number> results, final String attrName, final ObjectName target, final Map<String, Object> attributes) {
-			try { results.put(build(getMetric(target), baseTags, keyNamePairs(target, "metric", attrName)), (Number)attributes.get(attrName)); } catch (Exception x) {/* No Op */}
+			try { results.put(build(this.getMetric(target), baseTags, keyNamePairs(target, "metric", attrName)), (Number)attributes.get(attrName)); } catch (Exception x) {/* No Op */}
 		}
 		
 
+		
+	}
+	
+	/**
+	 * <p>Title: DefaultTransformer</p>
+	 * <p>Description: A full default behaviour transformer</p> 
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.opentsdb.Transformers.DefaultTransformer</code></p>
+	 */
+	public static class DefaultTransformer extends AbstractTransformer {
+		private static final ObjectName FILTER = JMXHelper.objectName("*:*");
+		
+		DefaultTransformer(Map<String, String> baseTags, String objNamePrefix) {
+			super(baseTags, objNamePrefix);
+		}
+
+		@Override
+		ObjectName getFilter() {
+			return FILTER;
+		}
+
+		@Override
+		protected Map<ObjectName, Number> doTransform(final ObjectName objectName, final Map<String, Object> attributes) {
+			final Map<ObjectName, Number> map = new HashMap<ObjectName, Number>();
+			for(String k: attributes.keySet()) {
+				defaultAttribute(map, k, objectName, attributes);
+			}
+			return map;
+		}
+		
+		
 		
 	}
 	
@@ -224,7 +256,7 @@ public class Transformers {
 		
 		
 		protected String getMetric(final ObjectName objectName) {
-			return "java.lang.gc";
+			return "java.lang.mempool";
 		}
 		
 		/**
