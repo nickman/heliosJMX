@@ -109,8 +109,10 @@ public class TSDBSubmitter {
 	/** The ObjectName transform cache */
 	protected final TransformCache transformCache = new TransformCache();
 	
-	/** The root tags applied to all traced metrics */
+	/** The sequential root tags applied to all traced metrics */
 	protected final Set<String> rootTags = new LinkedHashSet<String>();
+	/** The root tags map applied to all traced metrics */
+	protected final Map<String, String> rootTagsMap = new LinkedHashMap<String, String>();
 	
 	/** Deltas for long values */
 	protected final NonBlockingHashMap<String, Long> longDeltas = new NonBlockingHashMap<String, Long>(); 
@@ -325,6 +327,8 @@ public class TSDBSubmitter {
 		}
 	}
 	
+
+	
 	/**
 	 * Traces a double metric
 	 * @param metric The full metric as a JMX {@link ObjectName}
@@ -347,6 +351,95 @@ public class TSDBSubmitter {
 			traceCount.incrementAndGet();
 		}
 	}
+	
+	/**
+	 * Yet another tracing overload
+	 * @param target The target ObjectName that was sampled
+	 * @param metricName The desgnted metric name
+	 * @param attributeValues The collected values keyed by the attribute name
+	 * @param objectNameKeys The keys of the target ObjectName to add to the tags
+	 */
+	public void trace(final ObjectName target, final String metricName, final Map<String, Object> attributeValues, final String...objectNameKeys) {
+		if(target==null) throw new IllegalArgumentException("The passed target ObjectName was null");
+		if(objectNameKeys==null || objectNameKeys.length==0) throw new IllegalArgumentException("At least one ObjectName Key is required");
+		if(attributeValues==null || attributeValues.isEmpty()) return;		
+		final String m = (metricName==null || metricName.trim().isEmpty()) ? target.getDomain() : metricName.trim();
+		final Map<String, String> tags = new LinkedHashMap<String, String>(rootTagsMap);
+		int keyCount = 0;
+		for(String key: objectNameKeys) {
+			if(key==null || key.trim().isEmpty()) continue;
+			String v = clean(target, key.trim());
+			if(v==null || v.isEmpty()) continue;
+			tags.put(clean(key), clean(v));
+			keyCount++;			
+		}
+		if(keyCount==0) throw new IllegalArgumentException("No ObjectName Keys Usable as Tags. Keys: " + Arrays.toString(objectNameKeys) + ", ObjectName: [" + target.toString() + "]");
+		
+		for(Map.Entry<String, Object> attr: attributeValues.entrySet()) {
+			final String attributeName = clean(attr.getKey());
+			try {
+				tags.put("metric", attributeName);
+				final Object v = attr.getValue();
+				if(v==null) continue;
+				if(v instanceof Number) {
+					if(v instanceof Double) {
+						trace(m, (Double)v, tags);
+					} else {																																			
+						trace(m, ((Number)v).longValue(), tags);
+					}
+				} else if(v instanceof CompositeData) {
+					final CompositeData cd = (CompositeData)v;
+					final String cdType = cd.getCompositeType().getTypeName();
+					tags.put("ctype", cdType);
+					try {
+						Map<ObjectName, Number> cmap = fromOpenType(target, cd);
+						for(Map.Entry<ObjectName, Number> ce: cmap.entrySet()) {
+							final Number cv = ce.getValue();
+							if(v instanceof Double) {
+								trace(m, cv.doubleValue(), tags);
+							} else {
+								trace(m, cv.longValue(), tags);
+							}
+						}
+					} finally {
+						tags.remove("ctype");
+					}
+				}
+			} finally {
+				tags.remove("metric");
+			}
+		}
+
+	}
+	
+	
+	/**
+	 * Cleans the passed stringy
+	 * @param cs The stringy to clean
+	 * @return the cleaned stringy
+	 */
+	public static String clean(final CharSequence cs) {
+		if(cs==null || cs.toString().trim().isEmpty()) return "";
+		String s = cs.toString().trim();
+		final int index = s.indexOf('/');
+		if(index!=-1) {
+			s = s.substring(index+1);
+		}
+		return s.replace(" ", "_");
+	}
+	
+	/**
+	 * Cleans the object name property identified by the passed key
+	 * @param on The ObjectName to extract the value from
+	 * @param key The key property name
+	 * @return the cleaned key property value
+	 */
+	public static String clean(final ObjectName on, final String key) {
+		if(on==null) throw new IllegalArgumentException("The passed ObjectName was null");
+		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
+		return clean(on.getKeyProperty(key.trim()));
+	}
+	
 	
 	
 	/**
@@ -486,11 +579,7 @@ public class TSDBSubmitter {
 		}
 		return map;
 	}
-	
-	private static String clean(final CharSequence s) {
-		if(s==null) return null;
-		return s.toString().trim().replace(" ", "");
-	}
+
 	
 	private static String simpleName(final CharSequence s) {
 		if(s==null) return null;
@@ -868,6 +957,7 @@ public class TSDBSubmitter {
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
 		if(value==null || value.trim().isEmpty()) throw new IllegalArgumentException("The passed value was null or empty");
 		rootTags.add(clean(key) + "=" + clean(value));
+		rootTagsMap.put(clean(key), clean(value));
 		return this;
 	}
 	

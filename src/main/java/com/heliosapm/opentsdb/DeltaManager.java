@@ -79,8 +79,45 @@ public class DeltaManager {
 	private DeltaManager() {
 		final int initialDeltaCapacity = ConfigurationHelper.getIntSystemThenEnvProperty(DELTA_CAPACITY, DELTA_CAPACITY_DEFAULT);
 		final float initialDeltaLoadFactor = ConfigurationHelper.getFloatSystemThenEnvProperty(DELTA_LOAD_FACTOR, DELTA_LOAD_FACTOR_DEFAULT);
-		longDeltas = new TObjectLongHashMap<java.lang.String>(initialDeltaCapacity, initialDeltaLoadFactor);
-		doubleDeltas = new TObjectDoubleHashMap<java.lang.String>(initialDeltaCapacity, initialDeltaLoadFactor);
+		longDeltas = new TObjectLongHashMap<java.lang.String>(initialDeltaCapacity, initialDeltaLoadFactor, Long.MIN_VALUE);
+		doubleDeltas = new TObjectDoubleHashMap<java.lang.String>(initialDeltaCapacity, initialDeltaLoadFactor, Double.MIN_NORMAL);
 	}
+	
+	/**
+	 * Registers a sample value and returns the delta between this sample and the prior
+	 * @param key The delta sample key
+	 * @param value The absolute sample value
+	 * @return The delta or null if this was the first sample, or the last sample caused a reset
+	 */
+	public Long deltaLong(final String key, final long value) {
+		Long result = null;
+		long prior;
+		synchronized(longDeltas) {
+			prior = longDeltas.put(key, value);
+		}
+		if(prior!=Long.MIN_VALUE && prior <= value) {
+			result = value - prior;
+		}
+		return result;
+	}
+	
+	/**
+	 * Registers a sample value and returns the delta between this sample and the prior
+	 * @param key The delta sample key
+	 * @param value The absolute sample value
+	 * @return The delta or null if this was the first sample, or the last sample caused a reset
+	 */
+	public Double deltaDouble(final String key, final double value) {
+		Double result = null;
+		double prior;
+		synchronized(doubleDeltas) {
+			prior = doubleDeltas.put(key, value);
+		}
+		if(prior!=Double.MIN_VALUE && prior <= value) {			
+			result = value - prior;
+		}
+		return result;
+	}
+	
 
 }
