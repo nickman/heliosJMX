@@ -33,6 +33,7 @@ import javax.management.MBeanServer;
 import javax.management.MBeanServerConnection;
 import javax.management.NotificationFilter;
 import javax.management.NotificationListener;
+import javax.management.remote.JMXAddressable;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXServiceURL;
 import javax.security.auth.Subject;
@@ -47,7 +48,7 @@ import com.heliosapm.jmx.util.helpers.JMXHelper;
  * <p><code>org.helios.jmx.remote.protocol.local.LocalJMXConnector</code></p>
  */
 
-public class LocalJMXConnector implements JMXConnector {
+public class LocalJMXConnector implements JMXConnector, JMXAddressable {
 
 	/** The MBeanServer the connector connects to */
 	protected MBeanServer mbeanServer = null;
@@ -150,6 +151,15 @@ public class LocalJMXConnector implements JMXConnector {
 	@Override
 	public String getConnectionId() throws IOException {
 		return connectionId;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.remote.JMXAddressable#getAddress()
+	 */
+	@Override
+	public JMXServiceURL getAddress() {
+		return localURL;
 	}
 
 }

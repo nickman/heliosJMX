@@ -50,6 +50,8 @@ public class AnnotationBuilder {
 	 * custom: Map<String, String>
 	 * 
 
+ES Server:  http://10.5.202.22:9200
+
 Example GET Request
 
 http://localhost:4242/api/annotation?start_time=1369141261&tsuid=000001000001000001

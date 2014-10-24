@@ -30,6 +30,7 @@ import java.lang.management.ManagementFactory;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Collections;
@@ -39,12 +40,9 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import javax.management.Attribute;
-import javax.management.AttributeList;
-import javax.management.MBeanAttributeInfo;
-import javax.management.MBeanInfo;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import javax.management.openmbean.CompositeData;
@@ -54,13 +52,20 @@ import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.buffer.DirectChannelBufferFactory;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.StringHelper;
+import com.heliosapm.opentsdb.AnnotationBuilder.TSDBAnnotation;
+import com.ning.http.client.AsyncHandler;
 import com.ning.http.client.AsyncHttpClient;
 import com.ning.http.client.AsyncHttpClientConfig;
+import com.ning.http.client.HttpResponseBodyPart;
+import com.ning.http.client.HttpResponseHeaders;
+import com.ning.http.client.HttpResponseStatus;
 
 /**
  * <p>Title: TSDBSubmitter</p>
@@ -89,12 +94,20 @@ public class TSDBSubmitter {
 	protected final String host;
 	/** The OpenTSDB port */
 	protected final int port;
+	/** The ElasticSearch host */
+	protected String esHost = null;
+	/** The ElasticSearch port */
+	protected int esPort = -1;
+	
 	/** The socket connected to the host/port */
 	protected Socket socket = null;
 	/** The http client to submit http ops to the tsdb server */
 	protected AsyncHttpClient httpClient = null;
 	/** The HTTP base URL for HTTP submitted requests */
 	protected String baseURL = null;
+	/** The HTTP base URL for ES requests */
+	protected String esURL = null;
+	
 	/** The socket keep-alive flag */
 	protected boolean keepAlive = true;
 	/** The socket re-use address flag */
@@ -194,35 +207,62 @@ public class TSDBSubmitter {
 	}
 	
 	public static void main(String[] args) {
-		LOG.log("Submitter Test");
-		final MBeanServer ser = ManagementFactory.getPlatformMBeanServer();
-//		TSDBSubmitter submitter = new TSDBSubmitter("opentsdb", 8080);
-		TSDBSubmitter submitter = new TSDBSubmitter("localhost").addRootTag("host", "nicholas").addRootTag("app", "MyApp").setLogTraces(true).setTimeout(2000).connect();
-		LOG.log(submitter);
-		while(true) {
-			final long start = System.currentTimeMillis();
-			final Map<ObjectName, Map<String, Object>> mbeanMap = new HashMap<ObjectName, Map<String, Object>>(ser.getMBeanCount());
-			for(ObjectName on: ser.queryNames(null, null)) {
-				try {
-					MBeanInfo minfo = ser.getMBeanInfo(on);
-					MBeanAttributeInfo[] ainfos = minfo.getAttributes();					
-					String[] attrNames = new String[ainfos.length];
-					for(int i = 0; i < ainfos.length; i++) {
-						attrNames[i] = ainfos[i].getName();
-					}
-					AttributeList attrList = ser.getAttributes(on, attrNames);
-					Map<String, Object> attrValues = new HashMap<String, Object>(attrList.size());
-					for(Attribute a: attrList.asList()) {
-						attrValues.put(a.getName(), a.getValue());
-					}
-					mbeanMap.put(on, attrValues);
-				} catch (Exception ex) {
-					ex.printStackTrace(System.err);
-				}
-			}
-			LOG.log("Tracing All Attributes for [%s] MBeans", mbeanMap.size());
-			submitter.trace(mbeanMap);
+		try {
+			LOG.log("Submitter Test");
+			final MBeanServer ser = ManagementFactory.getPlatformMBeanServer();
+	//		TSDBSubmitter submitter = new TSDBSubmitter("opentsdb", 8080).addRootTag("host", "ord-pr-ceas-a01").addRootTag("app", "ECS").setLogTraces(true).setTimeout(2000).connect();
+			TSDBSubmitter submitter = new TSDBSubmitter("localhost", 4242).addRootTag("host", "ord-pr-ceas-a01").addRootTag("app", "ECS").setLogTraces(true).setTimeout(2000).connect();
+	//		TSDBSubmitter submitter = new TSDBSubmitter("localhost").addRootTag("host", "nicholas").addRootTag("app", "MyApp").setLogTraces(true).setTimeout(2000).connect();
+			LOG.log(submitter);
+			// q = new URL("http://opentsdb:8080/api/query?start=1m-ago&show_tsuids=true&m=avg:ecsmetric{
+			// host=ord-pr-ceas-a01,app=ECS,metric=InUseConnectionCount,service=ManagedConnectionPool,name=ECS}");
+			long start = System.currentTimeMillis();
+			JSONArray jarr = submitter.query("ecsmetric", "name", "ECS", "service", "ManagedConnectionPool"); //, "metric", "InUseConnectionCount");
+			long elapsed = System.currentTimeMillis() - start;
 			
+			LOG.log("Query Returned In [%s] ms. Results:\n%s", elapsed, jarr.toString(2));
+			
+			start = System.currentTimeMillis();
+			String tsuid = submitter.tsuid("ecsmetric", "name", "ECS", "service", "ManagedConnectionPool", "metric", "InUseConnectionCount");
+			elapsed = System.currentTimeMillis() - start;
+			
+			LOG.log("TSUID Returned In [%s] ms. TSUID: [%s]", elapsed, tsuid);
+			
+			
+			TSDBAnnotation ann = new AnnotationBuilder().setTSUID(tsuid).setDescription("ECS Prod Conn Pool").setCustom("current", "" + 14).build();
+			LOG.log("Annotation:\n%s", ann);
+			submitter.trace(ann);
+			try { Thread.sleep(5000); } catch (Exception x) {}		
+		} catch (Exception ex) {
+			ex.printStackTrace(System.err);
+		} finally {
+			System.exit(1);
+		}
+		
+//		while(true) {
+//			final long start = System.currentTimeMillis();
+//			final Map<ObjectName, Map<String, Object>> mbeanMap = new HashMap<ObjectName, Map<String, Object>>(ser.getMBeanCount());
+//			for(ObjectName on: ser.queryNames(null, null)) {
+//				try {
+//					MBeanInfo minfo = ser.getMBeanInfo(on);
+//					MBeanAttributeInfo[] ainfos = minfo.getAttributes();					
+//					String[] attrNames = new String[ainfos.length];
+//					for(int i = 0; i < ainfos.length; i++) {
+//						attrNames[i] = ainfos[i].getName();
+//					}
+//					AttributeList attrList = ser.getAttributes(on, attrNames);
+//					Map<String, Object> attrValues = new HashMap<String, Object>(attrList.size());
+//					for(Attribute a: attrList.asList()) {
+//						attrValues.put(a.getName(), a.getValue());
+//					}
+//					mbeanMap.put(on, attrValues);
+//				} catch (Exception ex) {
+//					ex.printStackTrace(System.err);
+//				}
+//			}
+//			LOG.log("Tracing All Attributes for [%s] MBeans", mbeanMap.size());
+//			submitter.trace(mbeanMap);
+//			
 			
 //			for(final MemoryPoolMXBean pool: ManagementFactory.getMemoryPoolMXBeans()) {
 //				final MemoryUsage mu = pool.getUsage();			
@@ -243,12 +283,12 @@ public class TSDBSubmitter {
 //					submitter.trace("collectiontime", time, "type", "GarbageCollector", "name", gcName);
 //				}
 //			}
-			submitter.flush();
-			final long elapsed = System.currentTimeMillis() - start;
-			LOG.log("Completed flush in %s ms", elapsed);
-			System.gc();
-			try { Thread.currentThread().join(5000); } catch (Exception x) {/* No Op */}
-		}		
+//			submitter.flush();
+//			final long elapsed = System.currentTimeMillis() - start;
+//			LOG.log("Completed flush in %s ms", elapsed);
+//			System.gc();
+//			try { Thread.currentThread().join(5000); } catch (Exception x) {/* No Op */}
+//		}		
 	}
 	
 	/**
@@ -461,7 +501,136 @@ public class TSDBSubmitter {
 		return clean(on.getKeyProperty(key.trim()));
 	}
 	
+	/** A cache of TSUIDs keyed by the URL which will be called if the tsuid is not in cache */
+	protected final NonBlockingHashMap<String, String> tsuidCache = new NonBlockingHashMap<String, String>(128);
 	
+	/** The query template to get TSUIDs from a metric name and tags. Tokens are: http server, http port, metric, comma separated key value pairs */
+	public static final String QUERY_TEMPLATE = "http://%s:%s/api/query?start=1s-ago&show_tsuids=true&m=avg:%s%s";
+	
+	/**
+	 * Formats the passed metric and tags into a URL with comma separated name/value pair URLEncoded string
+	 * @param metric The metric name 
+	 * @param tags The tags to format
+	 * @return the formatted URL string
+	 */
+	public String formatTags(final String metric, final String...tags) {
+		if(metric==null || metric.trim().isEmpty()) throw new IllegalArgumentException("The passed metric was null or empty");
+		if(tags==null || tags.length < 2) throw new IllegalArgumentException("Insufficient number of tags. Must have at least 1 tag, which would be 2 values");
+		if(tags.length%2!=0) throw new IllegalArgumentException("Odd number of tag values [" + tags.length + "]. Tag values come in pairs");		
+		StringBuilder b = new StringBuilder("{");
+		final Map<String, String> tagMap = new LinkedHashMap<String, String>(rootTagsMap);
+		for(int i = 0; i < tags.length; i++) {
+			String k = tags[i].trim();
+			i++;
+			String v = tags[i].trim();
+			tagMap.put(k, v);
+		}
+		for(Map.Entry<String, String> entry: tagMap.entrySet()) {
+			b.append(entry.getKey()).append("=").append(entry.getValue()).append(",");
+		}		
+		try {
+			final String formattedTags = URLEncoder.encode(b.deleteCharAt(b.length()-1).append("}").toString(), "UTF-8");
+			return String.format(QUERY_TEMPLATE, host, port, metric.trim(), formattedTags);
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to format " + Arrays.toString(tags), ex);
+		}
+	}
+	
+	/**
+	 * Issues a synchronous TSDB query for the passed metric and tags.
+	 * The intent is for meta only so the start time is <b><code>1s-ago</code></b>. 
+	 * @param metric The metric name
+	 * @param tags The tags
+	 * @return A JSON array of the parsed results
+	 */
+	public JSONArray query(final String metric, final String...tags) {
+		return query(formatTags(metric, tags));
+	}
+	
+	/**
+	 * Issues a synchronous TSDB query for the passed metric and tags.
+	 * The intent is for meta only so the start time is <b><code>1s-ago</code></b>. 
+	 * @param url The prepared and encoded URL 
+	 * @return A JSON array of the parsed results
+	 */
+	public JSONArray query(final String url) {
+		try {
+			String jsonText = httpClient.prepareGet(url).execute().get(timeout, TimeUnit.MILLISECONDS).getResponseBody("UTF-8");
+			return new JSONArray(jsonText);
+		} catch (Exception ex) {
+			LOG.loge("Failed to retrieve content for [%s] - %s", url, ex);
+			throw new RuntimeException(String.format("Failed to retrieve content for [%s] - %s", url, ex), ex);
+		}		
+	}
+	
+	
+	/**
+	 * Issues a synchronous TSDB query for the passed metric and tags to find a single TSUID.
+	 * In other words, if zero or more than one TSUIDs are returned, it's an error. 
+	 * @param metric The metric name
+	 * @param tags The tags
+	 * @return A JSON array of the parsed results
+	 */
+	public String tsuid(final String metric, final String...tags) {
+		final String key = formatTags(metric, tags);
+		String tsuid = tsuidCache.get(key);
+		if(tsuid==null) {
+			JSONArray jarr = query(key);
+			if(jarr.length()==0) throw new RuntimeException("No matches");
+			JSONObject m = (JSONObject) jarr.get(0);
+			JSONArray tsuidArr = m.getJSONArray("tsuids");
+			if(tsuidArr.length()==0) throw new RuntimeException("No matches");
+			if(tsuidArr.length()>1) throw new RuntimeException("More than one match (" + tsuidArr.length() + ")");
+			tsuid = tsuidArr.getString(0);
+			tsuidCache.put(key, tsuid);
+		}
+		return tsuid;
+	}
+	
+	
+	/**
+	 * Traces a tsdb annotation
+	 * @param annotation the annotation to trace
+	 */	
+	public void trace(final TSDBAnnotation annotation) {
+		if(annotation==null) throw new IllegalArgumentException("The passed annotation was null");
+		try {
+			final long start = System.currentTimeMillis();
+			httpClient.preparePost(baseURL + "api/annotation").setBody(annotation.toJSON()).execute(new AsyncHandler<Object>(){
+				protected HttpResponseStatus responseStatus = null;
+				@Override
+				public void onThrowable(final Throwable t) {
+					LOG.loge("Async failure on annotation send for [%s] - %s", annotation, t);
+				}
+
+				@Override
+				public STATE onBodyPartReceived(final HttpResponseBodyPart bodyPart) throws Exception {
+					return null;
+				}
+
+				@Override
+				public STATE onStatusReceived(final HttpResponseStatus responseStatus) throws Exception {
+					this.responseStatus = responseStatus;
+					return null;
+				}
+
+				@Override
+				public STATE onHeadersReceived(final HttpResponseHeaders headers) throws Exception {
+					return null;
+				}
+
+				@Override
+				public Object onCompleted() throws Exception {
+					long elapsed = System.currentTimeMillis() - start;
+					LOG.log("Annotation Send Complete in [%s] ms. Response: [%s], URI: [%s]", elapsed, responseStatus.getStatusText(), responseStatus.getUrl());
+					return null;
+				}				
+			});
+		} catch (Exception ex) {
+			LOG.loge("Failed to send annotation [%s] - %s", annotation, ex);
+		}
+	}
+		
 	
 	/**
 	 * Traces a double metric
@@ -1055,6 +1224,41 @@ public class TSDBSubmitter {
 		return this;
 	}
 	
+	/**
+	 * Returns the configured ES host or IP adddress
+	 * @return the configured ES host
+	 */
+	public String getEsHost() {
+		return esHost;
+	}
+
+	/**
+	 * Sets the ES host or ip address
+	 * @param esHost the ES host or ip address
+	 * @return this submitter
+	 */
+	public TSDBSubmitter setEsHost(final String esHost) {
+		this.esHost = esHost;
+		return this;
+	}
+
+	/**
+	 * Returns the configured ES http port
+	 * @return the configured ES http port
+	 */
+	public int getEsPort() {
+		return esPort;
+	}
+
+	/**
+	 * Sets the ES http port
+	 * @param esPort the ES http port to set
+	 * @return this submitter
+	 */
+	public TSDBSubmitter setEsPort(final int esPort) {
+		this.esPort = esPort;
+		return this;
+	}
 
 
 	/**
@@ -1071,6 +1275,12 @@ public class TSDBSubmitter {
 		}
 		builder.append("\n\tport=");
 		builder.append(port);
+		if(esHost!=null) {
+			builder.append("\n\tESHost=");
+			builder.append(esHost);
+			builder.append("\n\tESPort=");
+			builder.append(esPort);			
+		}
 		builder.append("\n\tlogTraces=");
 		builder.append(logTraces);
 		builder.append("\n\ttracingDisabled=");
@@ -1106,8 +1316,22 @@ public class TSDBSubmitter {
 	}
 
 
-
-
-	
-
 }
+
+
+/*
+import org.json.*;
+q = new URL("http://localhost:4242/api/search/annotation?query=description:ECS*");
+println q.getText();
+/*
+q = new URL("http://opentsdb:8080/api/query?start=1m-ago&show_tsuids=true&m=avg:ecsmetric{host=ord-pr-ceas-a01,app=ECS,metric=InUseConnectionCount,service=ManagedConnectionPool,name=ECS}");
+jsonText = q.getText();
+//println jsonText;
+json = new JSONArray(jsonText);
+println json.toString(2);
+println "=========================================================";
+if(json.length() != 1) throw new Exception("Result did not contain exactly ONE metric");
+metric = json.get(0);
+println metric.getClass().getName();
+println metric.getJSONArray("tsuids").getString(0);
+*/

@@ -32,6 +32,8 @@ import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorProvider;
 import javax.management.remote.JMXServiceURL;
 
+import com.heliosapm.jmx.remote.protocol.WrappedJMXConnector;
+
 /**
  * <p>Title: ClientProvider</p>
  * <p>Description: JMXConnector provider for acquiring an MBeanServer connection 
@@ -57,14 +59,14 @@ public class ClientProvider implements JMXConnectorProvider {
      * {@inheritDoc}
      * @see javax.management.remote.JMXConnectorProvider#newJMXConnector(javax.management.remote.JMXServiceURL, java.util.Map)
      */
-    public JMXConnector newJMXConnector(JMXServiceURL serviceURL, Map environment) throws IOException {
+    public JMXConnector newJMXConnector(final JMXServiceURL serviceURL, final Map environment) throws IOException {
 		if (!serviceURL.getProtocol().equals(PROTOCOL_NAME)) {
 			throw new MalformedURLException("Protocol not [" + PROTOCOL_NAME + "]: " +
 						    serviceURL.getProtocol());
 		}
 		String s = serviceURL.toString();
 		int index = s.indexOf(URL_PREFIX);
-		return new AttachJMXConnector(s.substring(index + URL_PREFIX.length()));
+		return WrappedJMXConnector.addressable(new AttachJMXConnector(s.substring(index + URL_PREFIX.length())), serviceURL);
     }
 
 
