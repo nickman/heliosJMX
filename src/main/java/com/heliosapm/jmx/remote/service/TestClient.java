@@ -200,19 +200,19 @@ public class TestClient {
 //		    conn = connector.getMBeanServerConnection();
 //		    runtime = conn.getAttribute(new ObjectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name").toString();
 //		    LOG.log("Connected at [%s]. Runtime: [%s]", new Date(), runtime);
-//			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:k=/home/nwhitehead/.ssh/np_dsa,u=nwhitehe");
+			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:k=/home/nwhitehead/.ssh/np_dsa,u=nwhitehe");
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://njwmintx:8006/ssh/jmxmp:");
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:jmxmp://localhost:8007");
-			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18088/ssh/jmxmp:");
+//			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18088/ssh/jmxmp:");
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18089/ssh/jmxmp:");
-//			tsdbSubmitter = new TSDBSubmitter("localhost", 4242).setTracingDisabled(true).setLogTraces(true).connect();
-			tsdbSubmitter = new TSDBSubmitter("opentsdb", 8080).setTracingDisabled(true).setLogTraces(false).connect();
+			tsdbSubmitter = new TSDBSubmitter("localhost", 4242).setTracingDisabled(true).setLogTraces(true).connect();
+//			tsdbSubmitter = new TSDBSubmitter("opentsdb", 8080).setTracingDisabled(true).setLogTraces(false).connect();
 		    connector = JMXConnectorFactory.connect(jmxUrl);
 		    conn = connector.getMBeanServerConnection();
 		    String runtime = (String)conn.getAttribute(JMXHelper.objectName("java.lang:type=Runtime"), "Name");
 		    LOG.log("Connected to [%s] - JMX Domain [%s]", runtime, conn.getDefaultDomain());
-//		    Set<ObjectName> bulks = conn.queryNames(null, Query.isInstanceOf(new StringValueExp("com.heliosapm.jmx.batch.BulkJMXServiceMBean")));
-		    Set<ObjectName> bulks = conn.queryNames(null, Query.isInstanceOf(new StringValueExp("com.theice.bec.jmx.remoting.BulkJMXService")));
+		    Set<ObjectName> bulks = conn.queryNames(null, Query.isInstanceOf(new StringValueExp("com.heliosapm.jmx.batch.BulkJMXServiceMBean")));
+//		    Set<ObjectName> bulks = conn.queryNames(null, Query.isInstanceOf(new StringValueExp("com.theice.bec.jmx.remoting.BulkJMXService")));
 		    
 		    if(bulks.isEmpty()) {
 		    	throw new RuntimeException("Bulk JMX Service Not Installed");
@@ -283,6 +283,12 @@ public class TestClient {
 //		    }
 		    tsdbSubmitter.trace(map);
 		    LOG.log("Flush: %s", Arrays.toString(tsdbSubmitter.flush()));
+		    LOG.log("===============================================================");
+		    for(Map.Entry<ObjectName, String[]> entry: attrNames.entrySet()) {		    
+	    		final ObjectName on = entry.getKey();
+	    		final String[] attrs = entry.getValue();		    	
+	    		tsdbSubmitter.trace(on, "yahoometric", JMXHelper.getAttributes(on, conn, attrs), "*");
+		    }		    
 //		    Thread.currentThread().join();
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);

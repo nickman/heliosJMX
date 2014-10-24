@@ -59,6 +59,8 @@ import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.StringHelper;
+import com.ning.http.client.AsyncHttpClient;
+import com.ning.http.client.AsyncHttpClientConfig;
 
 /**
  * <p>Title: TSDBSubmitter</p>
@@ -89,6 +91,10 @@ public class TSDBSubmitter {
 	protected final int port;
 	/** The socket connected to the host/port */
 	protected Socket socket = null;
+	/** The http client to submit http ops to the tsdb server */
+	protected AsyncHttpClient httpClient = null;
+	/** The HTTP base URL for HTTP submitted requests */
+	protected String baseURL = null;
 	/** The socket keep-alive flag */
 	protected boolean keepAlive = true;
 	/** The socket re-use address flag */
@@ -173,9 +179,10 @@ public class TSDBSubmitter {
 		this.port = port;
 		socket = new Socket();
 		Map<String, String> tags = new LinkedHashMap<String, String>();
-		tags.put("app", "groovy");
-		tags.put("host", "tpsolaris");
-		transformCache.register(JMXHelper.objectName("*:*"), new com.heliosapm.opentsdb.Transformers.DefaultTransformer(tags, null));
+//		tags.put("app", "groovy");
+//		tags.put("host", "tpsolaris");
+//		transformCache.register(JMXHelper.objectName("*:*"), new com.heliosapm.opentsdb.Transformers.DefaultTransformer(tags, null));
+		baseURL = "http://" + host + ":" + port + "/";
 	}
 	
 	/**
@@ -274,6 +281,7 @@ public class TSDBSubmitter {
 			LOG.log("Connected to [%s:%s]", host, port);
 			os = socket.getOutputStream();
 			is = socket.getInputStream();
+			httpClient = new AsyncHttpClient(new AsyncHttpClientConfig.Builder().setAllowPoolingConnection(true).setConnectionTimeoutInMs(2000).build());
 			LOG.log("Version: %s", getVersion());
 			return this;
 		} catch (Exception ex) {
@@ -366,12 +374,20 @@ public class TSDBSubmitter {
 		final String m = (metricName==null || metricName.trim().isEmpty()) ? target.getDomain() : metricName.trim();
 		final Map<String, String> tags = new LinkedHashMap<String, String>(rootTagsMap);
 		int keyCount = 0;
-		for(String key: objectNameKeys) {
-			if(key==null || key.trim().isEmpty()) continue;
-			String v = clean(target, key.trim());
-			if(v==null || v.isEmpty()) continue;
-			tags.put(clean(key), clean(v));
-			keyCount++;			
+		boolean all = (objectNameKeys.length==1 && "*".equals(objectNameKeys[0]));
+		if(all) {
+			for(Map.Entry<String, String> entry: target.getKeyPropertyList().entrySet()) {
+				tags.put(clean(entry.getKey()), clean(entry.getValue()));
+				keyCount++;
+			}
+		} else {
+			for(String key: objectNameKeys) {
+				if(key==null || key.trim().isEmpty()) continue;
+				String v = clean(target, key.trim());
+				if(v==null || v.isEmpty()) continue;
+				tags.put(clean(key), clean(v));
+				keyCount++;			
+			}			
 		}
 		if(keyCount==0) throw new IllegalArgumentException("No ObjectName Keys Usable as Tags. Keys: " + Arrays.toString(objectNameKeys) + ", ObjectName: [" + target.toString() + "]");
 		
@@ -388,17 +404,22 @@ public class TSDBSubmitter {
 						trace(m, ((Number)v).longValue(), tags);
 					}
 				} else if(v instanceof CompositeData) {
-					final CompositeData cd = (CompositeData)v;
-					final String cdType = cd.getCompositeType().getTypeName();
-					tags.put("ctype", cdType);
+					final CompositeData cd = (CompositeData)v;					
+					tags.put("ctype", attributeName);					
 					try {
-						Map<ObjectName, Number> cmap = fromOpenType(target, cd);
-						for(Map.Entry<ObjectName, Number> ce: cmap.entrySet()) {
-							final Number cv = ce.getValue();
-							if(v instanceof Double) {
-								trace(m, cv.doubleValue(), tags);
-							} else {
-								trace(m, cv.longValue(), tags);
+						Map<String, Number> cmap = fromOpenType(cd);
+						for(Map.Entry<String, Number> ce: cmap.entrySet()) {
+							final String key = clean(ce.getKey());							
+							tags.put("metric", key);
+							try {
+								final Number cv = ce.getValue();
+								if(v instanceof Double) {
+									trace(m, cv.doubleValue(), tags);
+								} else {
+									trace(m, cv.longValue(), tags);
+								}
+							} finally {
+								tags.put("metric", attributeName);
 							}
 						}
 					} finally {
@@ -576,6 +597,24 @@ public class TSDBSubmitter {
 			ObjectName on = JMXHelper.objectName(clean(b));
 			map.put(on, (Number)value);
 			
+		}
+		return map;
+	}
+	
+	/**
+	 * Decoposes the passed composite data instance to a map of numeric values keyed by the composite type key
+	 * @param cd The composite data instance
+	 * @return a map of numeric values keyed by the composite type key
+	 */
+	protected Map<String, Number> fromOpenType(final CompositeData cd) {
+		if(cd==null) return Collections.emptyMap();
+		final Map<String, Number> map = new LinkedHashMap<String, Number>();
+		final CompositeType ct = cd.getCompositeType();
+		for(final String key: ct.keySet()) {
+			final Object value = cd.get(key);
+			if(value!=null && (value instanceof Number)) {
+				map.put(key, (Number)value);
+			}
 		}
 		return map;
 	}
