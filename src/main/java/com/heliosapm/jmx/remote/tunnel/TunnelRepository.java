@@ -31,18 +31,19 @@ import java.net.UnknownHostException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.heliosapm.SimpleLogger;
-import com.heliosapm.SimpleLogger.SLogger;
-import com.heliosapm.jmx.remote.InetAddressCache;
-import com.heliosapm.opentsdb.TSDBSubmitter;
-import com.heliosapm.ssh.terminal.CommandTerminal;
-import com.heliosapm.ssh.terminal.WrappedSession;
+import javax.management.remote.JMXServiceURL;
 
 import sun.net.www.protocol.TunnelURLConnection;
 import ch.ethz.ssh2.Connection;
 import ch.ethz.ssh2.ConnectionMonitor;
-import ch.ethz.ssh2.LocalPortForwarder;
+import ch.ethz.ssh2.LocalStreamForwarder;
 import ch.ethz.ssh2.Session;
+
+import com.heliosapm.SimpleLogger;
+import com.heliosapm.SimpleLogger.SLogger;
+import com.heliosapm.jmx.remote.InetAddressCache;
+import com.heliosapm.ssh.terminal.CommandTerminal;
+import com.heliosapm.ssh.terminal.WrappedSession;
 
 /**
  * <p>Title: TunnelRepository</p>
@@ -134,15 +135,17 @@ public class TunnelRepository {
 		}
 	}
 	
-//	/**
-//	 * Creates a new tunnel
-//	 * @param sshHost The sshHost to bridge through, defaults to the target jmxHost
-//	 * @param sshPort The sshPort to bridge through, defaults to 22
-//	 * @param jmxHost The JMX connector endpoint host
-//	 * @param jmxPort The JMX connector endpoint port
-//	 * @param localPort The local port. If zero is passed, a port will be auto assigned
-//	 * @return a tunnel handle used to close the tunnel and that provides the local port assignment
-//	 */
+	/**
+	 * Creates a new LocalStreamForwarder for the passed JMX tunnel endpoint
+	 * @param serviceURL The tunnel JMXServiceURL
+	 * @param env The JMX environment map
+	 * @return a stream forwarder
+	 */
+	public LocalStreamForwarder streamForward(final JMXServiceURL serviceURL, Map<String, Object> env) {
+		SSHTunnelConnector sshConn = new SSHTunnelConnector(serviceURL, env);
+		return null;
+	}
+	
 	/**
 	 * Creates or acquires a new tunnel
 	 * @param tunnelConnector The tunnel connector
@@ -159,6 +162,11 @@ public class TunnelRepository {
 			localPort = 0;
 			key = String.format("%s:%s", jmxHost, jmxPort);
 			tunnel = tunnelsByAddress.get(key);
+			if(tunnel!=null && !tunnel.isOpen()) {
+				// there is a tunnel, but it's closed
+				tunnelsByAddress.remove(key);
+				tunnel = null;
+			}
 			if(tunnel == null) {
 				synchronized(tunnelsByAddress) {
 					tunnelsByAddress.get(key);

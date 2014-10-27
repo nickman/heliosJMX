@@ -29,7 +29,7 @@
 		<jmx-optional.version>1.0-b02-SNAPSHOT</jmx-optional.version>
 		<high-scale-lib.version>1.1.4</high-scale-lib.version>
 		<log4j.version>1.2.16</log4j.version>
-		<javassist.version>3.18.0-GA</javassist.version>
+		<javassist.version>3.18.2-GA</javassist.version>
 		<ganymed.version>262</ganymed.version>
 		<slf4j.version>1.7.2</slf4j.version>
 		<logback.version>1.1.2</logback.version>
@@ -117,6 +117,13 @@
 	  <artifactId>json</artifactId>
 	  <version>${json.version}</version>
 	</dependency>
+	
+	<dependency>
+	  <groupId>org.javassist</groupId>
+	  <artifactId>javassist</artifactId>
+	  <version>${javassist.version}</version>
+	</dependency>
+	
 	
       
 <!-- 			

@@ -263,20 +263,20 @@ public class FileCleaner implements Runnable {
 		return maxPending;
 	}
 	
-	public static void main(String args[]) {
-		createTestDir();
-		try {
-			LOG.log("FileCleaner Test");
-			FileCleaner fc = getInstance();
-
-			fc.deleteFile(new File("/etc/hosts"));
-			fc.deleteFile(new File("/tmp/d.txt"));
-			fc.deleteFile(new File("/tmp/newDir.0"));
-			Thread.currentThread().join();
-		} catch (Exception ex) {
-			ex.printStackTrace(System.err);
-		}
-	}
+//	public static void main(String args[]) {
+//		createTestDir();
+//		try {
+//			LOG.log("FileCleaner Test");
+//			FileCleaner fc = getInstance();
+//
+//			fc.deleteFile(new File("/etc/hosts"));
+//			fc.deleteFile(new File("/tmp/d.txt"));
+//			fc.deleteFile(new File("/tmp/newDir.0"));
+//			Thread.currentThread().join();
+//		} catch (Exception ex) {
+//			ex.printStackTrace(System.err);
+//		}
+//	}
 	
 	static void createTestDir() {
 		getInstance().reset();
@@ -332,7 +332,7 @@ public class FileCleaner implements Runnable {
 			int ne = 0;
 			int failed = 0;
 			String[] keys = pendingPrefs.childrenNames();
-			LOG.log("Running FileCleaner Task. Keys: %s", Arrays.toString(keys));
+//			LOG.log("Running FileCleaner Task. Keys: %s", Arrays.toString(keys));
 			if(keys!=null && keys.length>0) {
 				for(final String key: keys) {
 					final int id = parseKey(key);					
@@ -351,7 +351,7 @@ public class FileCleaner implements Runnable {
 						continue;						
 					}
 					final File pendingFile = new File(fileName.trim());
-					LOG.log("Processing Deletion File [%s]", pendingFile);					
+//					LOG.log("Processing Deletion File [%s]", pendingFile);					
 					if(pendingFile.exists()) {
 						if(pendingFile.delete()) {
 							removePendingFile(key);
@@ -365,7 +365,7 @@ public class FileCleaner implements Runnable {
 					}
 				}
 			}
-			LOG.log("Cleaner Task: Deleted [%s] files, Not found files: [%s], Deletion Failed: [%s]", cnt, ne, failed);
+//			LOG.log("Cleaner Task: Deleted [%s] files, Not found files: [%s], Deletion Failed: [%s]", cnt, ne, failed);
 		} catch (Exception ex) {
 			LOG.loge("Cleaner task failed: %s", ex);
 		}

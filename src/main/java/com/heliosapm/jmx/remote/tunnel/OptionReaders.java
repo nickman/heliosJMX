@@ -59,6 +59,9 @@ public class OptionReaders {
 	public static final StringReader STRING_READER = new StringReader();
 	/** Static shareable Int reader instance */
 	public static final IntReader INT_READER = new IntReader();
+	/** Static shareable Long reader instance */
+	public static final LongReader LONG_READER = new LongReader();
+	
 	/** Static shareable Char Array reader instance */
 	public static final CharArrReader CHAR_ARR_READER = new CharArrReader();
 	/** Static shareable Boolean reader instance */
@@ -324,10 +327,59 @@ public class OptionReaders {
 				return defaultValue;
 			}
 		}
-		
-		
-		
 	}
+	
+	/**
+	 * <p>Title: LongReader</p>
+	 * <p>Description: Long value option reader</p> 
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.jmx.remote.tunnel.OptionReaders.LongReader</code></p>
+	 */
+	public static class LongReader implements ISSHOptionReader<Long> {
+
+		/**
+		 * {@inheritDoc}
+		 * @see com.heliosapm.jmx.remote.tunnel.ISSHOptionReader#getOption(java.util.Map, java.lang.String, java.lang.Object)
+		 */
+		@Override
+		public Long getOption(Map env, String key, Long defaultValue) {
+			if(env==null || key==null || key.trim().isEmpty()) return defaultValue;
+			try {
+				String val = STRING_READER.getOption(env, key, null);
+				if(val!=null) return Long.parseLong(val);
+			} catch (Exception x) { /* No Op */ }
+			return defaultValue;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 * @see com.heliosapm.jmx.remote.tunnel.ISSHOptionReader#getOption(java.lang.String, java.lang.Object)
+		 */
+		@Override
+		public Long getOption(String key, Long defaultValue) {
+			if(key==null || key.trim().isEmpty()) return defaultValue;
+			String val = STRING_READER.getOption(key, null);
+			try {
+				if(val!=null) return Long.parseLong(val);
+			} catch (Exception x) { /* No Op */ }
+			return defaultValue;
+		}
+		
+		public Object getRawOption(String key, Object defaultValue) {
+			return getOption(key, (Long)defaultValue);
+		}
+		
+		public Long convert(String value, Long defaultValue) {
+			if(value==null || value.trim().isEmpty()) return defaultValue;
+			try {
+				return Long.parseLong(value.trim());
+			} catch (Exception ex) {
+				return defaultValue;
+			}
+		}
+	}
+	
 	
 	/**
 	 * <p>Title: CharArrReader</p>

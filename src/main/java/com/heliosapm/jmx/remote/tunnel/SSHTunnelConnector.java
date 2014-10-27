@@ -94,6 +94,9 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	/** The sub protocol */
 	protected String subProtocol = "ssh";
 	
+	/** The JMXMP client timeout in ms. */
+	protected long readTimeout = DEFAULT_JMXMP_READ_TIMEOUT;
+	
 	/** the key type */
 	protected String keyType = null;
 	
@@ -143,6 +146,12 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	/** The pattern of the TSSH URL Path */
 	public static final Pattern TSSH_URL_PATH_PATTERN = Pattern.compile("/(.*?)/(.*?):(.*)");
 	
+	/** The env property name for the JMXMP read timeout */
+	public static final String JMXMP_READ_TIMEOUT = "jmx.remote.x.request.timeout";
+	/** The JMXMP read timeout default in ms */
+	public static final long DEFAULT_JMXMP_READ_TIMEOUT = 15000;
+
+	
 	/** An empty connector useful as a placeholder so we don't jam up the caches when synchronizing */
 	public static final SSHTunnelConnector EMPTY_CONNECTOR = new SSHTunnelConnector(); 
 	
@@ -152,13 +161,13 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	 * @param jmxServiceURL The JMXServiceURL requested to connect to 
 	 * @param env An optional environment map
 	 */
-	public SSHTunnelConnector(JMXServiceURL jmxServiceURL, Map<?, Object> env) {
+	public SSHTunnelConnector(JMXServiceURL jmxServiceURL, Map<String, Object> env) {
 		if(jmxServiceURL==null) throw new IllegalArgumentException("The passed JMXServiceURL was null");
 		Map<SSHOption, Object> options = gather(jmxServiceURL, env);
 		initialize(options);
 		try {
 			jmxConnectorPort = jmxServiceURL.getPort();
-		} catch (Exception ex) {/* No Op */}
+		} catch (Exception ex) {/* No Op */} 
 		try {
 			jmxConnectorHost = InetAddressCache.getInstance().getAliases(jmxServiceURL.getHost())[0];
 		} catch (Exception ex) {/* No Op */}		
@@ -323,7 +332,9 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 //			case JMXPORT:
 //				jmxConnectorPort = (Integer)optionValue;
 //				break;
-				
+			case READTO:
+				readTimeout = ((Number)optionValue).longValue();
+				break;
 			default:
 				break;
 			
@@ -364,6 +375,9 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 		TunnelHandle tunnelHandle = TunnelRepository.getInstance().tunnel(tc);
 		if(env==null) {
 			env = new HashMap<String, Object>();
+		}
+		if(!env.containsKey(JMXMP_READ_TIMEOUT)) {
+			env.put(JMXMP_READ_TIMEOUT, tc.readTimeout);
 		}
 		JMXServiceURL serviceURL = JMXHelper.serviceUrl("service:jmx:%s://%s:%s", tc.getDelegateProtocol(), "localhost", tunnelHandle.getLocalPort());
 		LOG.log("Rewritten Tunneled JMXServiceURL [%s]", serviceURL);

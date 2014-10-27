@@ -28,6 +28,9 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.Map;
 
+import javax.management.Notification;
+import javax.management.NotificationListener;
+import javax.management.remote.JMXConnectionNotification;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXConnectorProvider;
@@ -38,6 +41,8 @@ import com.heliosapm.jmx.remote.protocol.WrappedJMXConnector;
 import com.heliosapm.jmx.remote.tunnel.LocalPortForwarderWrapper;
 import com.heliosapm.jmx.remote.tunnel.SSHTunnelConnector;
 import com.heliosapm.jmx.remote.tunnel.TunnelHandle;
+import com.heliosapm.jmx.util.helpers.ClassSwapper;
+import com.heliosapm.jmx.util.helpers.ReconnectorService;
 
 /**
  * <p>Title: ClientProvider</p>
@@ -50,28 +55,69 @@ public class ClientProvider implements JMXConnectorProvider {
 	
 	/** The protocol name */
 	public static final String PROTOCOL_NAME = "tunnel";
+	
+	private static boolean INSTR = false;
+	
+	public static final String TIMEOUT_FOR_CONNECTED_STATE =
+			"jmx.remote.x.client.connected.state.timeout";	
 
     /**
      * {@inheritDoc}
      * @see javax.management.remote.JMXConnectorProvider#newJMXConnector(javax.management.remote.JMXServiceURL, java.util.Map)
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({ "unchecked", "resource" })
 	public JMXConnector newJMXConnector(final JMXServiceURL serviceURL, final Map environment) throws IOException {
 		if (!serviceURL.getProtocol().equals(PROTOCOL_NAME)) {
 		    throw new MalformedURLException("Protocol not [" + PROTOCOL_NAME + "]: " +
 						    serviceURL.getProtocol());
 		}
 		Map newenv = SSHTunnelConnector.tunnel(serviceURL, environment);
+		newenv.put(TIMEOUT_FOR_CONNECTED_STATE, 2000);
 		final TunnelHandle th = (TunnelHandle)newenv.remove("TunnelHandle");
         final JMXConnector connector = WrappedJMXConnector.addressable(JMXConnectorFactory.newJMXConnector((JMXServiceURL)newenv.remove("JMXServiceURL"), newenv), serviceURL);
+        
+        
+        final NotificationListener closeListener = new NotificationListener() {
+        	@Override
+        	public void handleNotification(final Notification n, final Object handback) {
+        		final String type = n.getType();
+        		if(JMXConnectionNotification.CLOSED.equals(type) || JMXConnectionNotification.FAILED.equals(type)) {
+        			((LocalPortForwarderWrapper)th).close();
+        			System.err.println("Connection [" + clean(serviceURL) + "] Closed. Closing Tunnel [" + th + "].....");
+        			if(!INSTR) {
+        				try {
+        					ClassSwapper.getInstance().swapIn(com.sun.jmx.remote.socket.InstrumentedSocketConnection.class);
+        					System.out.println("\n\t============\n\tInstrumented JMX Socket\n\t============");
+        					INSTR = true;
+        				} catch (Exception x) {
+        					x.printStackTrace(System.err);
+        				}
+        			}
+        		}
+        	}
+        };
+        
         ((LocalPortForwarderWrapper)th).addCloseListener(new CloseListener<LocalPortForwarderWrapper>(){
         	public void onClosed(LocalPortForwarderWrapper closeable) {
         		try {
         			System.err.println("PortForward [" + closeable + "] Closed. Closing Connector [" + connector.getConnectionId() + "].....");
+        			try { connector.removeConnectionNotificationListener(closeListener); } catch (Exception x) {/* No Op */}
 					connector.close();
 				} catch (IOException x) { /* No Op */}
         	}
         });
+        connector.addConnectionNotificationListener(closeListener, null, null);
+        ReconnectorService.getInstance().autoReconnect(connector, serviceURL, true, null);
         return connector;
     }
+    
+	/**
+	 * Returns a "clean" JMXServiceURL representation so we don't reveal anything we shouldn't
+	 * @param serviceURL The JMXServiceURL to clean
+	 * @return the cleaned string
+	 */
+	protected String clean(final JMXServiceURL serviceURL) {
+		return String.format("service:jmx:%s://%s:%s/", serviceURL.getProtocol(), serviceURL.getHost(), serviceURL.getPort());
+	}
+    
 }

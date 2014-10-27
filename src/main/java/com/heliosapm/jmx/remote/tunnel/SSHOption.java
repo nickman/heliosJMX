@@ -79,7 +79,9 @@ public enum SSHOption {
 	/** The SSH connection timeout, non-negative, in millisecondsm where zero is no timeout */
 	SSHTO("to", ClientProvider.PROTOCOL_NAME + ".timeout", 10000, OptionReaders.INT_READER),
 	/** The SSH key exchange timeout, non-negative, in millisecondsm where zero is no timeout */
-	SSHKTO("kto", ClientProvider.PROTOCOL_NAME + ".kextimeout", 2000, OptionReaders.INT_READER);
+	SSHKTO("kto", ClientProvider.PROTOCOL_NAME + ".kextimeout", 2000, OptionReaders.INT_READER),
+	/** The SSH/JMXMP specific read timeout in ms. */
+	READTO("rto", ClientProvider.PROTOCOL_NAME + ".readtimeout", 15000, OptionReaders.LONG_READER);
 	
 	
 	/**
@@ -99,6 +101,8 @@ public enum SSHOption {
 	 */
 	
 	
+	/** The env property name for the JMXMP read timeout */
+	public static final String JMXMP_READ_TIMEOUT = "jmx.remote.x.request.timeout";
 	
 	
 	/** A map of SSHOptions keyed by the short code */

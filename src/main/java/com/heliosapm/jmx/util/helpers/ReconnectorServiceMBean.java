@@ -43,7 +43,7 @@ public interface ReconnectorServiceMBean {
 	public static final ObjectName WORKER_OBJECT_NAME = JMXHelper.objectName("com.heliosapm.jmx:service=ReconnectorService,pool=Worker");
 	
 	/** The default reconnect period, in ms. */
-	public static final long DEFAULT_PERIOD = 15000;
+	public static final long DEFAULT_PERIOD = 5000;
 	
 	/** The notification type root */
 	public static final String NOTIF_ROOT = "helios.jmx.reconnector";

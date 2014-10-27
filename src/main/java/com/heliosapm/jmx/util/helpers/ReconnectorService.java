@@ -34,7 +34,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.management.MBeanNotificationInfo;
 import javax.management.Notification;
 import javax.management.NotificationBroadcasterSupport;
+import javax.management.NotificationFilter;
+import javax.management.NotificationListener;
 import javax.management.remote.JMXAddressable;
+import javax.management.remote.JMXConnectionNotification;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
@@ -115,6 +118,33 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 	}
 	
 	/**
+	 * Attaches a connection failure notification listener to the passed JMXConnector which will automatically
+	 * register the disconnected connector with the reconnect service
+	 * @param connector The connector to auto-reconnect
+	 * @param serviceURL The JMXServiceURL which can be null if the connector implements {@link JMXAddressable}
+	 * @param alsoOnClosed If true, the notification listener will be triggered on close as well as fail, otherwise it will only be triggered on fail.
+	 * @param callback The optional callback to get the connector when it is reconnected
+	 */
+	public void autoReconnect(final JMXConnector connector, final JMXServiceURL serviceURL, final boolean alsoOnClosed, final ReconnectCallback<JMXConnector> callback) {
+		if(connector==null) throw new IllegalArgumentException("The passed connector was null");
+		if(!(connector instanceof JMXAddressable) && serviceURL==null) throw new IllegalArgumentException("The passed connector does not implement JMXAddressable and the passed JMXServiceURL was null");
+		final JMXServiceURL jmxServiceURL = serviceURL!=null ? serviceURL : ((JMXAddressable)connector).getAddress();
+		connector.addConnectionNotificationListener(new NotificationListener() {
+			public void handleNotification(final Notification n, final Object handback) {
+				register(connector, null, callback);
+			}
+		}, new NotificationFilter() {
+			/**  */
+			private static final long serialVersionUID = -3880149039195415789L;
+
+			public boolean isNotificationEnabled(final Notification n) {
+				return JMXConnectionNotification.FAILED.equals(n.getType()) 
+						|| (alsoOnClosed && JMXConnectionNotification.FAILED.equals(n.getType()));
+			}
+		}, jmxServiceURL);
+	}
+	
+	/**
 	 * Registers a JMXConnector to be reconnected
 	 * @param jmxConnector The JMXConnector to reconnect
 	 * @param name An optional decorative name for this reconnect
@@ -122,6 +152,13 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 	 */
 	public void register(final JMXConnector jmxConnector, final String name, final ReconnectCallback<JMXConnector> callback) {
 		if(jmxConnector==null) throw new IllegalArgumentException("The passed JMXConnector was null");
+		if(jmxConnector instanceof JMXAddressable) {
+			JMXAddressable jax = (JMXAddressable)jmxConnector;
+			if("tunnel".equalsIgnoreCase(jax.getAddress().getProtocol())) {
+				register(jax.getAddress(), null, name, callback);
+				return;
+			}
+		}
 		final Reconnectable reconnectable = new Reconnectable() {
 			final int hash = reconSerial.incrementAndGet();
 			@Override
@@ -135,7 +172,8 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 								callback.onReconnect(jmxConnector);
 							}
 						});
-					}										
+					}			
+					sendNotification(NOTIF_COMPLETE, "Reconnected JMXConnector [" + clean(((JMXAddressable)jmxConnector).getAddress()) + "]", jmxConnector);
 					return true;
 				} catch(Exception ex) {
 					log.loge("Failed to reconnect JMXConnector [%s] - %s", jmxConnector, ex.toString());
@@ -151,6 +189,7 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 				if(!reconnect()) {
 					final long failedAttempts = reconnectables.get(this).incrementAndGet();
 					schedule(this);
+					sendNotification(NOTIF_FAIL, "Failed reconnect on JMXConnector [" + clean(((JMXAddressable)jmxConnector).getAddress()) + "]. Failed Attempt #" + failedAttempts, null);
 				} else {
 					reconnectables.remove(this);
 				}
@@ -160,7 +199,10 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 			}
 			
 		};
+		sendNotification(NOTIF_REGISTERED, "Registered reconnect for [" + clean(((JMXAddressable)jmxConnector).getAddress()) + "]", null);
+		schedule(reconnectable);
 		reconnectables.put(reconnectable, new AtomicLong(0));
+		
 	}
 	
 	/**
@@ -186,6 +228,7 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 		if(jmxServiceURL==null) throw new IllegalArgumentException("The passed JMXServiceURL was null");
 		final Reconnectable reconnectable = new Reconnectable() {
 			final int hash = reconSerial.incrementAndGet();
+			@SuppressWarnings("resource")
 			@Override
 			public boolean reconnect() {
 				try {
@@ -197,10 +240,11 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 							}
 						});
 					}
+					sendNotification(NOTIF_COMPLETE, "Reconnected JMXConnector [" + clean(jmxServiceURL) + "]", connector);
 					log.log("Connected JMXConnector to [%s]", jmxServiceURL);
 					return true;
 				} catch(Exception ex) {
-					log.loge("Failed to connect to [%s] - %s", jmxServiceURL, ex.toString());
+					log.loge("Failed to connect to [%s] - %s", jmxServiceURL, ex);
 					return false;
 				}				
 			}
@@ -213,7 +257,7 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 				if(!reconnect()) {
 					final long failedAttempts = reconnectables.get(this).incrementAndGet();
 					schedule(this);
-					sendNotification(NOTIF_REGISTERED, "Registered reconnect for [" + clean(jmxServiceURL) + "]", null);
+					sendNotification(NOTIF_FAIL, "Failed reconnect on JMXConnector [" + clean(jmxServiceURL) + "]. Failed Attempt #" + failedAttempts, null);
 				} else {
 					reconnectables.remove(this);
 				}
@@ -221,9 +265,10 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 			public int hashCode() {
 				return hash * 31;
 			}
-		};
-		reconnectables.put(reconnectable, new AtomicLong(0));
+		};		
 		sendNotification(NOTIF_REGISTERED, "Registered reconnect for [" + clean(jmxServiceURL) + "]", null);
+		schedule(reconnectable);
+		reconnectables.put(reconnectable, new AtomicLong(0));
 	}
 
 	/**
@@ -246,7 +291,7 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 	 * @return the cleaned string
 	 */
 	protected String clean(final JMXServiceURL serviceURL) {
-		return String.format("service:jmx:%s://%s:%s/");
+		return String.format("service:jmx:%s://%s:%s/", serviceURL.getProtocol(), serviceURL.getHost(), serviceURL.getPort());
 	}
 	
 	/**
