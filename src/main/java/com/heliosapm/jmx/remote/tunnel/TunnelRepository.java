@@ -140,10 +140,11 @@ public class TunnelRepository {
 	 * @param serviceURL The tunnel JMXServiceURL
 	 * @param env The JMX environment map
 	 * @return a stream forwarder
+	 * @throws IOException 
 	 */
-	public LocalStreamForwarder streamForward(final JMXServiceURL serviceURL, Map<String, Object> env) {
+	public LocalStreamForwarder streamForward(final JMXServiceURL serviceURL, Map<String, Object> env) throws IOException {
 		SSHTunnelConnector sshConn = new SSHTunnelConnector(serviceURL, env);
-		return null;
+		return _connect(sshConn).createLocalStreamForwarder(sshConn.getJmxConnectorHost(), sshConn.getJmxConnectorPort());		
 	}
 	
 	/**

@@ -29,6 +29,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 
+import com.heliosapm.SimpleLogger;
+import com.heliosapm.SimpleLogger.SLogger;
+import com.heliosapm.jmx.util.helpers.SocketHelper;
+
 /**
  * <p>Title: InstrumentedStreamForwarder</p>
  * <p>Description: </p> 
@@ -46,16 +50,15 @@ public class InstrumentedStreamForwarder extends Thread {
 	StreamForwarder sibling;
 	Socket s;
 	String mode;
-
-	InstrumentedStreamForwarder(Channel c, StreamForwarder sibling, Socket s, InputStream is, OutputStream os, String mode)
-			throws IOException
-	{
+	
+	InstrumentedStreamForwarder(Channel c, StreamForwarder sibling, Socket s, InputStream is, OutputStream os, String mode) throws IOException 	{
 		this.is = is;
 		this.os = os;
 		this.mode = mode;
 		this.c = c;
 		this.sibling = sibling;
-		this.s = s;
+		this.s = s;		
+		SimpleLogger.logger(getClass()).log("Created New Stream Forwarder. Socket:\n%s", SocketHelper.dump(s));
 	}
 
 	@Override
@@ -66,6 +69,7 @@ public class InstrumentedStreamForwarder extends Thread {
 			while (true)
 			{
 				int len = is.read(buffer);
+				SimpleLogger.logger(getClass()).log("Running Stream Forwarder. Socket:\n%s", SocketHelper.dump(s));
 				if (len <= 0)
 					break;
 				os.write(buffer, 0, len);

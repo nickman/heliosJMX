@@ -31,10 +31,14 @@ import java.util.HashMap;
 import java.util.Map;
 
 import javax.management.remote.JMXAddressable;
+import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 import javax.management.remote.generic.GenericConnector;
+import javax.management.remote.generic.MessageConnection;
 
-import com.heliosapm.jmx.remote.tunnel.TunnelRepository;
+import com.heliosapm.jmx.remote.protocol.tunnel.SSHTunnelMessageConnection;
+import com.heliosapm.jmx.remote.tunnel.WrappedStreamForwarder;
+import com.sun.jmx.remote.opt.util.EnvHelp;
 
 /**
  * <p>Title: TunnelConnector</p>
@@ -48,10 +52,10 @@ public class TunnelConnector extends GenericConnector implements JMXAddressable 
     /** The requested tunnel JMX address */
     protected JMXServiceURL address;
     /** The internal connector environment map */
-    protected transient Map<String, ?> tunnelEnv;
+    protected transient Map<String, Object> tunnelEnv;
 
     /** The tunnel protocol name */
-    public static final String protocolName = "jmxmp";
+    public static final String protocolName = "tunnel";
 
     /**
      * <p>Constructs a JMXMP Connector client tunneled through an SSH local port forwarder
@@ -98,16 +102,28 @@ public class TunnelConnector extends GenericConnector implements JMXAddressable 
     private void validateAddress() throws IOException {
     	if (address == null) throw new IllegalArgumentException("JMXServiceURL must not be null");    	
     	if (!protocolName.equalsIgnoreCase(address.getProtocol())) throw new MalformedURLException("Unknown protocol: " + address.getProtocol());
-    }    
+    }  
+    
+    
+    
     /**
      * {@inheritDoc}
      * @see javax.management.remote.generic.GenericConnector#connect(java.util.Map)
      */
     @Override
     public void connect(final Map env) throws IOException {
-    	final Map<String, ?> newEnv = new HashMap<String, Object>();
+    	final Map<String, Object> newEnv = new HashMap<String, Object>();
     	validateAddress();
     	//TunnelRepository.getInstance().tunnel(tunnelConnector)
+    	final ClassLoader defaultClassLoader =
+    		    EnvHelp.resolveClientClassLoader(newEnv);
+    		newEnv.put(JMXConnectorFactory.DEFAULT_CLASS_LOADER, 
+    			   defaultClassLoader);
+    	
+    	if (!newEnv.containsKey(MESSAGE_CONNECTION)) {
+    	    MessageConnection conn = new SSHTunnelMessageConnection(new WrappedStreamForwarder(address, tunnelEnv));
+    	    newEnv.put(MESSAGE_CONNECTION, conn);
+    	}    	
     	super.connect(newEnv);
     }
     

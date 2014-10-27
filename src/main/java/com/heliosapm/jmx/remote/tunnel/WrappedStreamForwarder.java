@@ -29,6 +29,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Map;
 
+import javax.management.remote.JMXAddressable;
 import javax.management.remote.JMXServiceURL;
 
 import ch.ethz.ssh2.LocalStreamForwarder;
@@ -41,7 +42,7 @@ import ch.ethz.ssh2.LocalStreamForwarder;
  * <p><code>com.heliosapm.jmx.remote.tunnel.WrappedStreamForwarder</code></p>
  */
 
-public class WrappedStreamForwarder {
+public class WrappedStreamForwarder implements JMXAddressable {
 	/** The underlying stream forwarder */
 	protected volatile LocalStreamForwarder lsf = null;
 	/** The JMXServiceURL that the forwarder is associated to */
@@ -111,6 +112,15 @@ public class WrappedStreamForwarder {
 	 */
 	public String toString() {
 		return String.format("LocalStreamForwarder to [service:jmx:%s://%s:%s]", serviceURL.getProtocol(), serviceURL.getHost(), serviceURL.getPort());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.remote.JMXAddressable#getAddress()
+	 */
+	@Override
+	public JMXServiceURL getAddress() {
+		return serviceURL;
 	}
 
 }

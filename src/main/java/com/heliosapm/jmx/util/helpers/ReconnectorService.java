@@ -131,7 +131,8 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 		final JMXServiceURL jmxServiceURL = serviceURL!=null ? serviceURL : ((JMXAddressable)connector).getAddress();
 		connector.addConnectionNotificationListener(new NotificationListener() {
 			public void handleNotification(final Notification n, final Object handback) {
-				register(connector, null, callback);
+//				register(connector, null, callback);
+				register(serviceURL, null, null, callback);
 			}
 		}, new NotificationFilter() {
 			/**  */
@@ -144,66 +145,66 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 		}, jmxServiceURL);
 	}
 	
-	/**
-	 * Registers a JMXConnector to be reconnected
-	 * @param jmxConnector The JMXConnector to reconnect
-	 * @param name An optional decorative name for this reconnect
-	 * @param callback An optional callback that will pass the successfully connected JMXConnector
-	 */
-	public void register(final JMXConnector jmxConnector, final String name, final ReconnectCallback<JMXConnector> callback) {
-		if(jmxConnector==null) throw new IllegalArgumentException("The passed JMXConnector was null");
-		if(jmxConnector instanceof JMXAddressable) {
-			JMXAddressable jax = (JMXAddressable)jmxConnector;
-			if("tunnel".equalsIgnoreCase(jax.getAddress().getProtocol())) {
-				register(jax.getAddress(), null, name, callback);
-				return;
-			}
-		}
-		final Reconnectable reconnectable = new Reconnectable() {
-			final int hash = reconSerial.incrementAndGet();
-			@Override
-			public boolean reconnect() {
-				try {
-					jmxConnector.connect();
-					log.log("Reconnected JMXConnector [%s]", jmxConnector);
-					if(callback!=null) {
-						workerPool.execute(new Runnable(){
-							public void run() {
-								callback.onReconnect(jmxConnector);
-							}
-						});
-					}			
-					sendNotification(NOTIF_COMPLETE, "Reconnected JMXConnector [" + clean(((JMXAddressable)jmxConnector).getAddress()) + "]", jmxConnector);
-					return true;
-				} catch(Exception ex) {
-					log.loge("Failed to reconnect JMXConnector [%s] - %s", jmxConnector, ex.toString());
-					return false;
-				}				
-			}
-			@Override
-			public String getId() {
-				return name!=null ? name : "JMXConnector [" + ((JMXAddressable)jmxConnector).getAddress() + "]"; 
-			}
-			@Override
-			public void run() {
-				if(!reconnect()) {
-					final long failedAttempts = reconnectables.get(this).incrementAndGet();
-					schedule(this);
-					sendNotification(NOTIF_FAIL, "Failed reconnect on JMXConnector [" + clean(((JMXAddressable)jmxConnector).getAddress()) + "]. Failed Attempt #" + failedAttempts, null);
-				} else {
-					reconnectables.remove(this);
-				}
-			}
-			public int hashCode() {
-				return hash * 31;
-			}
-			
-		};
-		sendNotification(NOTIF_REGISTERED, "Registered reconnect for [" + clean(((JMXAddressable)jmxConnector).getAddress()) + "]", null);
-		schedule(reconnectable);
-		reconnectables.put(reconnectable, new AtomicLong(0));
-		
-	}
+//	/**
+//	 * Registers a JMXConnector to be reconnected
+//	 * @param jmxConnector The JMXConnector to reconnect
+//	 * @param name An optional decorative name for this reconnect
+//	 * @param callback An optional callback that will pass the successfully connected JMXConnector
+//	 */
+//	public void register(final JMXConnector jmxConnector, final String name, final ReconnectCallback<JMXConnector> callback) {
+//		if(jmxConnector==null) throw new IllegalArgumentException("The passed JMXConnector was null");
+////		if(jmxConnector instanceof JMXAddressable) {
+////			JMXAddressable jax = (JMXAddressable)jmxConnector;
+////			if("tunnel".equalsIgnoreCase(jax.getAddress().getProtocol())) {
+////				register(jax.getAddress(), null, name, callback);
+////				return;
+////			}
+////		}
+//		final Reconnectable reconnectable = new Reconnectable() {
+//			final int hash = reconSerial.incrementAndGet();
+//			@Override
+//			public boolean reconnect() {
+//				try {
+//					jmxConnector.connect();
+//					log.log("Reconnected JMXConnector [%s]", jmxConnector);
+//					if(callback!=null) {
+//						workerPool.execute(new Runnable(){
+//							public void run() {
+//								callback.onReconnect(jmxConnector);
+//							}
+//						});
+//					}			
+//					sendNotification(NOTIF_COMPLETE, "Reconnected JMXConnector [" + clean(((JMXAddressable)jmxConnector).getAddress()) + "]", jmxConnector);
+//					return true;
+//				} catch(Exception ex) {
+//					log.loge("Failed to reconnect JMXConnector [%s] - %s", jmxConnector, ex.toString());
+//					return false;
+//				}				
+//			}
+//			@Override
+//			public String getId() {
+//				return name!=null ? name : "JMXConnector [" + ((JMXAddressable)jmxConnector).getAddress() + "]"; 
+//			}
+//			@Override
+//			public void run() {
+//				if(!reconnect()) {
+//					final long failedAttempts = reconnectables.get(this).incrementAndGet();
+//					schedule(this);
+//					sendNotification(NOTIF_FAIL, "Failed reconnect on JMXConnector [" + clean(((JMXAddressable)jmxConnector).getAddress()) + "]. Failed Attempt #" + failedAttempts, null);
+//				} else {
+//					reconnectables.remove(this);
+//				}
+//			}
+//			public int hashCode() {
+//				return hash * 31;
+//			}
+//			
+//		};
+//		sendNotification(NOTIF_REGISTERED, "Registered reconnect for [" + clean(((JMXAddressable)jmxConnector).getAddress()) + "]", null);
+//		schedule(reconnectable);
+//		reconnectables.put(reconnectable, new AtomicLong(0));
+//		
+//	}
 	
 	/**
 	 * Schedules the reconnectable for a reconnect attempt
@@ -242,6 +243,7 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 					}
 					sendNotification(NOTIF_COMPLETE, "Reconnected JMXConnector [" + clean(jmxServiceURL) + "]", connector);
 					log.log("Connected JMXConnector to [%s]", jmxServiceURL);
+					register(jmxServiceURL, env, name, callback);
 					return true;
 				} catch(Exception ex) {
 					log.loge("Failed to connect to [%s] - %s", jmxServiceURL, ex);

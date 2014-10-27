@@ -81,7 +81,7 @@ public enum SSHOption {
 	/** The SSH key exchange timeout, non-negative, in millisecondsm where zero is no timeout */
 	SSHKTO("kto", ClientProvider.PROTOCOL_NAME + ".kextimeout", 2000, OptionReaders.INT_READER),
 	/** The SSH/JMXMP specific read timeout in ms. */
-	READTO("rto", ClientProvider.PROTOCOL_NAME + ".readtimeout", 15000, OptionReaders.LONG_READER);
+	READTO("rto", ClientProvider.PROTOCOL_NAME + ".readtimeout", 0, OptionReaders.LONG_READER);
 	
 	
 	/**

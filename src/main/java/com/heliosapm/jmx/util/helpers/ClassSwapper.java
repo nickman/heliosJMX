@@ -32,7 +32,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javassist.ClassPool;
 import javassist.CtClass;
+import javassist.CtConstructor;
 import javassist.CtMethod;
+import javassist.CtNewConstructor;
 import javassist.CtNewMethod;
 import javassist.LoaderClassPath;
 
@@ -123,6 +125,30 @@ public class ClassSwapper {
 			if(failed>0) {
 				throw new RuntimeException("Failed to swap classes", x);
 			}
+			ok = 0;
+			failed = 0;
+			x = null;
+			for(final CtConstructor ctx: fromClazz.getDeclaredConstructors()) {
+				try {
+					CtConstructor newCtor = null;
+					try {
+						newCtor = toClazz.getConstructor(ctx.getMethodInfo().getDescriptor());		
+					} catch (Exception ex) {
+						continue;
+					}
+					fromClazz.removeConstructor(ctx);										
+					fromClazz.addConstructor(CtNewConstructor.copy(newCtor, fromClazz, null));
+					ok++;
+				} catch (Throwable tx) {
+					failed++;
+					x = tx;
+				}
+			}
+			log.log("Class Swap Ctor Counts: OK: [%s],  Failed: [%s]", ok, failed);
+			if(failed>0) {
+				throw new RuntimeException("Failed to swap classes", x);
+			}
+			
 			final byte[] byteCode = fromClazz.toBytecode();
 			final ClassFileTransformer ctf = new ClassFileTransformer() {
 				@Override

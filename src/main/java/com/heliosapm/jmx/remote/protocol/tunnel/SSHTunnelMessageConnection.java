@@ -24,18 +24,31 @@
  */
 package com.heliosapm.jmx.remote.protocol.tunnel;
 
+import static com.heliosapm.jmx.remote.tunnel.TunnelState.CONNECTED;
+import static com.heliosapm.jmx.remote.tunnel.TunnelState.TERMINATED;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
+import java.lang.management.ManagementFactory;
+import java.security.Principal;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
 import javax.management.remote.generic.MessageConnection;
 import javax.management.remote.message.Message;
 
 import com.heliosapm.jmx.remote.tunnel.TunnelState;
 import com.heliosapm.jmx.remote.tunnel.WrappedStreamForwarder;
+import com.sun.jmx.remote.generic.DefaultConfig;
 
 /**
  * <p>Title: SSHTunnelMessageConnection</p>
@@ -50,6 +63,10 @@ public class SSHTunnelMessageConnection implements MessageConnection {
 	protected BufferedInputStream bis = null;
 	/** The buffered output stream */
 	protected BufferedOutputStream bos = null;
+	/** The buffered object input stream */
+	private ObjectInputStream oin = null;
+	/** The buffered object output strea, */
+	private ObjectOutputStream oout;
 	
 	/** The wrapped SSH tunnel stream forwarder */
 	protected WrappedStreamForwarder wsf = null;
@@ -58,7 +75,10 @@ public class SSHTunnelMessageConnection implements MessageConnection {
 	
 	/** The state of this message connection */
 	protected final AtomicReference<TunnelState> state = new AtomicReference<TunnelState>(TunnelState.UNCONNECTED); 
+	/** The time to wait for a connected state in ms. */
+	private long  waitConnectedState = 1000;
 	
+	private final String defaultConnectionId = "Uninitialized connection id";
 	
 	/**
 	 * Creates a new SSHTunnelMessageConnection
@@ -74,12 +94,15 @@ public class SSHTunnelMessageConnection implements MessageConnection {
 	 */
 	@Override
 	public void connect(final Map env) throws IOException {
-		state.set(TunnelState.CONNECTING);
-		bufferStreams();  // this will trigger the creation of the tunnel		
+		waitConnectedState = DefaultConfig.getTimeoutForWaitConnectedState(env);
+		
+		state.set(TunnelState.CONNECTING);			
 		if(env!=null) {
 			defaultClassLoader = (ClassLoader)env.get(JMXConnectorFactory.DEFAULT_CLASS_LOADER);
 		}
+		bufferStreams();  // this will trigger the creation of the tunnel
 		state.set(TunnelState.CONNECTED);
+		checkState();
 	}
 	
 	/**
@@ -90,6 +113,23 @@ public class SSHTunnelMessageConnection implements MessageConnection {
 	protected void bufferStreams() throws IOException {
 		bis = new BufferedInputStream(wsf.getInputStream());
 		bos = new BufferedOutputStream(wsf.getOutputStream());
+		oin = new ObjectInputStreamWithLoader(bis, defaultClassLoader);
+		oout = new ObjectOutputStream(bos);
+	}
+	
+	protected void checkState() {
+	    if (state.get() == CONNECTED) {
+	    	return;
+	    } else if (state.get() == TERMINATED) {
+	    	throw new IllegalStateException("The connection has been closed.");
+	    }
+	    final long waitingTime = waitConnectedState;	    
+	    TunnelState.waitForState(state, waitingTime, CONNECTED, TERMINATED);
+	    if (state.get() == CONNECTED) {
+	    	return;
+	    }
+	    close();
+		throw new IllegalStateException("The connection is not currently established.");
 	}
 
 	/**
@@ -98,8 +138,8 @@ public class SSHTunnelMessageConnection implements MessageConnection {
 	 */
 	@Override
 	public Message readMessage() throws IOException, ClassNotFoundException {
-		// TODO Auto-generated method stub
-		return null;
+		checkState();
+		return (Message) oin.readObject();
 	}
 
 	/**
@@ -107,9 +147,11 @@ public class SSHTunnelMessageConnection implements MessageConnection {
 	 * @see javax.management.remote.generic.MessageConnection#writeMessage(javax.management.remote.message.Message)
 	 */
 	@Override
-	public void writeMessage(Message msg) throws IOException {
-		// TODO Auto-generated method stub
-
+	public void writeMessage(final Message msg) throws IOException {
+		checkState();
+		oout.writeObject(msg);
+		oout.flush();
+		oout.reset();
 	}
 
 	/**
@@ -117,9 +159,13 @@ public class SSHTunnelMessageConnection implements MessageConnection {
 	 * @see javax.management.remote.generic.MessageConnection#close()
 	 */
 	@Override
-	public void close() throws IOException {
-		// TODO Auto-generated method stub
-
+	public void close() {
+		state.set(TERMINATED);
+		try { wsf.close(); } catch (Exception x) {/* No Op */}
+		bis = null;
+		bos = null;
+		oin = null;
+		oout = null;
 	}
 	
 	/**
@@ -130,14 +176,53 @@ public class SSHTunnelMessageConnection implements MessageConnection {
 		return state.get();
 	}
 
+	
+	private static final String NODEID = ManagementFactory.getRuntimeMXBean().getName();
+	
 	/**
 	 * {@inheritDoc}
 	 * @see javax.management.remote.generic.MessageConnection#getConnectionId()
 	 */
 	@Override
 	public String getConnectionId() {
-		// TODO Auto-generated method stub
-		return null;
+		if(state.get() != CONNECTED) {
+			return defaultConnectionId;
+		}
+		final JMXServiceURL address = wsf.getAddress();
+		StringBuilder buf = new StringBuilder("tunnel://");		
+		buf.append(address.getHost()).append(":").append(address.getPort());
+		buf.append("[").append(NODEID).append("]");
+		buf.append(" ").append(System.identityHashCode(this));
+		return buf.toString();
 	}
+	
+	/**
+	 * <p>Title: ObjectInputStreamWithLoader</p>
+	 * <p>Description: Classloader enabled object inout stream</p>
+	 * <p>Copied from: {@link com.sun.jmx.remote.socket.SocketConnection}</p>
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.jmx.remote.protocol.tunnel.SSHTunnelMessageConnection.ObjectInputStreamWithLoader</code></p>
+	 */
+	private static class ObjectInputStreamWithLoader extends ObjectInputStream {
+		
+		/**
+		 * Creates a new ObjectInputStreamWithLoader
+		 * @param in The underlying input stream
+		 * @param cl The specified class loader
+		 * @throws IOException thrown on any IO errors
+		 */
+		public ObjectInputStreamWithLoader(InputStream in, ClassLoader cl) throws IOException {
+			super(in);
+			this.cloader = cl;
+		}
+
+		protected Class<?> resolveClass(ObjectStreamClass aClass) throws IOException, ClassNotFoundException {
+			return cloader == null ? super.resolveClass(aClass) : Class.forName(aClass.getName(), false, cloader);
+		}
+
+		private final ClassLoader cloader;
+	}
+	
 
 }

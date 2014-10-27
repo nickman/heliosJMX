@@ -24,6 +24,8 @@
  */
 package com.heliosapm.jmx.remote.tunnel;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 /**
  * <p>Title: TunnelState</p>
  * <p>Description: Enumerates the state of tunnel based message connection</p> 
@@ -52,6 +54,35 @@ public enum TunnelState {
 	
 	/** The bit mask of this state */
 	public final int mask;
+	
+	
+	public boolean isEnabled(final int testMask) {
+		return (testMask | mask) == testMask;
+	}
+	
+	public static int mask(final TunnelState...states) {
+		if(states==null || states.length==0) return 0;
+		int _mask = 0;
+		for(TunnelState ts: states) {
+			if(ts==null) continue;
+			_mask = (_mask | ts.mask);
+		}
+		return _mask;
+	}
+	
+	public static boolean waitForState(final AtomicReference<TunnelState> state, final long waitTimeMs, final TunnelState...states) {		
+		final long endTime = System.currentTimeMillis() + waitTimeMs;
+		final int acceptMask = mask(states); if(acceptMask<1) throw new IllegalArgumentException("No states specified");
+		while(!state.get().isEnabled(acceptMask)) {
+			if(System.currentTimeMillis() > endTime) return false;
+			try {
+				Thread.currentThread().join(5);
+			} catch (InterruptedException e) {
+				throw new RuntimeException("Thread interrupted while waiting on TunnelState change");				
+			}
+		}
+		return true;
+	}
 	
 
 }

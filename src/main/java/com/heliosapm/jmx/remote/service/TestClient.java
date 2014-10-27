@@ -26,10 +26,12 @@ package com.heliosapm.jmx.remote.service;
 
 import java.lang.management.ManagementFactory;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
 
 import javax.management.MBeanServerConnection;
 import javax.management.MBeanServerInvocationHandler;
@@ -40,9 +42,15 @@ import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 
+import ch.ethz.ssh2.channel.ChannelManager;
+import ch.ethz.ssh2.channel.InstrumentedStreamForwarder;
+import ch.ethz.ssh2.transport.TransportConnection;
+import ch.ethz.ssh2.transport.TransportManager;
+
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.batch.BulkJMXServiceMBean;
+import com.heliosapm.jmx.util.helpers.ClassSwapper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.ReconnectCallback;
 import com.heliosapm.jmx.util.helpers.ReconnectorService;
@@ -143,6 +151,7 @@ public class TestClient {
 //		));
 		
 		LOG.log("=============================================");
+		
 //		URL sshUrl = URLHelper.toURL("ssh://nwhitehe@pdk-pt-ceas-01:22");
 //		LOG.log("SSHURL: [%s], Port: [%s]", sshUrl, sshUrl.getPort());
 //		CommandTerminal ct = TunnelRepository.getInstance().openCommandTerminal(sshUrl);
@@ -202,19 +211,31 @@ public class TestClient {
 //		    conn = connector.getMBeanServerConnection();
 //		    runtime = conn.getAttribute(new ObjectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name").toString();
 //		    LOG.log("Connected at [%s]. Runtime: [%s]", new Date(), runtime);
-			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:k=/home/nwhitehead/.ssh/np_dsa,u=nwhitehe,sk=false,rto=3000");
-//			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://njwmintx:8006/ssh/jmxmp:");
+//			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:k=/home/nwhitehead/.ssh/np_dsa,u=nwhitehe,sk=false,rto=3000");
+			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://njwmintx:8006/ssh/jmxmp:");
+			
+			
+			
+			ch.ethz.ssh2.log.Logger.enabled = true;
+			java.util.logging.Logger.getLogger(ChannelManager.class.getName()).setLevel(Level.FINEST);
+			java.util.logging.Logger.getLogger(TransportManager.class.getName()).setLevel(Level.FINEST);
+			java.util.logging.Logger.getLogger(TransportConnection.class.getName()).setLevel(Level.FINEST);
+//			java.util.logging.LogManager.getLogManager().
+//			ch.ethz.ssh2.channel.ChannelManager
+			
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:jmxmp://localhost:8007");
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18088/ssh/jmxmp:");
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18089/ssh/jmxmp:");
-			tsdbSubmitter = new TSDBSubmitter("localhost", 4242).setTracingDisabled(true).setLogTraces(true).connect();
+			tsdbSubmitter = new TSDBSubmitter("localhost", 4242).setTracingDisabled(true).setLogTraces(false).connect();
 //			tsdbSubmitter = new TSDBSubmitter("opentsdb", 8080).setTracingDisabled(true).setLogTraces(false).connect();
-		    connector = JMXConnectorFactory.connect(jmxUrl);
-		    ReconnectorService.getInstance().autoReconnect(connector, jmxUrl, false, new ReconnectCallback<JMXConnector>() {
-				public void onReconnect(final JMXConnector jmxConnector) {
-					LOG.log("\n\tRECONNECTED %s", jmxConnector);
-				}
-			}); 
+		    ClassSwapper.getInstance().swapIn(InstrumentedStreamForwarder.class);
+			connector = JMXConnectorFactory.connect(jmxUrl, Collections.singletonMap("jmx.remote.x.client.autoreconnect", true));
+		    
+//		    ReconnectorService.getInstance().autoReconnect(connector, jmxUrl, false, new ReconnectCallback<JMXConnector>() {
+//				public void onReconnect(final JMXConnector jmxConnector) {
+//					LOG.log("\n\tRECONNECTED %s", jmxConnector);
+//				}
+//			}); 
 		    conn = connector.getMBeanServerConnection();
 		    String runtime = (String)conn.getAttribute(JMXHelper.objectName("java.lang:type=Runtime"), "Name");
 		    LOG.log("Connected to [%s] - JMX Domain [%s]", runtime, conn.getDefaultDomain());
@@ -234,69 +255,74 @@ public class TestClient {
 //		    }
 //		    System.out.println(".");
 //		    LOG.log("Warmup Complete");
-		    int dcount = conn.getDomains().length;
-		    Map<ObjectName, Map<String, Object>> map = new HashMap<ObjectName, Map<String, Object>>(dcount);
-		    Map<ObjectName, String[]> attrNames = new HashMap<ObjectName, String[]>(dcount);
-		    int totalAttrs = 0;
-		    long start = System.currentTimeMillis();
-		    for(ObjectName on: conn.queryNames(null, null)) {
-		    	String[] names = JMXHelper.getAttributeNames(on, conn);
-		    	attrNames.put(on, names);
-		    	totalAttrs += names.length;
-		    }
-		    long elapsed = System.currentTimeMillis() - start;
-		    LOG.log("Retrieved [%s] Attribute Names for [%s] MBeans in [%s] ms.", totalAttrs, attrNames.size(), elapsed);
-		    totalAttrs = 0;
-		    start = System.currentTimeMillis();
-		    for(Map.Entry<ObjectName, String[]> entry: attrNames.entrySet()) {
-		    	
-	    		final ObjectName on = entry.getKey();
-	    		final String[] attrs = entry.getValue();		    	
-		    	try {
-		    		map.put(on, JMXHelper.getAttributes(entry.getKey(), conn, attrs));
-		    		totalAttrs += attrs.length;
-		    	} catch (Exception x) {
-		    		Map<String, Object> av = new HashMap<String, Object>(attrs.length);
-		    		Set<String> remaps = new HashSet<String>();
-		    		int afails = 0;
-		    		for(String s: attrs) {
-		    			try {
-		    				av.put(s, JMXHelper.getAttribute(conn, s));
-		    				remaps.add(s);
-		    				totalAttrs++;
-		    			} catch (Exception xy) {
-		    				afails++;
-		    				LOG.loge("Unretrievable Attribute [%s]/[%s]", on, s);
-		    			}
-		    		}
-		    		if(!av.isEmpty()) {
-		    			map.put(on, av);
-		    		}		    	
-		    		if(afails>0) {
-		    			entry.setValue(remaps.toArray(new String[remaps.size()]));
-		    		}
-		    	}
-		    }
 		    
-//		    Map<ObjectName, Map<String, Object>> map = bulkService.getAttributes(new ArrayList<String>(Arrays.asList(".*")), JMXHelper.ALL_MBEANS_FILTER);
-		    elapsed = System.currentTimeMillis() - start;
-		    LOG.log("Retrieved [%s] Attribute Values for [%s] MBeans in [%s] ms.", totalAttrs, map.size(), elapsed);
-//		    for(Map.Entry<ObjectName, Map<String, Object>> entry: map.entrySet()) {
-//		    	StringBuilder b = new StringBuilder("\n\t").append(entry.getKey());
-//		    	for(String k: entry.getValue().keySet()) {
-//		    		b.append("\n\t\t").append(k);
-//		    	}
-//		    	LOG.log(b);
-//		    }
-		    tsdbSubmitter.trace(map);
-		    LOG.log("Flush: %s", Arrays.toString(tsdbSubmitter.flush()));
-		    LOG.log("===============================================================");
-		    for(Map.Entry<ObjectName, String[]> entry: attrNames.entrySet()) {		    
-	    		final ObjectName on = entry.getKey();
-	    		final String[] attrs = entry.getValue();		    	
-	    		tsdbSubmitter.trace(on, "yahoometric", JMXHelper.getAttributes(on, conn, attrs), "*");
-		    }		    
-		    Thread.currentThread().join();
+		    for(int i = 0; i < 1000; i++) {
+			    int dcount = conn.getDomains().length;
+			    Map<ObjectName, Map<String, Object>> map = new HashMap<ObjectName, Map<String, Object>>(dcount);
+			    Map<ObjectName, String[]> attrNames = new HashMap<ObjectName, String[]>(dcount);
+			    int totalAttrs = 0;
+			    long start = System.currentTimeMillis();
+			    for(ObjectName on: conn.queryNames(null, null)) {
+			    	String[] names = JMXHelper.getAttributeNames(on, conn);
+			    	attrNames.put(on, names);
+			    	totalAttrs += names.length;
+			    }
+			    long elapsed = System.currentTimeMillis() - start;
+			    LOG.log("Retrieved [%s] Attribute Names for [%s] MBeans in [%s] ms.", totalAttrs, attrNames.size(), elapsed);
+			    totalAttrs = 0;
+			    start = System.currentTimeMillis();
+			    for(Map.Entry<ObjectName, String[]> entry: attrNames.entrySet()) {
+			    	
+		    		final ObjectName on = entry.getKey();
+		    		final String[] attrs = entry.getValue();		    	
+			    	try {
+			    		map.put(on, JMXHelper.getAttributes(entry.getKey(), conn, attrs));
+			    		totalAttrs += attrs.length;
+			    	} catch (Exception x) {
+			    		Map<String, Object> av = new HashMap<String, Object>(attrs.length);
+			    		Set<String> remaps = new HashSet<String>();
+			    		int afails = 0;
+			    		for(String s: attrs) {
+			    			try {
+			    				av.put(s, JMXHelper.getAttribute(conn, s));
+			    				remaps.add(s);
+			    				totalAttrs++;
+			    			} catch (Exception xy) {
+			    				afails++;
+			    				LOG.loge("Unretrievable Attribute [%s]/[%s]", on, s);
+			    			}
+			    		}
+			    		if(!av.isEmpty()) {
+			    			map.put(on, av);
+			    		}		    	
+			    		if(afails>0) {
+			    			entry.setValue(remaps.toArray(new String[remaps.size()]));
+			    		}
+			    	}
+			    }
+			    
+	//		    Map<ObjectName, Map<String, Object>> map = bulkService.getAttributes(new ArrayList<String>(Arrays.asList(".*")), JMXHelper.ALL_MBEANS_FILTER);
+			    elapsed = System.currentTimeMillis() - start;
+			    LOG.log("Retrieved [%s] Attribute Values for [%s] MBeans in [%s] ms.", totalAttrs, map.size(), elapsed);
+	//		    for(Map.Entry<ObjectName, Map<String, Object>> entry: map.entrySet()) {
+	//		    	StringBuilder b = new StringBuilder("\n\t").append(entry.getKey());
+	//		    	for(String k: entry.getValue().keySet()) {
+	//		    		b.append("\n\t\t").append(k);
+	//		    	}
+	//		    	LOG.log(b);
+	//		    }
+			    
+			    LOG.log("Flush: %s", Arrays.toString(tsdbSubmitter.flush()));			    
+			    for(Map.Entry<ObjectName, String[]> entry: attrNames.entrySet()) {		    
+		    		final ObjectName on = entry.getKey();
+		    		final String[] attrs = entry.getValue();		    	
+		    		tsdbSubmitter.trace(on, "yahoometric", JMXHelper.getAttributes(on, conn, attrs), "*");
+			    }
+			    tsdbSubmitter.trace(map);
+			    LOG.log("=====================Completed Loop [%s] ==========================================", i);
+			    Thread.currentThread().join(5000);
+			    
+		    }
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
 		} finally {
