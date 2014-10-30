@@ -28,6 +28,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import javax.management.ObjectName;
+
 import com.google.common.collect.Multiset.Entry;
 
 /**
@@ -91,6 +93,9 @@ public class ExpressionResult {
 		}
 	}
 	
+	public void process(Map<String, Object> attrValues, ObjectName objectName, String...expressions) {
+		
+	}
 	
 	private StringBuilder getSB() {
 		StringBuilder b = SB.get();

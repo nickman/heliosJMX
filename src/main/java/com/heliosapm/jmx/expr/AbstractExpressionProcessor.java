@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2007, Helios Development Group and individual contributors
+ * Copyright 2014, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -29,23 +29,31 @@ import java.util.Map;
 import javax.management.ObjectName;
 
 /**
- * <p>Title: ExpressionProcessor</p>
- * <p>Description: Defines an expression processor which extracts and traces values sampled from a JMX MBean</p> 
+ * <p>Title: AbstractExpressionProcessor</p>
+ * <p>Description: </p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.jmx.expr.ExpressionProcessor</code></p>
+ * <p><code>com.heliosapm.jmx.expr.AbstractExpressionProcessor</code></p>
  */
 
-public interface ExpressionProcessor {
-	
-	public static final String OBJECTNAME_KEY = "\\{key:.*?\\}";
-	
-	
+public abstract class AbstractExpressionProcessor implements ExpressionProcessor {
+
 	/**
-	 * Executes a trace for one value extracted from the values collected from the passed JMX ObjectName
-	 * @param attrValues A map of attribute values keyed by the attribute name
-	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
-	 * @return The expression result which can render an OpenTSDB put command for the extracted metric, or null if one could not be read
+	 * Creates a new AbstractExpressionProcessor
 	 */
-	public ExpressionResult process(Map<String, Object> attrValues, ObjectName objectName); 
+	public AbstractExpressionProcessor() {
+
+	}
+	
+	public ExpressionResult process(final Map<String, Object> attrValues, final ObjectName objectName) {
+		ExpressionResult er = ExpressionResult.newInstance();
+		doName(attrValues, objectName, er);
+		doValue(attrValues, objectName, er);
+		return er;
+	}
+	
+	protected abstract void doName(final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result);
+	
+	protected abstract void doValue(final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result);
+
 }

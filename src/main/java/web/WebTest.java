@@ -61,7 +61,12 @@ import com.heliosapm.SimpleLogger.SLogger;
 
 public class WebTest {
 	public static final SLogger LOG = SimpleLogger.logger(WebTest.class);
-	private static final String WEBDRIVER_SERVER_URL = "http://localhost:9515/";
+//	private static final String WEBDRIVER_SERVER_URL = "http://localhost:9515/";
+//	private static final String WEBDRIVER_SERVER_URL = "http://localhost:4444/wd/hub";
+//	private static final String WEBDRIVER_SERVER_URL = "http://njwmintx:5555/wd/hub";
+//	private static final String WEBDRIVER_SERVER_URL = "http://njwmintx:9515";
+	private static final String WEBDRIVER_SERVER_URL = "http://10.12.114.23:5555/wd/hub";
+	
 	private RemoteWebDriver driver;
 	
 	/**
@@ -69,22 +74,19 @@ public class WebTest {
 	 * @throws Exception 
 	 */
 	public WebTest() throws Exception {
-		setup();
+		setupChrome();
 	}
 	
-	public void setup() throws Exception {
-//	    DesiredCapabilities caps = DesiredCapabilities.chrome();
-//	    ChromeOptions options = new ChromeOptions();
-//	    options.addArguments("test-type");
-//	    caps.setCapability(ChromeOptions.CAPABILITY, options);
-//	    
-//	    LoggingPreferences logPrefs = new LoggingPreferences();
-//	    logPrefs.enable(LogType.BROWSER, Level.ALL);
-//	    logPrefs.enable(LogType.PERFORMANCE, Level.INFO);
-//	    caps.setCapability(CapabilityType.LOGGING_PREFS, logPrefs);
-//	    driver = (RemoteWebDriver) 
-//	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
-	    DesiredCapabilities caps = DesiredCapabilities.firefox();
+	public void setupChrome() throws Exception {
+	    DesiredCapabilities caps = DesiredCapabilities.chrome();
+	    ChromeOptions options = new ChromeOptions();
+	    options.addArguments("test-type");
+	    caps.setCapability(ChromeOptions.CAPABILITY, options);
+	    
+	    LoggingPreferences logPrefs = new LoggingPreferences();
+	    logPrefs.enable(LogType.BROWSER, Level.ALL);
+	    logPrefs.enable(LogType.PERFORMANCE, Level.INFO);
+	    caps.setCapability(CapabilityType.LOGGING_PREFS, logPrefs);
 	    driver = (RemoteWebDriver) 
 	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
 	    
@@ -92,9 +94,31 @@ public class WebTest {
 		
 	}
   
+	public void setupFirefox() throws Exception {
+	    DesiredCapabilities caps = DesiredCapabilities.firefox();
+	    driver = (RemoteWebDriver) 
+	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
+	    
+	    LoggingPreferences logPrefs = new LoggingPreferences();
+	    logPrefs.enable(LogType.BROWSER, Level.ALL);
+	    logPrefs.enable(LogType.PERFORMANCE, Level.INFO);
+	    caps.setCapability(CapabilityType.LOGGING_PREFS, logPrefs);
+	    driver = (RemoteWebDriver) 
+	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
+//	    DesiredCapabilities caps = DesiredCapabilities.firefox();
+//	    driver = (RemoteWebDriver) 
+//	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
+	    
+	    
+		
+	}
+  
+	
 
   public void testTSDB() throws Exception {
-    driver.get("http://localhost:4242");
+    //driver.get("http://localhost:4242");
+	  driver.get("http://pdk-pt-cetsd-01:8080/");
+	  
     
     List<WebElement> elements = driver.findElements(By.className("gwt-SuggestBox"));
     LOG.log("SuggestBox Elements: [%s]", elements.size());
