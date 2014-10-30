@@ -87,8 +87,9 @@ public class ClientProvider implements JMXConnectorProvider {
 		if (!serviceURL.getProtocol().equals(PROTOCOL_NAME)) {
 			throw new MalformedURLException("Protocol not [" + PROTOCOL_NAME + "]: " + serviceURL.getProtocol());
 		}
-		SwapableDelegateJMXConnector delegate = new SwapableDelegateJMXConnector(new TunnelConnector(serviceURL, environment), serviceURL);
-		if(environment.containsKey(AUTO_RECONECT)) {
+		final TunnelConnector tunnelConnector = new TunnelConnector(serviceURL, (Map<String, Object>) environment);
+		SwapableDelegateJMXConnector delegate = new SwapableDelegateJMXConnector(tunnelConnector, serviceURL);
+		if(tunnelConnector.isAutoReconnect() || environment.containsKey(AUTO_RECONECT)) {
 			ReconnectorService.getInstance().autoReconnect(delegate, serviceURL, false, delegate);
 		}
 	    return delegate;		
@@ -99,6 +100,19 @@ public class ClientProvider implements JMXConnectorProvider {
 		private final JMXServiceURL address;
 		
 		private final SwapableDelegateMBeanServerConnection delegateMBeanServer;
+
+		/**
+		 * {@inheritDoc}
+		 * @see com.heliosapm.jmx.util.helpers.ReconnectCallback#onReconnect(java.lang.Object)
+		 */
+		@Override
+		public void onReconnect(final JMXConnector t) {
+			try {
+				updateDelegate(t);
+			} catch (Exception ex) {
+				throw new RuntimeException("Failed to update delegate", ex);
+			}
+		}		
 		
 		SwapableDelegateJMXConnector(JMXConnector delegate, final JMXServiceURL address) throws IOException {
 			this.delegate = delegate;
@@ -204,18 +218,7 @@ public class ClientProvider implements JMXConnectorProvider {
 			return delegate.getConnectionId();
 		}
 
-		/**
-		 * {@inheritDoc}
-		 * @see com.heliosapm.jmx.util.helpers.ReconnectCallback#onReconnect(java.lang.Object)
-		 */
-		@Override
-		public void onReconnect(JMXConnector t) {
-			try {
-				updateDelegate(delegate);
-			} catch (Exception ex) {
-				throw new RuntimeException("Failed to update delegate", ex);
-			}
-		}
+
 
 		/**
 		 * {@inheritDoc}

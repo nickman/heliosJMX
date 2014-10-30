@@ -37,6 +37,7 @@ import javax.management.remote.generic.GenericConnector;
 import javax.management.remote.generic.MessageConnection;
 
 import com.heliosapm.jmx.remote.protocol.tunnel.SSHTunnelMessageConnection;
+import com.heliosapm.jmx.remote.tunnel.SSHTunnelConnector;
 import com.heliosapm.jmx.remote.tunnel.WrappedStreamForwarder;
 import com.sun.jmx.remote.opt.util.EnvHelp;
 
@@ -53,6 +54,9 @@ public class TunnelConnector extends GenericConnector implements JMXAddressable 
     protected JMXServiceURL address;
     /** The internal connector environment map */
     protected transient Map<String, Object> tunnelEnv;
+    
+    /** Indicates if the connector should auto-reconnect on connection failure  */
+    protected boolean autoReconnect = true;
 
     /** The tunnel protocol name */
     public static final String protocolName = "tunnel";
@@ -92,10 +96,11 @@ public class TunnelConnector extends GenericConnector implements JMXAddressable 
      * a valid URL for the tunnel connector.
      * @exception IOException if the connector cannot work for another reason.
      */
-    public TunnelConnector(final JMXServiceURL address, final Map<String, ?> env) throws IOException {
+    public TunnelConnector(final JMXServiceURL address, final Map<String, Object> env) throws IOException {
     	super(env);
 		tunnelEnv = new HashMap<String, Object>((env==null)?Collections.EMPTY_MAP:env);
     	this.address = address;
+    	autoReconnect = new SSHTunnelConnector(address, env).isAutoReconnect();
     	validateAddress();    	
     }
     
@@ -143,6 +148,14 @@ public class TunnelConnector extends GenericConnector implements JMXAddressable 
 	@Override
 	public JMXServiceURL getAddress() {
 		return address;
+	}
+
+	/**
+	 * Indicates if the connector should auto-reconnect on connection failure
+	 * @return true if the connector should auto-reconnect on connection failure, false otherwise
+	 */
+	public final boolean isAutoReconnect() {
+		return autoReconnect;
 	}
 
 

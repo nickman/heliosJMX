@@ -24,6 +24,10 @@
  */
 package com.heliosapm.jmx.util.helpers;
 
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -232,23 +236,35 @@ public class ReconnectorService extends NotificationBroadcasterSupport implement
 			@SuppressWarnings("resource")
 			@Override
 			public boolean reconnect() {
+				final PrintStream ERR = System.err;
+				System.setErr(new PrintStream(new OutputStream() {
+					public void write(int b) throws IOException {
+					}
+				}));
 				try {
+					ERR.println("Attempting reconnect for [" + jmxServiceURL + "]");
+					final Closeable cl = ThreadWatcher.getInstance().watch(5, TimeUnit.SECONDS);
 					final JMXConnector connector = JMXConnectorFactory.connect(jmxServiceURL, env);
+					connector.getMBeanServerConnection().getMBeanCount();
+					try { cl.close(); } catch (Exception x) {/* No Op */} 
 					if(callback!=null) {
 						workerPool.execute(new Runnable(){
-							public void run() {
+							public void run() {								
 								callback.onReconnect(connector);
 							}
 						});
 					}
 					sendNotification(NOTIF_COMPLETE, "Reconnected JMXConnector [" + clean(jmxServiceURL) + "]", connector);
-					log.log("Connected JMXConnector to [%s]", jmxServiceURL);
-					register(jmxServiceURL, env, name, callback);
+					ERR.println(String.format("Connected JMXConnector to [%s]", jmxServiceURL));
+					//register(jmxServiceURL, env, name, callback);
+					autoReconnect(connector, jmxServiceURL, false, callback);
 					return true;
 				} catch(Exception ex) {
 					log.loge("Failed to connect to [%s] - %s", jmxServiceURL, ex);
 					return false;
-				}				
+				} finally {
+					System.setErr(ERR);
+				}
 			}
 			@Override
 			public String getId() {

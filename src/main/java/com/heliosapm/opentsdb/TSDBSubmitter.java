@@ -43,10 +43,16 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import javax.management.MBeanServer;
+import javax.management.Attribute;
+import javax.management.AttributeList;
+import javax.management.MBeanAttributeInfo;
+import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 import javax.management.openmbean.CompositeData;
 import javax.management.openmbean.CompositeType;
+import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.jboss.netty.buffer.ChannelBuffer;
@@ -58,6 +64,7 @@ import org.json.JSONObject;
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
+import com.heliosapm.jmx.util.helpers.ReconnectorService;
 import com.heliosapm.jmx.util.helpers.StringHelper;
 import com.heliosapm.opentsdb.AnnotationBuilder.TSDBAnnotation;
 import com.ning.http.client.AsyncHandler;
@@ -206,33 +213,99 @@ public class TSDBSubmitter {
 		this(host, 4242);
 	}
 	
+	public static final String AUTO_RECONECT = "jmx.remote.x.client.autoreconnect";
+	
+	public void loopOnJVMStats() {
+		JMXConnector connector = null;
+		addRootTag("host", "ord-pr-ceas-a01")
+			.addRootTag("app", "ECS")
+			.setLogTraces(false)
+			.setTimeout(2000)
+			.setTracingDisabled(true);
+//			.connect();
+
+		try {
+			JMXServiceURL surl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:u=nwhitehe,p=mysol!1");
+//			JMXServiceURL surl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:u=nwhitehe");
+			connector = JMXConnectorFactory.connect(surl);
+//			ReconnectorService.getInstance().autoReconnect(connector, surl, false, null);
+			MBeanServerConnection server = connector.getMBeanServerConnection();
+			LOG.log("Connected");
+			// public void trace(
+				//final ObjectName target, 
+				//final String metricName, 
+				//final Map<String, Object> attributeValues, 
+				//final String...objectName
+			
+			
+			
+			while(true) {
+				try {
+					Set<ObjectName> ons = server.queryNames(JMXHelper.objectName(ManagementFactory.GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE + ",*"), null);
+					for(final ObjectName on: ons) {
+						String[] attrNames  = getAttributeNames(server, on);
+//						LOG.log("AttributeNames: %s", Arrays.toString(attrNames));
+						AttributeList attrList = server.getAttributes(on, attrNames);
+						Map<String, Object> attrValues = new HashMap<String, Object>(attrList.size());
+						for(Attribute a: attrList.asList()) {
+							attrValues.put(a.getName(), a.getValue());
+						}
+						trace(on, "java.lang.gc", attrValues, "name", "type");
+					}					
+					flush();
+					try { Thread.currentThread().join(5000); } catch (Exception x) {/* No Op */}
+				} catch (Exception ex) {
+					LOG.log("Loop Error: %s", ex);
+					while(true) {
+						try { Thread.currentThread().join(5000); } catch (Exception x) {/* No Op */}
+						try {
+							server = connector.getMBeanServerConnection();
+							server.getMBeanCount();
+							LOG.log("\nReconnected....");
+							break;
+						} catch (Exception x) {
+							System.err.print(".");
+						}
+					}
+				}
+			}
+		} catch (Exception ex) {
+			LOG.loge("Unexpected Loop Exit: %s", ex);
+		} finally {
+			if(connector!=null) try { connector.close(); } catch (Exception x) {/* No Op */}
+			try { this.close(); } catch (Exception x) {/* No Op */}
+		}
+	}
+	
 	public static void main(String[] args) {
 		try {
 			LOG.log("Submitter Test");
-			final MBeanServer ser = ManagementFactory.getPlatformMBeanServer();
-	//		TSDBSubmitter submitter = new TSDBSubmitter("opentsdb", 8080).addRootTag("host", "ord-pr-ceas-a01").addRootTag("app", "ECS").setLogTraces(true).setTimeout(2000).connect();
-			TSDBSubmitter submitter = new TSDBSubmitter("localhost", 4242).addRootTag("host", "ord-pr-ceas-a01").addRootTag("app", "ECS").setLogTraces(true).setTimeout(2000).connect();
-	//		TSDBSubmitter submitter = new TSDBSubmitter("localhost").addRootTag("host", "nicholas").addRootTag("app", "MyApp").setLogTraces(true).setTimeout(2000).connect();
-			LOG.log(submitter);
-			// q = new URL("http://opentsdb:8080/api/query?start=1m-ago&show_tsuids=true&m=avg:ecsmetric{
-			// host=ord-pr-ceas-a01,app=ECS,metric=InUseConnectionCount,service=ManagedConnectionPool,name=ECS}");
-			long start = System.currentTimeMillis();
-			JSONArray jarr = submitter.query("ecsmetric", "name", "ECS", "service", "ManagedConnectionPool"); //, "metric", "InUseConnectionCount");
-			long elapsed = System.currentTimeMillis() - start;
-			
-			LOG.log("Query Returned In [%s] ms. Results:\n%s", elapsed, jarr.toString(2));
-			
-			start = System.currentTimeMillis();
-			String tsuid = submitter.tsuid("ecsmetric", "name", "ECS", "service", "ManagedConnectionPool", "metric", "InUseConnectionCount");
-			elapsed = System.currentTimeMillis() - start;
-			
-			LOG.log("TSUID Returned In [%s] ms. TSUID: [%s]", elapsed, tsuid);
-			
-			
-			TSDBAnnotation ann = new AnnotationBuilder().setTSUID(tsuid).setDescription("ECS Prod Conn Pool").setCustom("current", "" + 14).build();
-			LOG.log("Annotation:\n%s", ann);
-			submitter.trace(ann);
-			try { Thread.sleep(5000); } catch (Exception x) {}		
+			TSDBSubmitter submitter = new TSDBSubmitter("localhost", 4242);
+			submitter.loopOnJVMStats();
+//			final MBeanServer ser = ManagementFactory.getPlatformMBeanServer();
+//	//		TSDBSubmitter submitter = new TSDBSubmitteklr("opentsdb", 8080).addRootTag("host", "ord-pr-ceas-a01").addRootTag("app", "ECS").setLogTraces(true).setTimeout(2000).connect();
+//			TSDBSubmitter submitter = new TSDBSubmitter("localhost", 4242).addRootTag("host", "ord-pr-ceas-a01").addRootTag("app", "ECS").setLogTraces(true).setTimeout(2000).connect();
+//	//		TSDBSubmitter submitter = new TSDBSubmitter("localhost").addRootTag("host", "nicholas").addRootTag("app", "MyApp").setLogTraces(true).setTimeout(2000).connect();
+//			LOG.log(submitter);
+//			// q = new URL("http://opentsdb:8080/api/query?start=1m-ago&show_tsuids=true&m=avg:ecsmetric{
+//			// host=ord-pr-ceas-a01,app=ECS,metric=InUseConnectionCount,service=ManagedConnectionPool,name=ECS}");
+//			long start = System.currentTimeMillis();
+//			JSONArray jarr = submitter.query("ecsmetric", "name", "ECS", "service", "ManagedConnectionPool"); //, "metric", "InUseConnectionCount");
+//			long elapsed = System.currentTimeMillis() - start;
+//			
+//			LOG.log("Query Returned In [%s] ms. Results:\n%s", elapsed, jarr.toString(2));
+//			
+//			start = System.currentTimeMillis();
+//			String tsuid = submitter.tsuid("ecsmetric", "name", "ECS", "service", "ManagedConnectionPool", "metric", "InUseConnectionCount");
+//			elapsed = System.currentTimeMillis() - start;
+//			
+//			LOG.log("TSUID Returned In [%s] ms. TSUID: [%s]", elapsed, tsuid);
+//			
+//			
+//			TSDBAnnotation ann = new AnnotationBuilder().setTSUID(tsuid).setDescription("ECS Prod Conn Pool").setCustom("current", "" + 14).build();
+//			LOG.log("Annotation:\n%s", ann);
+//			submitter.trace(ann);
+//			try { Thread.sleep(5000); } catch (Exception x) {}		
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
 		} finally {
@@ -340,7 +413,7 @@ public class TSDBSubmitter {
 		}
 	};
 	
-	private StringBuilder getSB() {
+	public StringBuilder getSB() {
 		StringBuilder b = SB.get();
 		b.setLength(0);
 		return b;
@@ -587,6 +660,24 @@ public class TSDBSubmitter {
 		return tsuid;
 	}
 	
+	/**
+	 * Retrieves the attribute names of the MBean registered in the passed MBeanServer
+	 * @param conn The connection to the remote MBeanServer
+	 * @param target The JMX ObjectName of the target MBean
+	 * @return An array of attribute names
+	 */
+	public String[] getAttributeNames(final MBeanServerConnection conn, final ObjectName target) {
+		try {
+			MBeanAttributeInfo[] attrInfos = conn.getMBeanInfo(target).getAttributes();
+			String[] attrNames = new String[attrInfos.length];
+			for(int i = 0; i < attrInfos.length; i++) {
+				attrNames[i] = attrInfos[i].getName();
+			}
+			return attrNames;
+		} catch (Exception ex) {
+			throw new RuntimeException(ex);
+		}
+	}
 	
 	/**
 	 * Traces a tsdb annotation
@@ -822,6 +913,7 @@ public class TSDBSubmitter {
 	 * @return the number of bytes flushed
 	 */
 	public int[] flush() {
+		final long startTime = System.currentTimeMillis();
 		final int[] bytesWritten = new int[]{0, 0};
 //		GZIPOutputStream gzip = null;
 		synchronized(dataBuffer) {
@@ -831,14 +923,18 @@ public class TSDBSubmitter {
 				final int r = dataBuffer.readableBytes();
 //				gzip = new GZIPOutputStream(os, r * 2);
 				pos = dataBuffer.readerIndex();
-				dataBuffer.readBytes(os, dataBuffer.readableBytes());
+				if(os!=null) {
+					dataBuffer.readBytes(os, dataBuffer.readableBytes());
+					os.flush();
+				}
 //				gzip.finish();
 //				gzip.flush();
-				os.flush();
+				
 				dataBuffer.clear();
 				bytesWritten[0] = r;
 				bytesWritten[1] = traceCount.getAndSet(0);
-				LOG.log("Flushed %s traces in %s bytes", bytesWritten[1], r);
+				long elapsed = System.currentTimeMillis() - startTime;
+				LOG.log("Flushed %s traces in %s bytes. Elapsed: %s ms.", bytesWritten[1], r, elapsed);
 			} catch (Exception ex) {
 				LOG.log("Failed to flush. Stack trace follows...");
 				ex.printStackTrace(System.err);

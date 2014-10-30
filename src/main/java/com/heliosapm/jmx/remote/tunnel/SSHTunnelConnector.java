@@ -112,6 +112,9 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	/** The SSH key exchange timeout in ms. */
 	protected int sshKeyExchangeTimeout = 0;
 	
+	/** Indicates if the JMXConnector should auto-reconnect on connection failure */
+	protected boolean autoReconnect = true;
+	
 	
 	
 	/** A map of known sshHost instances keyed by the underlying file name */
@@ -239,7 +242,7 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	 * Creates a new SSHTunnelConnector from the passed options stringy
 	 * @param sshOptions and SSHOption stringy
 	 */
-	public SSHTunnelConnector(CharSequence sshOptions) {
+	public SSHTunnelConnector(final CharSequence sshOptions) {
 		Map<SSHOption, Object> map = extractTunnelOpts(sshOptions);
 		Map<SSHOption, Object> options = gather(null, map);
 		initialize(options);
@@ -256,7 +259,7 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	 * Initializes this SSHTunnelConnector with the passed map of options
 	 * @param options The SSHOptions specifying how a tunnel should be created
 	 */
-	protected void initialize(Map<SSHOption, Object> options) {		
+	protected void initialize(final Map<SSHOption, Object> options) {		
 		for(Map.Entry<SSHOption, Object> entry: options.entrySet()) {
 			SSHOption option = entry.getKey();
 			Object optionValue = entry.getValue();
@@ -272,6 +275,9 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 					knownHostsFile = optionValue.toString();
 					buildKnownHosts();
 				}
+				break;
+			case RECON:
+				
 				break;
 			case KEY:
 				if(optionValue!=null) {
@@ -954,6 +960,9 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 		builder.append(", localPort=");
 		builder.append(localPort);
 		builder.append(", ");
+		builder.append("autoReconnect=");
+		builder.append(autoReconnect);
+		
 		if (userName != null) {
 			builder.append("userName=");
 			builder.append(userName);
@@ -1122,6 +1131,22 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	 */
 	public void setSshConnectTimeout(int sshConnectTimeout) {
 		this.sshConnectTimeout = sshConnectTimeout;
+	}
+
+	/**
+	 * Indicates if the JMXConnector should auto-reconnect on connection failure
+	 * @return true if the JMXConnector should auto-reconnect on connection failure, false otherwise
+	 */
+	public final boolean isAutoReconnect() {
+		return autoReconnect;
+	}
+
+	/**
+	 * Sets the auto-reconnect on connection failure
+	 * @param autoReconnect true to auto-reconnect on connection failure, false otherwise
+	 */
+	public final void setAutoReconnect(boolean autoReconnect) {
+		this.autoReconnect = autoReconnect;
 	}
 
 	
