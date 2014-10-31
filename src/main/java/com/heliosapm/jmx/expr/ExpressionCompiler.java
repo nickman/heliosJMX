@@ -34,6 +34,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javassist.ClassPool;
+import javassist.CtClass;
+import javassist.LoaderClassPath;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 
@@ -60,7 +62,23 @@ public class ExpressionCompiler {
 	public static final Pattern DOMAIN_VALUE = Pattern.compile("\\{domain\\}");
 	public static final Pattern FULL_EXPR = Pattern.compile("(.*?)\\s+*?\\->(.*?)");
 	public static final Pattern NAME_EXPR = Pattern.compile("(.*?)\\s+*?\\->(.*?)");
+	public static final Pattern KEY_EXPR = Pattern.compile("key:(.*?)");
 	
+	/** The CtClass for AbstractExpressionProcessor */
+	protected static final CtClass abstractExpressionProcessorCtClass;
+	/** The package in which new processors will be created in */
+	public static final String PROCESSOR_PACKAGE = ExpressionCompiler.class.getPackage().getName() + ".impls";
+	
+	static {
+		final ClassPool cp = new ClassPool();
+		cp.appendSystemPath();
+		cp.appendClassPath(new LoaderClassPath(AbstractExpressionProcessor.class.getClassLoader()));
+		try {
+			abstractExpressionProcessorCtClass = cp.get(AbstractExpressionProcessor.class.getName());
+		} catch(Exception ex) {
+			throw new RuntimeException(ex);
+		}
+	}
 	
 	public static final Set<String> NAME_KEYS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
 			"key" // resolves to the value of the key name pairs in the object name for the specified value, objectName.getKeyProperty(key)
@@ -108,8 +126,34 @@ public class ExpressionCompiler {
 		String nameExpr = m.group(1).trim();
 		String valueExpr = m.group(2).trim();
 		ClassPool cp = new ClassPool();
-		
+		CtClass processorCtClass = null;
+		final String className = PROCESSOR_PACKAGE + ".ExpressionProcessorImpl" + classSerial.incrementAndGet();
+		StringBuilder codeBuffer = new StringBuilder();
+		try {
+			processorCtClass = cp.makeClass(className, abstractExpressionProcessorCtClass);
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to generate Expression Processor Class for ["  + fullExpression + "]", ex);
+		}
 		return null;
+	}
+	
+	/** The validation and group defs for the name segment of the expression */
+	public static final Pattern NAME_SEGMENT = Pattern.compile("^(.*?):(.*?)$");
+	
+	/**
+	 * Builds the method:
+	 * 	<pre>
+	 * 		doName(
+	 * 			Map<String, Object> attrValues, 
+	 * 			ObjectName objectName, 
+	 * 			ExpressionResult result)
+	 *  </pre> 
+	 *  @param nameSegment The name portion of the raw expression
+	 */
+	protected void buildNameGenCode(final String nameSegment) {
+		// we're looking for {key:X}, {attr[X]}, {domain}
+		// Attributed could be composite, e.g. {attr[X/Y/Z]} 
+		// name segment should match ^(.*?):(.*?)$
 	}
 	
 	//public ExpressionResult process(Map<String, Object> attrValues, ObjectName objectName);
