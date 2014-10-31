@@ -45,15 +45,19 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 
 	}
 	
-	public ExpressionResult process(final Map<String, Object> attrValues, final ObjectName objectName) {
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.jmx.expr.ExpressionProcessor#process(java.lang.String, java.util.Map, javax.management.ObjectName)
+	 */
+	public ExpressionResult process(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName) {
 		ExpressionResult er = ExpressionResult.newInstance();
-		doName(attrValues, objectName, er);
-		doValue(attrValues, objectName, er);
+		doName(sourceId, attrValues, objectName, er);
+		doValue(sourceId, attrValues, objectName, er);
 		return er;
 	}
 	
-	protected abstract void doName(final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result);
+	protected abstract void doName(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result);
 	
-	protected abstract void doValue(final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result);
+	protected abstract void doValue(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result);
 
 }

@@ -64,6 +64,8 @@ public class ExpressionCompiler {
 	public static final Pattern NAME_EXPR = Pattern.compile("(.*?)\\s+*?\\->(.*?)");
 	public static final Pattern KEY_EXPR = Pattern.compile("key:(.*?)");
 	
+	public static final Pattern TOKEN_PATTERN = Pattern.compile("\\{(.*?)(?::(.*?))?\\}");
+	
 	/** The CtClass for AbstractExpressionProcessor */
 	protected static final CtClass abstractExpressionProcessorCtClass;
 	/** The package in which new processors will be created in */
@@ -140,17 +142,35 @@ public class ExpressionCompiler {
 	/** The validation and group defs for the name segment of the expression */
 	public static final Pattern NAME_SEGMENT = Pattern.compile("^(.*?):(.*?)$");
 	
+	public static final Pattern NAME_TAG_SPLITTER = Pattern.compile("::");
+	
 	/**
 	 * Builds the method:
 	 * 	<pre>
 	 * 		doName(
+	 * 			String sourceId,
 	 * 			Map<String, Object> attrValues, 
 	 * 			ObjectName objectName, 
 	 * 			ExpressionResult result)
 	 *  </pre> 
 	 *  @param nameSegment The name portion of the raw expression
 	 */
-	protected void buildNameGenCode(final String nameSegment) {
+	protected void buildNamingCode(final String nameSegment) {
+		String[] metricAndTags = NAME_TAG_SPLITTER.split(nameSegment);
+		if(metricAndTags.length!=2) throw new RuntimeException("Name segment [" + nameSegment + "] did not split to 2 segments");
+		if(metricAndTags[0]==null || metricAndTags[0].trim().isEmpty()) throw new RuntimeException("MetricName segment in [" + nameSegment + "] was null or empty");
+		if(metricAndTags[1]==null || metricAndTags[1].trim().isEmpty()) throw new RuntimeException("Tags segment in [" + nameSegment + "] was null or empty");
+		metricAndTags[0] = metricAndTags[0].replace(" ", "");
+		metricAndTags[1] = metricAndTags[1].replace(" ", "");
+		Matcher m = TOKEN_PATTERN.matcher(metricAndTags[0]);
+		while(m.find()) {
+	        String segment = m.group();
+	        String key = m.group(1);
+	        String value = m.group(2);
+	        
+
+		}
+		
 		// we're looking for {key:X}, {attr[X]}, {domain}
 		// Attributed could be composite, e.g. {attr[X/Y/Z]} 
 		// name segment should match ^(.*?):(.*?)$
@@ -170,3 +190,62 @@ public class ExpressionCompiler {
 	}
 
 }
+
+//import java.util.regex.*;
+//
+//constants = new HashSet<String>(Arrays.asList("domain"));
+//prefixes = new HashSet<String>(Arrays.asList("key", "attr"));
+//
+//Pattern EXPR_PATTERN = Pattern.compile('(.*?)::(.*?)');
+//Pattern TOKEN_PATTERN = Pattern.compile('\\{(.*?)(?::(.*?))?\\}');
+//
+//
+//
+//nameSegments = [
+//    "java.lang.gc::{key:type}{key:name}",
+//    "   java.lang.gc   :: {key:type}{key:name}  ",
+//    "java.lang.gc.{attr:Foo}::{key:type}{key:name}",
+//    "{domain}.gc.{attr:Foo}::{key:type}{key:name}",
+//    "{domain}.gc.{attr:Foo}::{key:type}{attr:A/B/C}"
+//]
+//
+//
+//nameSegments.each() {  it.split("::").each() {
+//    println "Processing:\t\t[$it]";
+//    b = new StringBuffer();
+//    cleaned = it.replace(' ', '');
+//    m =TOKEN_PATTERN.matcher(cleaned);
+//    while(m.find()) {
+//        println "Start: ${m.start()}";
+//        segment = m.group();
+//        key = m.group(1);
+//        value = m.group(2);
+//        println "\t [$segment]  -->  [$key]:[$value]";
+//        if("attr".equals(key)) {
+//            if(value.contains("/")) {
+//                println "\t\t\tNested Key: [${value.split('/')}]";
+//            }
+//        }
+//    }
+//}}
+//
+//
+///*
+//nameSegments.each() {
+//    println "Testing [$it]";
+//    m = NAME_SEGMENT.matcher(it.replace(" ", "").replace("=", ""));
+//    if(m.matches()) {
+//        println "\tMatched: [${m.group(1)}] : [${m.group(2)}]";
+//        
+//    } else {
+//        println "\tNO MATCH";
+//    }
+//}
+//*/
+//
+//
+//
+//
+//
+//return null;
+

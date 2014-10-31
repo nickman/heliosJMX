@@ -43,9 +43,10 @@ public interface ExpressionProcessor {
 	
 	/**
 	 * Executes a trace for one value extracted from the values collected from the passed JMX ObjectName
+	 * @param sourceId A unique id identifying where the values and object name were collected from
 	 * @param attrValues A map of attribute values keyed by the attribute name
 	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
 	 * @return The expression result which can render an OpenTSDB put command for the extracted metric, or null if one could not be read
 	 */
-	public ExpressionResult process(Map<String, Object> attrValues, ObjectName objectName); 
+	public ExpressionResult process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName); 
 }
