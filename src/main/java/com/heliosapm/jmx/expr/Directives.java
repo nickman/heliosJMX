@@ -21,7 +21,7 @@ public class Directives {
 	public static class ObjectNameKeyDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final StringBuilder code) {
+		public void generate(final String directive, final StringBuilder code, final LoadPhase phase) {
 			Matcher m = KEY_EXPR.matcher(directive);
 			m.matches();
 			String arg = m.group(1);

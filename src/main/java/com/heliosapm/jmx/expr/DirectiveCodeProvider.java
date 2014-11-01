@@ -43,11 +43,13 @@ public interface DirectiveCodeProvider {
 	 *  <li><b>sourceId ($1)</b> : (String) the unique identifier of the source of the attribute values  </li>
 	 *  <li><b>attrValues ($2)</b> : (Map<String, Object>) The MBean attribute values keyed by the attribute name </li>
 	 *  <li><b>objectName ($3)</b> : (ObjectName) the ObjectName being sampled from</li>
+	 *  <li><b>result ($4)</b> : (ExpressionResult) the expression result to load</li>
 	 * </ul>
 	 * @param directive The directive to generate the code for
 	 * @param code The code buffer to append to
+	 * @param phase The load phase
 	 */
-	public void generate(final String directive, final StringBuilder code);
+	public void generate(final String directive, final StringBuilder code, final LoadPhase phase);
 	
 	/**
 	 * Indicates if the passed directive should be processed by this provider
