@@ -144,6 +144,18 @@ public class ExpressionCompiler {
 	
 	public static final Pattern NAME_TAG_SPLITTER = Pattern.compile("::");
 	
+	
+	protected void process(final String fullExpression, final StringBuilder nameCode, final StringBuilder valueCode) {
+		String[] metricAndTags = NAME_TAG_SPLITTER.split(fullExpression);
+		if(metricAndTags.length!=2) throw new RuntimeException("Expression [" + fullExpression + "] did not split to 2 segments");
+		if(metricAndTags[0]==null || metricAndTags[0].trim().isEmpty()) throw new RuntimeException("MetricName segment in [" + fullExpression + "] was null or empty");
+		if(metricAndTags[1]==null || metricAndTags[1].trim().isEmpty()) throw new RuntimeException("Tags segment in [" + fullExpression + "] was null or empty");
+		metricAndTags[0] = metricAndTags[0].replace(" ", "");
+		metricAndTags[1] = metricAndTags[1].replace(" ", "");		
+		buildMetricName(metricAndTags[0], nameCode);
+		buildTags(metricAndTags[1], nameCode);
+	}
+	
 	/**
 	 * Builds the method:
 	 * 	<pre>
@@ -155,25 +167,30 @@ public class ExpressionCompiler {
 	 *  </pre> 
 	 *  @param nameSegment The name portion of the raw expression
 	 */
-	protected void buildNamingCode(final String nameSegment) {
-		String[] metricAndTags = NAME_TAG_SPLITTER.split(nameSegment);
-		if(metricAndTags.length!=2) throw new RuntimeException("Name segment [" + nameSegment + "] did not split to 2 segments");
-		if(metricAndTags[0]==null || metricAndTags[0].trim().isEmpty()) throw new RuntimeException("MetricName segment in [" + nameSegment + "] was null or empty");
-		if(metricAndTags[1]==null || metricAndTags[1].trim().isEmpty()) throw new RuntimeException("Tags segment in [" + nameSegment + "] was null or empty");
-		metricAndTags[0] = metricAndTags[0].replace(" ", "");
-		metricAndTags[1] = metricAndTags[1].replace(" ", "");
-		Matcher m = TOKEN_PATTERN.matcher(metricAndTags[0]);
+	protected void buildMetricName(final String nameSegment, final StringBuilder nameCode) {
+		//localVar nBuff builds the metric name
+        int lstart = 0;
+        int matcherStart = 0;
+        int matcherEnd = 0;
+		Matcher m = TOKEN_PATTERN.matcher(nameSegment);
 		while(m.find()) {
-	        String segment = m.group();
-	        String key = m.group(1);
-	        String value = m.group(2);
-	        
-
-		}
+			matcherStart = m.start();
+			matcherEnd = m.end();
+			if(matcherStart > lstart) {
+				nameCode.append("\n\tnBuff.append(\"").append(nameSegment.substring(lstart, matcherStart)).append("\");");				
+			}
+			resolveDirective(m.group(), nameCode);
+			lstart = matcherEnd;
+		}		
+		nameCode.append("\n\tnBuff.append(\"").append(nameSegment.substring(lstart, nameSegment.length())).append("\");");
+	}
+	
+	protected void buildTags(final String tagSegment, final StringBuilder nameCode) {
 		
-		// we're looking for {key:X}, {attr[X]}, {domain}
-		// Attributed could be composite, e.g. {attr[X/Y/Z]} 
-		// name segment should match ^(.*?):(.*?)$
+	}
+	
+	protected void resolveDirective(final String directive, final StringBuilder nameCode) {
+		
 	}
 	
 	//public ExpressionResult process(Map<String, Object> attrValues, ObjectName objectName);
@@ -190,62 +207,4 @@ public class ExpressionCompiler {
 	}
 
 }
-
-//import java.util.regex.*;
-//
-//constants = new HashSet<String>(Arrays.asList("domain"));
-//prefixes = new HashSet<String>(Arrays.asList("key", "attr"));
-//
-//Pattern EXPR_PATTERN = Pattern.compile('(.*?)::(.*?)');
-//Pattern TOKEN_PATTERN = Pattern.compile('\\{(.*?)(?::(.*?))?\\}');
-//
-//
-//
-//nameSegments = [
-//    "java.lang.gc::{key:type}{key:name}",
-//    "   java.lang.gc   :: {key:type}{key:name}  ",
-//    "java.lang.gc.{attr:Foo}::{key:type}{key:name}",
-//    "{domain}.gc.{attr:Foo}::{key:type}{key:name}",
-//    "{domain}.gc.{attr:Foo}::{key:type}{attr:A/B/C}"
-//]
-//
-//
-//nameSegments.each() {  it.split("::").each() {
-//    println "Processing:\t\t[$it]";
-//    b = new StringBuffer();
-//    cleaned = it.replace(' ', '');
-//    m =TOKEN_PATTERN.matcher(cleaned);
-//    while(m.find()) {
-//        println "Start: ${m.start()}";
-//        segment = m.group();
-//        key = m.group(1);
-//        value = m.group(2);
-//        println "\t [$segment]  -->  [$key]:[$value]";
-//        if("attr".equals(key)) {
-//            if(value.contains("/")) {
-//                println "\t\t\tNested Key: [${value.split('/')}]";
-//            }
-//        }
-//    }
-//}}
-//
-//
-///*
-//nameSegments.each() {
-//    println "Testing [$it]";
-//    m = NAME_SEGMENT.matcher(it.replace(" ", "").replace("=", ""));
-//    if(m.matches()) {
-//        println "\tMatched: [${m.group(1)}] : [${m.group(2)}]";
-//        
-//    } else {
-//        println "\tNO MATCH";
-//    }
-//}
-//*/
-//
-//
-//
-//
-//
-//return null;
 
