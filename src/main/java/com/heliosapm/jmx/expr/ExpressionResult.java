@@ -24,13 +24,13 @@
  */
 package com.heliosapm.jmx.expr;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import javax.management.ObjectName;
 
-import com.google.common.collect.Multiset.Entry;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 
 /**
@@ -146,6 +146,32 @@ public class ExpressionResult {
 		doubleValue = true;
 		return this;
 	}
+	
+	/**
+	 * Accepts an opaque object and attempts to convert the string value of it to a double or a long and applies it
+	 * @param value The opaque value whose {@link #toString()} should render the intended number
+	 * @return this result
+	 */
+	ExpressionResult value(final Object value) {
+		if(value==null) throw new IllegalArgumentException("The passed value was null");
+		if(value instanceof Number) {
+			if(value instanceof Double || value instanceof Float || value instanceof BigDecimal) {
+				value(((Number)value).doubleValue());
+			} else {
+				value(((Number)value).longValue());
+			}
+		} else {
+			String valStr = value.toString().trim();
+			if(valStr.isEmpty()) throw new IllegalArgumentException("The passed value evaluated to an empty string");
+			if(valStr.indexOf('.')!=-1) {
+				value(Double.parseDouble(valStr));
+			} else {
+				value(Long.parseLong(valStr));
+			}
+		}
+		return this;
+	}
+	
 	
 	/**
 	 * Populates this ExpressionResult from the passed ObjectName stringy.
