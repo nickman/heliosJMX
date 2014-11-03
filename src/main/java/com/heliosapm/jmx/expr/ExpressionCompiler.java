@@ -29,6 +29,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,6 +39,9 @@ import javassist.CtClass;
 import javassist.LoaderClassPath;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
+
+import com.heliosapm.SimpleLogger;
+import com.heliosapm.SimpleLogger.SLogger;
 
 /**
  * <p>Title: ExpressionCompiler</p>
@@ -53,15 +57,22 @@ public class ExpressionCompiler {
 	/** The singleton instance ctor lock */
 	private static final Object lock = new Object();
 	
+	
+	/** Instance simple logger */
+	protected static final SLogger log = SimpleLogger.logger(ExpressionCompiler.class);
+	
 	/** A cache of compiled claass constructors */
 	private final NonBlockingHashMap<String, Constructor<ExpressionProcessor>> classes = new NonBlockingHashMap<String, Constructor<ExpressionProcessor>>();
 	/** Serial number to name generated classes */
 	private final AtomicLong classSerial = new AtomicLong();
 	
+	/** The registered directives */
+	protected final Set<DirectiveCodeProvider> providers = new CopyOnWriteArraySet<DirectiveCodeProvider>(Directives.PROVIDERS);
+	
 	public static final Pattern VALUE_LOOKUP = Pattern.compile("\\{(.*?):(.*?)\\}");
 	public static final Pattern DOMAIN_VALUE = Pattern.compile("\\{domain\\}");
-	public static final Pattern FULL_EXPR = Pattern.compile("(.*?)\\s+*?\\->(.*?)");
-	public static final Pattern NAME_EXPR = Pattern.compile("(.*?)\\s+*?\\->(.*?)");
+	public static final Pattern FULL_EXPR = Pattern.compile("(.*?)\\s*?\\->(.*?)");
+	
 	public static final Pattern KEY_EXPR = Pattern.compile("key:(.*?)");
 	
 	public static final Pattern TOKEN_PATTERN = Pattern.compile("\\{(.*?)(?::(.*?))?\\}");
@@ -110,12 +121,13 @@ public class ExpressionCompiler {
 				ctor = classes.get(key);
 				if(ctor==null) {
 					ctor = build(key);
-					classes.put(key, ctor);
+//					classes.put(key, ctor);
 				}
 			}
 		}
 		try {
-			return ctor.newInstance();
+//			return ctor.newInstance();
+			return null;
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to construct ExpressionProcessor for [" + key + "]", ex);
 		}
@@ -130,7 +142,11 @@ public class ExpressionCompiler {
 		ClassPool cp = new ClassPool();
 		CtClass processorCtClass = null;
 		final String className = PROCESSOR_PACKAGE + ".ExpressionProcessorImpl" + classSerial.incrementAndGet();
-		StringBuilder codeBuffer = new StringBuilder();
+		StringBuilder domainBuffer = new StringBuilder();
+		StringBuilder tagsBuffer = new StringBuilder();
+		process(nameExpr, domainBuffer, tagsBuffer);
+		log.log("Generated Domain Code:\n%s", domainBuffer);
+		log.log("Generated Tags Code:\n%s", tagsBuffer);
 		try {
 			processorCtClass = cp.makeClass(className, abstractExpressionProcessorCtClass);
 		} catch (Exception ex) {
@@ -145,15 +161,23 @@ public class ExpressionCompiler {
 	public static final Pattern NAME_TAG_SPLITTER = Pattern.compile("::");
 	
 	
-	protected void process(final String fullExpression, final StringBuilder nameCode, final StringBuilder valueCode) {
+	protected void process(final String fullExpression, final StringBuilder domainCode, final StringBuilder tagsCode) {
 		String[] metricAndTags = NAME_TAG_SPLITTER.split(fullExpression);
 		if(metricAndTags.length!=2) throw new RuntimeException("Expression [" + fullExpression + "] did not split to 2 segments");
 		if(metricAndTags[0]==null || metricAndTags[0].trim().isEmpty()) throw new RuntimeException("MetricName segment in [" + fullExpression + "] was null or empty");
 		if(metricAndTags[1]==null || metricAndTags[1].trim().isEmpty()) throw new RuntimeException("Tags segment in [" + fullExpression + "] was null or empty");
 		metricAndTags[0] = metricAndTags[0].replace(" ", "");
 		metricAndTags[1] = metricAndTags[1].replace(" ", "");		
-		buildMetricName(metricAndTags[0], nameCode);
-		buildTags(metricAndTags[1], nameCode);
+		build(metricAndTags[0], domainCode);		
+		build(metricAndTags[1], tagsCode);
+		
+	}
+	
+	public static void main(String[] args) {
+		log.log("Testing ExpressionCompiler");
+		//getInstance().get("{domain}.gc.{attr:Foo}::type={key:type},type={key:name}->{attr:A/B/C}");
+		getInstance().get("{domain}.gc.{attr:Foo}::{allkeys}->{attr:A/B/C}");
+		
 	}
 	
 	/**
@@ -167,7 +191,7 @@ public class ExpressionCompiler {
 	 *  </pre> 
 	 *  @param nameSegment The name portion of the raw expression
 	 */
-	protected void buildMetricName(final String nameSegment, final StringBuilder nameCode) {
+	protected void build(final String nameSegment, final StringBuilder nameCode) {
 		//localVar nBuff builds the metric name
         int lstart = 0;
         int matcherStart = 0;
@@ -182,15 +206,19 @@ public class ExpressionCompiler {
 			resolveDirective(m.group(), nameCode);
 			lstart = matcherEnd;
 		}		
-		nameCode.append("\n\tnBuff.append(\"").append(nameSegment.substring(lstart, nameSegment.length())).append("\");");
+		if(lstart < nameSegment.length()) {
+			nameCode.append("\n\tnBuff.append(\"").append(nameSegment.substring(lstart, nameSegment.length())).append("\");");
+		}
 	}
 	
-	protected void buildTags(final String tagSegment, final StringBuilder nameCode) {
-		
-	}
 	
 	protected void resolveDirective(final String directive, final StringBuilder nameCode) {
-		
+		for(DirectiveCodeProvider provider: providers) {
+			if(provider.match(directive)) {
+				provider.generate(directive, nameCode);
+				break;
+			}
+		}
 	}
 	
 	//public ExpressionResult process(Map<String, Object> attrValues, ObjectName objectName);
