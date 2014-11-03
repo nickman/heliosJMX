@@ -36,12 +36,17 @@ import java.util.regex.Pattern;
 
 import javassist.ClassPool;
 import javassist.CtClass;
+import javassist.CtConstructor;
+import javassist.CtMethod;
+import javassist.CtNewConstructor;
 import javassist.LoaderClassPath;
+import javassist.Modifier;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
+import com.heliosapm.jmx.util.helpers.JMXHelper;
 
 /**
  * <p>Title: ExpressionCompiler</p>
@@ -133,6 +138,14 @@ public class ExpressionCompiler {
 		}
 	}
 	
+	public static String DO_NAME_DESCR = "(Ljava/lang/String;Ljava/util/Map;Ljavax/management/ObjectName;Lcom/heliosapm/jmx/expr/ExpressionResult;)V";
+	
+	public CtMethod findMethod(final CtClass clazz, final String name) {
+		for(CtMethod ctm: clazz.getMethods()) {
+			if(ctm.equals(name)) return ctm;
+		}
+		throw new RuntimeException("Failed to find method named [" + name + "] in CtClass [" + clazz.getName() + "]");
+	}
 	
 	private Constructor<ExpressionProcessor> build(final String fullExpression) {
 		Matcher m = FULL_EXPR.matcher(fullExpression);
@@ -140,36 +153,62 @@ public class ExpressionCompiler {
 		String nameExpr = m.group(1).trim();
 		String valueExpr = m.group(2).trim();
 		ClassPool cp = new ClassPool();
+		cp.appendSystemPath();
+//		cp.importPackage("java.lang");
+		cp.importPackage(JMXHelper.class.getPackage().getName());
 		CtClass processorCtClass = null;
 		final String className = PROCESSOR_PACKAGE + ".ExpressionProcessorImpl" + classSerial.incrementAndGet();
-		StringBuilder domainBuffer = new StringBuilder();
-		StringBuilder tagsBuffer = new StringBuilder();
-		process(nameExpr, domainBuffer, tagsBuffer);
-		log.log("Generated Domain Code:\n%s", domainBuffer);
-		log.log("Generated Tags Code:\n%s", tagsBuffer);
+		StringBuilder nameBuffer = new StringBuilder("{\n\tfinal StringBuilder nBuff = new StringBuilder();");
+		StringBuilder valueBuffer = new StringBuilder();
+		process(nameExpr, nameBuffer);
+		nameBuffer.append("\n\t$4.objectName(nBuff);\n}");
+		log.log("Generated Name Code:\n%s", nameBuffer);
+//		log.log("Generated Tags Code:\n%s", tagsBuffer);
 		try {
 			processorCtClass = cp.makeClass(className, abstractExpressionProcessorCtClass);
+			CtMethod absDoNameMethod = abstractExpressionProcessorCtClass.getDeclaredMethod("doName");
+			CtMethod doNameMethod = new CtMethod(absDoNameMethod.getReturnType(), "doName", absDoNameMethod.getParameterTypes(), processorCtClass);
+			//CtConstructor ctor = new CtConstructor(new CtClass[0], processorCtClass);
+			//ctor.setBody(null);
+			processorCtClass.addConstructor(CtNewConstructor.defaultConstructor(processorCtClass));
+			doNameMethod.setBody(nameBuffer.toString());
+			doNameMethod.setModifiers(doNameMethod.getModifiers() & ~Modifier.ABSTRACT);
+			processorCtClass.addMethod(doNameMethod);
+			log.log("Got doName method: [%s]", doNameMethod);
+			
+			Class<ExpressionProcessor> clazz = (Class<ExpressionProcessor>) processorCtClass.getClass();
+			return clazz.getDeclaredConstructor();
+			
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to generate Expression Processor Class for ["  + fullExpression + "]", ex);
 		}
-		return null;
 	}
+	
+	/*
+	 * protected abstract void doName(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result);
+	 * nBuff = new StringBuilder();
+	 * <generated code>
+	 * exprResult.objectName(nBuff)
+	 */
+	
 	
 	/** The validation and group defs for the name segment of the expression */
 	public static final Pattern NAME_SEGMENT = Pattern.compile("^(.*?):(.*?)$");
 	
+	/** Splits the domain part of the expression from the tags */
 	public static final Pattern NAME_TAG_SPLITTER = Pattern.compile("::");
 	
 	
-	protected void process(final String fullExpression, final StringBuilder domainCode, final StringBuilder tagsCode) {
+	protected void process(final String fullExpression, final StringBuilder nameCode) {
 		String[] metricAndTags = NAME_TAG_SPLITTER.split(fullExpression);
 		if(metricAndTags.length!=2) throw new RuntimeException("Expression [" + fullExpression + "] did not split to 2 segments");
 		if(metricAndTags[0]==null || metricAndTags[0].trim().isEmpty()) throw new RuntimeException("MetricName segment in [" + fullExpression + "] was null or empty");
 		if(metricAndTags[1]==null || metricAndTags[1].trim().isEmpty()) throw new RuntimeException("Tags segment in [" + fullExpression + "] was null or empty");
 		metricAndTags[0] = metricAndTags[0].replace(" ", "");
 		metricAndTags[1] = metricAndTags[1].replace(" ", "");		
-		build(metricAndTags[0], domainCode);		
-		build(metricAndTags[1], tagsCode);
+		build(metricAndTags[0], nameCode);
+		nameCode.append("\n\tnBuff.append(\":\");");
+		build(metricAndTags[1], nameCode);
 		
 	}
 	

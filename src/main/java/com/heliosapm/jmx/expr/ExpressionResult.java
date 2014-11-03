@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import javax.management.ObjectName;
 
 import com.google.common.collect.Multiset.Entry;
+import com.heliosapm.jmx.util.helpers.JMXHelper;
 
 /**
  * <p>Title: ExpressionResult</p>
@@ -118,7 +119,7 @@ public class ExpressionResult {
 	 * @param name The metric name to set
 	 * @return this result
 	 */
-	ExpressionResult metric(final String name) {
+	public ExpressionResult metric(final String name) {
 		if(name==null || name.trim().isEmpty()) throw new IllegalArgumentException("The passed meric name was null or empty");
 		metricName = clean(name);
 		return this;
@@ -147,12 +148,34 @@ public class ExpressionResult {
 	}
 	
 	/**
+	 * Populates this ExpressionResult from the passed ObjectName stringy.
+	 * @param cs The ObjectName stringy
+	 * @return this result
+	 */
+	public ExpressionResult objectName(final CharSequence cs) {
+		if(cs==null) throw new IllegalArgumentException("The passed CharSequence was null");
+		return objectName(JMXHelper.objectName(cs));
+	}
+	
+	/**
+	 * Populates this ExpressionResult from the passed ObjectName.
+	 * @param on The ObjectName
+	 * @return this result
+	 */
+	public ExpressionResult objectName(final ObjectName on) {
+		if(on==null) throw new IllegalArgumentException("The passed ObjectName was null");
+		metric(on.getDomain());
+		tags(on.getKeyPropertyList());
+		return this;
+	}
+	
+	/**
 	 * Appends a tag to this result
 	 * @param key The tag key
 	 * @param value The tag value
 	 * @return this result
 	 */
-	ExpressionResult tag(final String key, final String value) {
+	public ExpressionResult tag(final String key, final String value) {
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
 		if(value==null || value.trim().isEmpty()) throw new IllegalArgumentException("The passed value was null or empty");
 		tags.put(clean(key), clean(value));
@@ -164,7 +187,7 @@ public class ExpressionResult {
 	 * @param tags The map of tags to add
 	 * @return this result
 	 */
-	ExpressionResult tags(final Map<String, String> tags) {
+	public ExpressionResult tags(final Map<String, String> tags) {
 		if(tags==null) throw new IllegalArgumentException("The passed tag map was null");
 		for(final Map.Entry<String, String> tag: tags.entrySet()) {
 			this.tags.put(clean(tag.getKey()), clean(tag.getValue()));

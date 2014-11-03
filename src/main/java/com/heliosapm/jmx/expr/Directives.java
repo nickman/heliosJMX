@@ -126,7 +126,7 @@ public class Directives {
 				String sub = m.group(2);
 				code.append("\n\tnBuff.append($2.get(\"").append(arg).append("\")").append(sub).append(");");
 			} else {
-				code.append("\n\tnBuff.append($2.get(\"").append(arg).append("\");");
+				code.append("\n\tnBuff.append($2.get(\"").append(arg).append("\"));");
 			}
 		}
 		
