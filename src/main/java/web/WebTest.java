@@ -33,6 +33,7 @@ import java.util.logging.Level;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+/*
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
@@ -46,7 +47,7 @@ import org.openqa.selenium.remote.Augmenter;
 import org.openqa.selenium.remote.CapabilityType;
 import org.openqa.selenium.remote.DesiredCapabilities;
 import org.openqa.selenium.remote.RemoteWebDriver;
-
+*/
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
 
@@ -60,140 +61,140 @@ import com.heliosapm.SimpleLogger.SLogger;
  */
 
 public class WebTest {
-	public static final SLogger LOG = SimpleLogger.logger(WebTest.class);
-//	private static final String WEBDRIVER_SERVER_URL = "http://localhost:9515/";
-//	private static final String WEBDRIVER_SERVER_URL = "http://localhost:4444/wd/hub";
-//	private static final String WEBDRIVER_SERVER_URL = "http://njwmintx:5555/wd/hub";
-//	private static final String WEBDRIVER_SERVER_URL = "http://njwmintx:9515";
-	private static final String WEBDRIVER_SERVER_URL = "http://10.12.114.23:5555/wd/hub";
-	
-	private RemoteWebDriver driver;
-	
-	/**
-	 * Creates a new WebTest
-	 * @throws Exception 
-	 */
-	public WebTest() throws Exception {
-		setupChrome();
-	}
-	
-	public void setupChrome() throws Exception {
-	    DesiredCapabilities caps = DesiredCapabilities.chrome();
-	    ChromeOptions options = new ChromeOptions();
-	    options.addArguments("test-type");
-	    caps.setCapability(ChromeOptions.CAPABILITY, options);
-	    
-	    LoggingPreferences logPrefs = new LoggingPreferences();
-	    logPrefs.enable(LogType.BROWSER, Level.ALL);
-	    logPrefs.enable(LogType.PERFORMANCE, Level.INFO);
-	    caps.setCapability(CapabilityType.LOGGING_PREFS, logPrefs);
-	    driver = (RemoteWebDriver) 
-	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
-	    
-	    
-		
-	}
-  
-	public void setupFirefox() throws Exception {
-	    DesiredCapabilities caps = DesiredCapabilities.firefox();
-	    driver = (RemoteWebDriver) 
-	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
-	    
-	    LoggingPreferences logPrefs = new LoggingPreferences();
-	    logPrefs.enable(LogType.BROWSER, Level.ALL);
-	    logPrefs.enable(LogType.PERFORMANCE, Level.INFO);
-	    caps.setCapability(CapabilityType.LOGGING_PREFS, logPrefs);
-	    driver = (RemoteWebDriver) 
-	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
+//	public static final SLogger LOG = SimpleLogger.logger(WebTest.class);
+////	private static final String WEBDRIVER_SERVER_URL = "http://localhost:9515/";
+////	private static final String WEBDRIVER_SERVER_URL = "http://localhost:4444/wd/hub";
+////	private static final String WEBDRIVER_SERVER_URL = "http://njwmintx:5555/wd/hub";
+////	private static final String WEBDRIVER_SERVER_URL = "http://njwmintx:9515";
+//	private static final String WEBDRIVER_SERVER_URL = "http://10.12.114.23:5555/wd/hub";
+//	
+//	private RemoteWebDriver driver;
+//	
+//	/**
+//	 * Creates a new WebTest
+//	 * @throws Exception 
+//	 */
+//	public WebTest() throws Exception {
+//		setupChrome();
+//	}
+//	
+//	public void setupChrome() throws Exception {
+//	    DesiredCapabilities caps = DesiredCapabilities.chrome();
+//	    ChromeOptions options = new ChromeOptions();
+//	    options.addArguments("test-type");
+//	    caps.setCapability(ChromeOptions.CAPABILITY, options);
+//	    
+//	    LoggingPreferences logPrefs = new LoggingPreferences();
+//	    logPrefs.enable(LogType.BROWSER, Level.ALL);
+//	    logPrefs.enable(LogType.PERFORMANCE, Level.INFO);
+//	    caps.setCapability(CapabilityType.LOGGING_PREFS, logPrefs);
+//	    driver = (RemoteWebDriver) 
+//	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
+//	    
+//	    
+//		
+//	}
+//  
+//	public void setupFirefox() throws Exception {
 //	    DesiredCapabilities caps = DesiredCapabilities.firefox();
 //	    driver = (RemoteWebDriver) 
 //	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
-	    
-	    
-		
-	}
-  
-	
-
-  public void testTSDB() throws Exception {
-    //driver.get("http://localhost:4242");
-	  driver.get("http://pdk-pt-cetsd-01:8080/");
-	  
-    
-    List<WebElement> elements = driver.findElements(By.className("gwt-SuggestBox"));
-    LOG.log("SuggestBox Elements: [%s]", elements.size());
-    sleep(1000);
-    elements = driver.findElements(By.className("gwt-DateBox"));
-    LOG.log("DateBox Elements: [%s]", elements.size());
-    tearDown();
-    
-//    element.sendKeys("Selenium Conference 2013");
-//    element.submit();
-//    driver.findElement(By.linkText("Web")).click();
-  }
-	
-  public static void sleep(final long sleep) {
-	  try { Thread.currentThread().join(sleep); } catch (Exception x) {throw new RuntimeException(x);}
-  }
-
-	/**
-	 * @param args
-	 */
-	public static void main(String[] args) {
-		LOG.log("WebTest");
-		WebTest wt = null;
-		try {
-			wt = new WebTest();
-			wt.testTSDB();
-		} catch (Exception ex) {
-			ex.printStackTrace(System.err);
-		} finally {
-			try { wt.driver.quit();} catch (Exception x) {/* No Op */}
-		}
-	}
-
-	
-	
-	  public void tearDown() throws Exception {
-		    try {
-		      Logs logs = driver.manage().logs();
-		      System.out.println("Log types: " + logs.getAvailableLogTypes());
-		      printLog(LogType.BROWSER);
-		      submitPerformanceResult("Test.testGoogleSearch", logs.get(LogType.PERFORMANCE).getAll());
-		    } finally {
-		      driver.quit();
-		    }
-		  }
-
-		  void printLog(String type) {
-		    List<LogEntry> entries = driver.manage().logs().get(type).getAll();
-		    System.out.println(entries.size() + " " + type + " log entries found");
-		    for (LogEntry entry : entries) {
-		      System.out.println(
-		          new Date(entry.getTimestamp()) + " " + entry.getLevel() + " " + entry.getMessage());
-		    }
-		  }
-
-		  void submitPerformanceResult(String name, List<LogEntry> perfLogEntries)
-		      throws IOException, JSONException {
-		    JSONArray devToolsLog = new JSONArray();
-		    System.out.println(perfLogEntries.size() + " performance log entries found");
-		    for (LogEntry entry : perfLogEntries) {
-		      JSONObject message = new JSONObject(entry.getMessage());
-		      JSONObject devToolsMessage = message.getJSONObject("message");
-		      LOG.log("PerfLogEntry:\n%s", devToolsMessage.toString(2));
-		      // System.out.println(
-		      //     devToolsMessage.getString("method") + " " + message.getString("webview"));
-		      //devToolsLog.put(devToolsMessage);
-		    }
-//		    byte[] screenshot = null;
-//		    if (null == androidPackage) {  // Chrome on Android does not yet support screenshots
-//		      screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.BYTES);
+//	    
+//	    LoggingPreferences logPrefs = new LoggingPreferences();
+//	    logPrefs.enable(LogType.BROWSER, Level.ALL);
+//	    logPrefs.enable(LogType.PERFORMANCE, Level.INFO);
+//	    caps.setCapability(CapabilityType.LOGGING_PREFS, logPrefs);
+//	    driver = (RemoteWebDriver) 
+//	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
+////	    DesiredCapabilities caps = DesiredCapabilities.firefox();
+////	    driver = (RemoteWebDriver) 
+////	    		new Augmenter().augment(new RemoteWebDriver(new URL(WEBDRIVER_SERVER_URL), caps));
+//	    
+//	    
+//		
+//	}
+//  
+//	
+//
+//  public void testTSDB() throws Exception {
+//    //driver.get("http://localhost:4242");
+//	  driver.get("http://pdk-pt-cetsd-01:8080/");
+//	  
+//    
+//    List<WebElement> elements = driver.findElements(By.className("gwt-SuggestBox"));
+//    LOG.log("SuggestBox Elements: [%s]", elements.size());
+//    sleep(1000);
+//    elements = driver.findElements(By.className("gwt-DateBox"));
+//    LOG.log("DateBox Elements: [%s]", elements.size());
+//    tearDown();
+//    
+////    element.sendKeys("Selenium Conference 2013");
+////    element.submit();
+////    driver.findElement(By.linkText("Web")).click();
+//  }
+//	
+//  public static void sleep(final long sleep) {
+//	  try { Thread.currentThread().join(sleep); } catch (Exception x) {throw new RuntimeException(x);}
+//  }
+//
+//	/**
+//	 * @param args
+//	 */
+//	public static void main(String[] args) {
+//		LOG.log("WebTest");
+//		WebTest wt = null;
+//		try {
+//			wt = new WebTest();
+//			wt.testTSDB();
+//		} catch (Exception ex) {
+//			ex.printStackTrace(System.err);
+//		} finally {
+//			try { wt.driver.quit();} catch (Exception x) {/* No Op */}
+//		}
+//	}
+//
+//	
+//	
+//	  public void tearDown() throws Exception {
+//		    try {
+//		      Logs logs = driver.manage().logs();
+//		      System.out.println("Log types: " + logs.getAvailableLogTypes());
+//		      printLog(LogType.BROWSER);
+//		      submitPerformanceResult("Test.testGoogleSearch", logs.get(LogType.PERFORMANCE).getAll());
+//		    } finally {
+//		      driver.quit();
 //		    }
-//		    String resultUrl = new WebPageTest(new URL("http://localhost:8888/"), "Test", name)
-//		        .submitResult(devToolsLog, screenshot);
-//		    System.out.println("Result page: " + resultUrl);
-		  }
-
+//		  }
+//
+//		  void printLog(String type) {
+//		    List<LogEntry> entries = driver.manage().logs().get(type).getAll();
+//		    System.out.println(entries.size() + " " + type + " log entries found");
+//		    for (LogEntry entry : entries) {
+//		      System.out.println(
+//		          new Date(entry.getTimestamp()) + " " + entry.getLevel() + " " + entry.getMessage());
+//		    }
+//		  }
+//
+//		  void submitPerformanceResult(String name, List<LogEntry> perfLogEntries)
+//		      throws IOException, JSONException {
+//		    JSONArray devToolsLog = new JSONArray();
+//		    System.out.println(perfLogEntries.size() + " performance log entries found");
+//		    for (LogEntry entry : perfLogEntries) {
+//		      JSONObject message = new JSONObject(entry.getMessage());
+//		      JSONObject devToolsMessage = message.getJSONObject("message");
+//		      LOG.log("PerfLogEntry:\n%s", devToolsMessage.toString(2));
+//		      // System.out.println(
+//		      //     devToolsMessage.getString("method") + " " + message.getString("webview"));
+//		      //devToolsLog.put(devToolsMessage);
+//		    }
+////		    byte[] screenshot = null;
+////		    if (null == androidPackage) {  // Chrome on Android does not yet support screenshots
+////		      screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.BYTES);
+////		    }
+////		    String resultUrl = new WebPageTest(new URL("http://localhost:8888/"), "Test", name)
+////		        .submitResult(devToolsLog, screenshot);
+////		    System.out.println("Result page: " + resultUrl);
+//		  }
+//
 	
 }
