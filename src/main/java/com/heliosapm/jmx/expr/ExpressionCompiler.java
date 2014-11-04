@@ -25,10 +25,12 @@
 package com.heliosapm.jmx.expr;
 
 import java.io.File;
+import java.lang.management.ManagementFactory;
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicLong;
@@ -43,6 +45,10 @@ import javassist.CtNewConstructor;
 import javassist.CtNewMethod;
 import javassist.LoaderClassPath;
 import javassist.Modifier;
+
+import javax.management.MBeanServer;
+import javax.management.MBeanServerDelegate;
+import javax.management.ObjectName;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 
@@ -128,13 +134,12 @@ public class ExpressionCompiler {
 				ctor = classes.get(key);
 				if(ctor==null) {
 					ctor = build(key);
-//					classes.put(key, ctor);
+					classes.put(key, ctor);
 				}
 			}
 		}
 		try {
-//			return ctor.newInstance();
-			return null;
+			return ctor.newInstance();
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to construct ExpressionProcessor for [" + key + "]", ex);
 		}
@@ -156,8 +161,14 @@ public class ExpressionCompiler {
 		String valueExpr = m.group(2).trim();
 		ClassPool cp = new ClassPool();
 		cp.appendSystemPath();
+	
 //		cp.importPackage("java.lang");
 		cp.importPackage(JMXHelper.class.getPackage().getName());
+		cp.importPackage("javax.script");
+		//cp.importPackage(StateService.class.getPackage().getName());
+		
+		
+		
 		CtClass processorCtClass = null;
 		final String className = PROCESSOR_PACKAGE + ".ExpressionProcessorImpl" + classSerial.incrementAndGet();
 		StringBuilder nameBuffer = new StringBuilder("{\n\tfinal StringBuilder nBuff = new StringBuilder();");
@@ -249,7 +260,21 @@ public class ExpressionCompiler {
 	public static void main(String[] args) {
 		log.log("Testing ExpressionCompiler");
 		//getInstance().get("{domain}.gc.{attr:Foo}::type={key:type},type={key:name}->{attr:A/B/C}");
-		getInstance().get("{domain}.gc.{attr:Foo}::{allkeys}->{attr:A/B/C}");
+//		getInstance().get("{domain}.gc.{attr:Foo}::{allkeys}->{attr:A/B/C}");
+		getInstance().get("{domain}.gc.{eval:d(nuthin):ON.getKeyProperty('Foo');}::{allkeys}->{attr:A/B/C}");
+		ManagementFactory.getMemoryMXBean().gc();
+		try {
+			MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+			final String agentId = server.getAttribute(MBeanServerDelegate.DELEGATE_NAME, "MBeanServerId").toString();
+			for(ObjectName on: server.queryNames(JMXHelper.objectName(ManagementFactory.GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE + ",*"), null)) {
+				Map<String, Object> attrValues = JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on));
+				ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}"); 
+				ExpressionResult er = ep.process(agentId, attrValues, on, null);
+				log.log("Expr [%s]: %s", on, er);
+			}
+		} catch (Exception ex) {
+			ex.printStackTrace(System.err);
+		}
 		
 	}
 	

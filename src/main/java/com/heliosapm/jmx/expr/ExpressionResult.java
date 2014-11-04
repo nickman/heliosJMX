@@ -108,7 +108,7 @@ public class ExpressionResult {
 	 * Resets this result
 	 * @return this result in a reset state
 	 */
-	ExpressionResult reset() {
+	public ExpressionResult reset() {
 		metricName = null;
 		tags.clear();		
 		return this;
@@ -130,7 +130,7 @@ public class ExpressionResult {
 	 * @param value The long value
 	 * @return this result
 	 */
-	ExpressionResult value(final long value) {
+	public ExpressionResult value(final long value) {
 		lValue = value;
 		doubleValue = false;
 		return this;
@@ -141,7 +141,7 @@ public class ExpressionResult {
 	 * @param value The double value
 	 * @return this result
 	 */
-	ExpressionResult value(final double value) {
+	public ExpressionResult value(final double value) {
 		dValue = value;
 		doubleValue = true;
 		return this;
@@ -152,7 +152,7 @@ public class ExpressionResult {
 	 * @param value The opaque value whose {@link #toString()} should render the intended number
 	 * @return this result
 	 */
-	ExpressionResult value(final Object value) {
+	public ExpressionResult value(final Object value) {
 		if(value==null) throw new IllegalArgumentException("The passed value was null");
 		if(value instanceof Number) {
 			if(value instanceof Double || value instanceof Float || value instanceof BigDecimal) {
@@ -275,6 +275,19 @@ public class ExpressionResult {
 		return b.deleteCharAt(b.length()-1).append("\n").toString();
 	}
 	
+	public String toString() {
+		StringBuilder b = new StringBuilder(clean(metricName)).append(":");
+		for(final Map.Entry<String, String> tag: rootTags.entrySet()) {
+			b.append(clean(tag.getKey())).append("=").append(clean(tag.getValue())).append(",");
+		}		
+		for(final Map.Entry<String, String> tag: tags.entrySet()) {
+			b.append(clean(tag.getKey())).append("=").append(clean(tag.getValue())).append(",");
+		}
+		b.deleteCharAt(b.length()-1);
+		b.append("/").append(doubleValue ? dValue : lValue);
+		return b.toString();
+		
+	}
 	
 	/**
 	 * Cleans the passed stringy

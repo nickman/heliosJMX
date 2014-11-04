@@ -27,6 +27,8 @@ package com.heliosapm.jmx.expr;
 import java.util.Map;
 
 import javax.management.ObjectName;
+import javax.script.Bindings;
+import javax.script.CompiledScript;
 
 /**
  * <p>Title: AbstractExpressionProcessor</p>
@@ -54,6 +56,19 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 		doName(sourceId, attrValues, objectName, er);
 		doValue(sourceId, attrValues, objectName, er);
 		return er;
+	}
+	
+	protected Object invokeEval(final Object cs, final Bindings bindings) {
+		return invokeEval(cs, bindings);
+	}
+	
+	protected Object invokeEval(final Object cs, final Bindings bindings, final Object defaultValue) {
+		try {
+			return ((CompiledScript)cs).eval(bindings);
+		} catch (Exception x) {
+			if(defaultValue!=null) return defaultValue;
+			throw new RuntimeException(x);
+		}
 	}
 	
 	protected abstract void doName(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result);

@@ -4,8 +4,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.script.CompiledScript;
+
+import com.heliosapm.jmx.util.helpers.StateService;
 
 /**
  * <p>Title: Directives</p>
@@ -21,6 +26,11 @@ public class Directives {
 	public static final Pattern KEY_EXPR = Pattern.compile("\\{key:(.*?)\\}");
 	/** The directive matching expression for an ObjectNameKeyValueDirective */
 	public static final Pattern KEYVALUE_EXPR = Pattern.compile("\\{keyvalue:(.*?)\\}");
+
+	/** The directive matching expression for a JavaScript eval  */
+	public static final Pattern EVAL_EXPR = Pattern.compile("\\{eval:(?:d\\((.*?)\\):)?(.*)\\}");
+	
+	
 	
 	/** The directive matching expression for an AttributeDirective */
 	public static final Pattern ATTR_EXPR = Pattern.compile("\\{attr:(.*?)\\}");
@@ -29,6 +39,9 @@ public class Directives {
 	public static final String ALL_KEYVALUES = "{allkeys}";
 	/** The directive matching string for the ObjectName domain */
 	public static final String DOMAIN = "{domain}";
+	
+	/** Serial number for compiled script keys */
+	protected static final AtomicLong evalSerial = new AtomicLong();
 	
 	
 	/** Directive subscript expression */
@@ -40,8 +53,55 @@ public class Directives {
 			new AttributeDirective(),
 			new DomainDirective(),
 			new ObjectNameKeyDirective(),
-			new ObjectNameKeyValueDirective()
+			new ObjectNameKeyValueDirective(),
+			new EvalDirective()
 	)));	
+	
+	
+	/**
+	 * <p>Title: EvalDirective</p>
+	 * <p>Description: Directive processor that exeecutes the embedded JavaScript in the directive</p>
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><b><code>com.heliosapm.jmx.expr.Directives.EvalDirective</code></b>
+	 */
+	public static class EvalDirective implements DirectiveCodeProvider {
+		/** The state service which compiles and caches the JS fragments */
+		static final StateService state = StateService.getInstance();
+		
+		@Override
+		public void generate(final String directive, final StringBuilder code) {
+			Matcher m = EVAL_EXPR.matcher(directive);
+			m.matches();
+			final String defaultValue = m.group(1);
+			final String sourceCode = m.group(2);
+			final String evalKey = "eval" + evalSerial.incrementAndGet();
+			CompiledScript cs = state.getCompiledScript(sourceCode);
+			state.put(evalKey, cs);
+			code.append("\n\tBindings b = StateService.getInstance().getBindings(\"").append(evalKey).append("\");");
+			code.append("\n\tb.put(\"sourceId\", $1);");
+			code.append("\n\tb.put(\"attrValues\", $2);");
+			code.append("\n\tb.put(\"objectName\", $3);");
+			code.append("\n\tb.put(\"exResult\", $4);");
+			code.append("\n\tObject cs = StateService.getInstance().get(\"").append(evalKey).append("\");");
+			if(defaultValue!=null && !defaultValue.trim().isEmpty()) {
+				code.append("\n\tnBuff.append(invokeEval(cs, b, \"").append(defaultValue).append("\"));");
+			} else {
+				code.append("\n\tnBuff.append(invokeEval(cs, b));");
+			}
+		}
+		
+		
+		// DirectiveCodeProvider
+		//  public void generate(final String directive, final StringBuilder code);
+		//  nBuff
+		//  final String sourceId, Map<String, Object> attrValues, ObjectName objectName
+		
+		public boolean match(final String directive) {
+			return patternMatch(directive, EVAL_EXPR);
+		}		
+	}
+	
 	
 	
 	/**
@@ -190,13 +250,6 @@ public class Directives {
 		if(expr==null) throw new IllegalArgumentException("The passed pattern was null");
 		return expr.matcher(directive).matches();
 	}
-	
-	// DirectiveCodeProvider
-	//  public void generate(final String directive, final StringBuilder code);
-	//  nBuff
-	//  final String sourceId, Map<String, Object> attrValues, ObjectName objectName
-	
-	
 	
 	private Directives() {}
 
