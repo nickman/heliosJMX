@@ -47,8 +47,12 @@ import javassist.LoaderClassPath;
 import javassist.Modifier;
 
 import javax.management.MBeanServer;
+import javax.management.MBeanServerConnection;
 import javax.management.MBeanServerDelegate;
 import javax.management.ObjectName;
+import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 
@@ -272,6 +276,56 @@ public class ExpressionCompiler {
 				ExpressionResult er = ep.process(agentId, attrValues, on, null);
 				log.log("Expr [%s]: %s", on, er);
 			}
+		} catch (Exception ex) {
+			ex.printStackTrace(System.err);
+		}
+		log.log("\n\t===============================\n\tHBase Test\n\t===============================\n");
+		try {
+			JMXServiceURL serviceUrl = new JMXServiceURL("service:jmx:attach:///[.*HMaster.*]");
+			JMXConnector jconn = JMXConnectorFactory.connect(serviceUrl);
+			MBeanServerConnection server = jconn.getMBeanServerConnection();
+			final String agentId = server.getAttribute(MBeanServerDelegate.DELEGATE_NAME, "MBeanServerId").toString();
+			log.log("Connected to HMaster. ServerID: [%s]", agentId);
+			for(ObjectName on: server.queryNames(JMXHelper.objectName(ManagementFactory.GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE + ",*"), null)) {
+				Map<String, Object> attrValues = JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on));
+				ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}"); 
+				ExpressionResult er = ep.process(agentId, attrValues, on, null);
+				log.log("Expr [%s]: %s", on, er);
+			}
+			Set<String> memoryPoolNames = new HashSet<String>(5);
+			int index = 0;
+			for(ObjectName on: server.queryNames(JMXHelper.objectName("java.lang:type=MemoryPool,*"), null)) {
+				memoryPoolNames.add(on.getKeyProperty("name"));
+			}
+			log.log("Memory Pool Names: %s", memoryPoolNames.toString());
+			
+			for(ObjectName on: server.queryNames(JMXHelper.objectName("java.lang:type=GarbageCollector,*"), null)) {
+				final String gcName = on.getKeyProperty("name");
+				String memPoolName = ((String[])server.getAttribute(on, "MemoryPoolNames"))[0];
+				log.log("GC: [%s], First Pool: [%s]", gcName, memPoolName);
+				
+			}
+			
+			
+			ExpressionProcessor ep = ExpressionCompiler.getInstance()
+//					.get("{domain}::{allkeys},pool={attr:MemoryPoolNames([0])}->{attr:LastGCInfo}");
+					.get("{domain}::{allkeys},pool={eval:attrValues.get('MemoryPoolNames')[0]}->1");
+			
+			ExpressionResult er = ep.process(agentId, attrValues, on, null);
+			
+			//  {eval:attrValues.get('MemoryPoolNames')[0]}
+			
+			/*
+			 * LastGcInfo / 
+			 * 		GcThreadCount, duration
+			 * 		memoryUsageBeforeGc / memoryUsageAfterGc
+			 * 			key: <pool name>  e.g. CMS Old Gen
+			 * 			value: MemoryUsage
+			 * 				committed, init, max, used
+			 */
+			
+			jconn.close();
+			
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
 		}
