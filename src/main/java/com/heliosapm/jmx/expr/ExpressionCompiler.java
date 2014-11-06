@@ -299,19 +299,22 @@ public class ExpressionCompiler {
 			}
 			log.log("Memory Pool Names: %s", memoryPoolNames.toString());
 			
-			for(ObjectName on: server.queryNames(JMXHelper.objectName("java.lang:type=GarbageCollector,*"), null)) {
-				final String gcName = on.getKeyProperty("name");
-				String memPoolName = ((String[])server.getAttribute(on, "MemoryPoolNames"))[0];
-				log.log("GC: [%s], First Pool: [%s]", gcName, memPoolName);
-				
-			}
-			
-			
 			ExpressionProcessor ep = ExpressionCompiler.getInstance()
 //					.get("{domain}::{allkeys},pool={attr:MemoryPoolNames([0])}->{attr:LastGCInfo}");
 					.get("{domain}::{allkeys},pool={eval:attrValues.get('MemoryPoolNames')[0]}->1");
 			
-			ExpressionResult er = ep.process(agentId, attrValues, on, null);
+			
+			for(ObjectName on: server.queryNames(JMXHelper.objectName("java.lang:type=GarbageCollector,*"), null)) {
+				final String gcName = on.getKeyProperty("name");
+				String memPoolName = ((String[])server.getAttribute(on, "MemoryPoolNames"))[0];
+				log.log("GC: [%s], First Pool: [%s]", gcName, memPoolName);
+				ExpressionResult er = ep.process(agentId, JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on, server)), on, null);
+				log.log("ER: %s", er);
+			}
+			
+			
+			
+			
 			
 			//  {eval:attrValues.get('MemoryPoolNames')[0]}
 			

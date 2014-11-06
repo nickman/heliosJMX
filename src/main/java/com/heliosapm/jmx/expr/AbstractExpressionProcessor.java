@@ -59,7 +59,7 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	}
 	
 	protected Object invokeEval(final Object cs, final Bindings bindings) {
-		return invokeEval(cs, bindings);
+		return invokeEval(cs, bindings, null);
 	}
 	
 	protected Object invokeEval(final Object cs, final Bindings bindings, final Object defaultValue) {

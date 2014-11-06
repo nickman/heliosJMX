@@ -29,22 +29,33 @@ import java.util.Map;
 import javax.management.ObjectName;
 
 /**
- * <p>Title: ExpressionProcessor</p>
- * <p>Description: Defines an expression processor which extracts and traces values sampled from a JMX MBean</p> 
+ * <p>Title: LoopingExpressionProcessor</p>
+ * <p>Description: An expression processor that supports repeated executions in a loop over one or more {@link Iterable}s</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.jmx.expr.ExpressionProcessor</code></p>
+ * <p><code>com.heliosapm.jmx.expr.LoopingExpressionProcessor</code></p>
  */
 
-public interface ExpressionProcessor {
+public interface LoopingExpressionProcessor extends ExpressionProcessor {
+
+	//public ExpressionResult process(
+		//final String sourceId, 
+		// Map<String, Object> attrValues, 
+		//ObjectName objectName, 
+		//ExpressionResult result);
 	
 	/**
-	 * Executes a trace for one value extracted from the values collected from the passed JMX ObjectName
-	 * @param sourceId A unique id identifying where the values and object name were collected from
-	 * @param attrValues A map of attribute values keyed by the attribute name
-	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
-	 * @param result The optional input result. If null, a new one will be created
-	 * @return The expression result which can render an OpenTSDB put command for the extracted metric, or null if one could not be read
+	 * Executes the passed processor for each iterable
+	 * @param processor The processor to execute
+	 * @param loopers The iterables to nest the execution with
 	 */
-	public ExpressionResult process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, ExpressionResult result); 
+	public void process(ExpressionProcessor processor, Iterable<?>...loopers);
+	
+
+	/**
+	 * Executes this processor for each iterable
+	 * @param loopers The iterables to nest the execution with
+	 */
+	public void process(Iterable<?>...loopers);
+	
 }
