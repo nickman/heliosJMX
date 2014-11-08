@@ -22,7 +22,7 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.jmx.expr;
+package com.heliosapm.opentsdb;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -31,16 +31,20 @@ import java.util.concurrent.TimeUnit;
 
 import javax.management.ObjectName;
 
+import org.jboss.netty.buffer.ChannelBuffer;
+
 import com.heliosapm.jmx.util.helpers.JMXHelper;
+import com.heliosapm.opentsdb.TSDBSubmitter.SubmitterFlush;
+
 
 /**
  * <p>Title: ExpressionResult</p>
- * <p>Description: A container for a processed expression result</p> 
+ * <p>Description: A container for a processed expression result and metric accumulator that feeds to the
+ * creating TSDBSubmitter on flush.</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.jmx.expr.ExpressionResult</code></p>
+ * <p><code>com.heliosapm.opentsdb.ExpressionResult</code></p>
  */
-
 public class ExpressionResult {
 	/** The OpenTSDB metric name */
 	protected String metricName = null;
@@ -56,6 +60,12 @@ public class ExpressionResult {
 	/** Indicates if the metric value is a double type */
 	protected boolean doubleValue = true;
 	
+	/** The submitted metric buffer */
+	protected final ChannelBuffer buffer;
+	/** The flush target where this buffer will flush to */
+	protected final SubmitterFlush flushTarget;
+	
+	/** Fast string builder */
 	private static final ThreadLocal<StringBuilder> SB = new ThreadLocal<StringBuilder>() {
 		@Override
 		protected StringBuilder initialValue() {
@@ -67,26 +77,25 @@ public class ExpressionResult {
 	/**
 	 * Creates a new ExpressionResult
 	 * @param rootTags An optional map of root tags
+	 * @param buffer The submitted metric buffer
+	 * @param flushTarget The target the buffer will be flushed to
 	 * @return a new ExpressionResult
 	 */
-	public static ExpressionResult newInstance(final Map<String, String> rootTags) {
-		return new ExpressionResult(rootTags);
+	static ExpressionResult newInstance(final Map<String, String> rootTags, final ChannelBuffer buffer, final SubmitterFlush flushTarget) {
+		return new ExpressionResult(rootTags, buffer, flushTarget);
 	}
 	
-	/**
-	 * Creates a new ExpressionResult with no root tags
-	 * @return a new ExpressionResult
-	 */
-	public static ExpressionResult newInstance() {
-		return new ExpressionResult(null);
-	}
-	
+
 
 	/**
 	 * Creates a new ExpressionResult
 	 * @param rootTags An optional map of root tags
+	 * @param buffer The submitted metric buffer
+	 * @param flushTarget The target the buffer will be flushed to
 	 */
-	private ExpressionResult(final Map<String, String> rootTags) {
+	private ExpressionResult(final Map<String, String> rootTags, final ChannelBuffer buffer, final SubmitterFlush flushTarget) {
+		this.buffer = buffer;
+		this.flushTarget = flushTarget;
 		if(rootTags!=null && !rootTags.isEmpty()) {
 			for(final Map.Entry<String, String> tag: rootTags.entrySet()) {
 				this.rootTags.put(clean(tag.getKey()), clean(tag.getValue()));

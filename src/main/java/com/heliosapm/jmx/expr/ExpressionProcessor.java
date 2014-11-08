@@ -28,6 +28,8 @@ import java.util.Map;
 
 import javax.management.ObjectName;
 
+import com.heliosapm.opentsdb.ExpressionResult;
+
 /**
  * <p>Title: ExpressionProcessor</p>
  * <p>Description: Defines an expression processor which extracts and traces values sampled from a JMX MBean</p> 
@@ -43,8 +45,20 @@ public interface ExpressionProcessor {
 	 * @param sourceId A unique id identifying where the values and object name were collected from
 	 * @param attrValues A map of attribute values keyed by the attribute name
 	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
-	 * @param result The optional input result. If null, a new one will be created
-	 * @return The expression result which can render an OpenTSDB put command for the extracted metric, or null if one could not be read
+	 * @param outer Specifies if the passed loopers are looped outside any expression based loopers (true) or inside (false)
+	 * @param loopers The iterables to nest the execution with
+	 * @return The expression result rendered to a char sequence
 	 */
-	public ExpressionResult process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, ExpressionResult result); 
+	public CharSequence process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, final boolean outer, Iterable<?>...loopers);
+	
+	/**
+	 * Executes a trace for one value extracted from the values collected from the passed JMX ObjectName
+	 * @param sourceId A unique id identifying where the values and object name were collected from
+	 * @param attrValues A map of attribute values keyed by the attribute name
+	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
+	 * @param loopers The outer loopers iterables to nest the execution with
+	 * @return The expression result rendered to a char sequence
+	 */
+	public CharSequence process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, Iterable<?>...loopers);
+
 }

@@ -205,6 +205,30 @@ public class TSDBSubmitter {
 		baseURL = "http://" + host + ":" + port + "/";
 	}
 	
+	interface SubmitterFlush {
+		void flush();
+	}
+	
+	/**
+	 * Creates a new ExpressionResult using the submitter's root tags and that flushes into this submitter's metric buffer.
+	 * @return a new ExpressionResult 
+	 */
+	public ExpressionResult newExpressionResult() {
+		final ChannelBuffer _buffer = ChannelBuffers.dynamicBuffer(bufferFactory);
+		final SubmitterFlush _flushTarget = new SubmitterFlush() {
+			@Override
+			public void flush() {
+				synchronized(_buffer) {
+					synchronized(dataBuffer) {
+						dataBuffer.writeBytes(_buffer);
+						_buffer.clear();
+					}					
+				}
+			}
+		};
+		return ExpressionResult.newInstance(rootTagsMap, _buffer, _flushTarget);
+	}
+	
 	/**
 	 * Creates a new TSDBSubmitter using the default OpenTSDB port
 	 * @param host The OpenTSDB host or ip address

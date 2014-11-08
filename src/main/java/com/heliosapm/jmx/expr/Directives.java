@@ -82,7 +82,7 @@ public class Directives {
 			code.append("\n\tb.put(\"sourceId\", $1);");
 			code.append("\n\tb.put(\"attrValues\", $2);");
 			code.append("\n\tb.put(\"objectName\", $3);");
-			code.append("\n\tb.put(\"exResult\", $4);");
+			code.append("\n\tb.put(\"exResult\", er);");
 			code.append("\n\tObject cs = StateService.getInstance().get(\"").append(evalKey).append("\");");
 			if(defaultValue!=null && !defaultValue.trim().isEmpty()) {
 				code.append("\n\tnBuff.append(invokeEval(cs, b, \"").append(defaultValue).append("\"));");

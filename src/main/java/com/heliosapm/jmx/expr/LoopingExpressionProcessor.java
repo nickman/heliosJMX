@@ -38,24 +38,10 @@ import javax.management.ObjectName;
 
 public interface LoopingExpressionProcessor extends ExpressionProcessor {
 
-	//public ExpressionResult process(
-		//final String sourceId, 
-		// Map<String, Object> attrValues, 
-		//ObjectName objectName, 
-		//ExpressionResult result);
-	
-	/**
-	 * Executes the passed processor for each iterable
-	 * @param processor The processor to execute
-	 * @param loopers The iterables to nest the execution with
-	 */
-	public void process(ExpressionProcessor processor, Iterable<?>...loopers);
-	
-
 	/**
 	 * Executes this processor for each iterable
 	 * @param loopers The iterables to nest the execution with
 	 */
-	public void process(Iterable<?>...loopers);
+	public void loopProcess(Iterable<?>...loopers);
 	
 }

@@ -7,3 +7,6 @@ function cache(key, value) {
 function elapsed(ts) {
 	return stateService.put(key, value);
 }
+function objectName(s) {
+	return com.heliosapm.jmx.util.helpers.JMXHelper.objectName(s.toString());
+}

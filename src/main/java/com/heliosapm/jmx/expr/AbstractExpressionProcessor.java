@@ -30,6 +30,8 @@ import javax.management.ObjectName;
 import javax.script.Bindings;
 import javax.script.CompiledScript;
 
+import com.heliosapm.opentsdb.ExpressionResult;
+
 /**
  * <p>Title: AbstractExpressionProcessor</p>
  * <p>Description: </p> 
@@ -39,23 +41,24 @@ import javax.script.CompiledScript;
  */
 
 public abstract class AbstractExpressionProcessor implements ExpressionProcessor {
-
+	/** The expression result that handles the expression processing and result buffering */
+	protected final ExpressionResult er;
 	/**
 	 * Creates a new AbstractExpressionProcessor
+	 * @param er The expression result that handles the expression processing and result buffering
 	 */
-	public AbstractExpressionProcessor() {
-
+	public AbstractExpressionProcessor(ExpressionResult er) {
+		this.er = er;
 	}
 	
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.jmx.expr.ExpressionProcessor#process(java.lang.String, java.util.Map, javax.management.ObjectName, com.heliosapm.jmx.expr.ExpressionResult)
+	 * @see com.heliosapm.jmx.expr.ExpressionProcessor#process(java.lang.String, java.util.Map, javax.management.ObjectName, java.lang.Iterable[])
 	 */
-	public ExpressionResult process(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result) {
-		ExpressionResult er = result != null ? result : ExpressionResult.newInstance();
-		doName(sourceId, attrValues, objectName, er);
-		doValue(sourceId, attrValues, objectName, er);
-		return er;
+	public CharSequence process(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final Iterable<?>...loopers) {
+		doName(sourceId, attrValues, objectName);
+		doValue(sourceId, attrValues, objectName);
+		return er.renderPut();
 	}
 	
 	protected Object invokeEval(final Object cs, final Bindings bindings) {
@@ -71,8 +74,8 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 		}
 	}
 	
-	protected abstract void doName(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result);
+	protected abstract void doName(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName);
 	
-	protected abstract void doValue(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final ExpressionResult result);
+	protected abstract void doValue(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName);
 
 }

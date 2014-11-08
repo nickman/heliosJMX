@@ -59,6 +59,8 @@ import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
+import com.heliosapm.opentsdb.ExpressionResult;
+import com.heliosapm.opentsdb.TSDBSubmitter;
 
 /**
  * <p>Title: ExpressionCompiler</p>
@@ -85,17 +87,44 @@ public class ExpressionCompiler {
 	
 	/** The registered directives */
 	protected final Set<DirectiveCodeProvider> providers = new CopyOnWriteArraySet<DirectiveCodeProvider>(Directives.PROVIDERS);
+
 	
-	public static final Pattern VALUE_LOOKUP = Pattern.compile("\\{(.*?):(.*?)\\}");
-	public static final Pattern DOMAIN_VALUE = Pattern.compile("\\{domain\\}");
 	public static final Pattern FULL_EXPR = Pattern.compile("(.*?)\\s*?\\->(.*?)");
-	
-	public static final Pattern KEY_EXPR = Pattern.compile("key:(.*?)");
-	
 	public static final Pattern TOKEN_PATTERN = Pattern.compile("\\{(.*?)(?::(.*?))?\\}");
+	public static final Pattern LOOPERS_PATTERN = Pattern.compile("foreach\\((.*?)\\)\\s+" + FULL_EXPR.pattern());
+	
+	/*
+	 * Loopers represent Iterables.
+	 * If loopers are passed as (a, b, c), then the logic flow would be
+	 * 		for(x in a) {
+	 * 			for(y in b) {
+	 * 				for(z in c) {
+	 * 					// execute an expression which should probably reference x, y and z
+	 * 				}
+	 * 			}
+	 * 		}
+	 * 
+	 * Execution Models:
+	 * =================
+	 *   Pure Symbolic:  The loopers are all symbolic so the full looped expression can be executed standalone
+	 *   	LoopingExpressionProcessor lep =  
+	 *   		(LoopingExpressionProcessor)ExpressionCompiler.getInstance().get("<looping expr>");
+	 *   	
+	 *   <need to add sourceId to js bindings and enhance arbitrary binding support>
+	 *   
+	 *   Symbolic and Actual Loopers:
+	 *   	
+	 */
+
+	
+//	ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}"); 
+//	ExpressionResult er = ep.process(agentId, attrValues, on, null);
 	
 	/** The CtClass for AbstractExpressionProcessor */
 	protected static final CtClass abstractExpressionProcessorCtClass;
+	/** The CtClass for ExpressionResult */
+	protected static final CtClass expressionResultCtClass;
+	
 	/** The package in which new processors will be created in */
 	public static final String PROCESSOR_PACKAGE = ExpressionCompiler.class.getPackage().getName() + ".impls";
 	
@@ -103,8 +132,10 @@ public class ExpressionCompiler {
 		final ClassPool cp = new ClassPool();
 		cp.appendSystemPath();
 		cp.appendClassPath(new LoaderClassPath(AbstractExpressionProcessor.class.getClassLoader()));
+		cp.appendClassPath(new LoaderClassPath(ExpressionResult.class.getClassLoader()));
 		try {
 			abstractExpressionProcessorCtClass = cp.get(AbstractExpressionProcessor.class.getName());
+			expressionResultCtClass = cp.get(ExpressionResult.class.getName());
 		} catch(Exception ex) {
 			throw new RuntimeException(ex);
 		}
@@ -129,7 +160,12 @@ public class ExpressionCompiler {
 		return instance;
 	}
 	
-	public ExpressionProcessor get(final String fullExpression) {
+	/**
+	 * @param fullExpression The expression to compile
+	 * @param er The expression result handler the returned processor will flush results to 
+	 * @return The compiled expression processor
+	 */
+	public ExpressionProcessor get(final String fullExpression, final ExpressionResult er) {
 		if(fullExpression==null || fullExpression.trim().isEmpty()) throw new IllegalArgumentException("The passed full expression was null or empty");		
 		final String key = fullExpression.trim();
 		Constructor<ExpressionProcessor> ctor = classes.get(key);
@@ -137,13 +173,13 @@ public class ExpressionCompiler {
 			synchronized(classes) {
 				ctor = classes.get(key);
 				if(ctor==null) {
-					ctor = build(key);
+					ctor = build(key, er);
 					classes.put(key, ctor);
 				}
 			}
 		}
 		try {
-			return ctor.newInstance();
+			return ctor.newInstance(er);
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to construct ExpressionProcessor for [" + key + "]", ex);
 		}
@@ -158,14 +194,14 @@ public class ExpressionCompiler {
 		throw new RuntimeException("Failed to find method named [" + name + "] in CtClass [" + clazz.getName() + "]");
 	}
 	
-	private Constructor<ExpressionProcessor> build(final String fullExpression) {
+	private Constructor<ExpressionProcessor> build(final String fullExpression, final ExpressionResult er) {
 		Matcher m = FULL_EXPR.matcher(fullExpression);
 		if(!m.matches()) throw new RuntimeException("Invalid full expression: [" + fullExpression + "]");
 		String nameExpr = m.group(1).trim();
 		String valueExpr = m.group(2).trim();
 		ClassPool cp = new ClassPool();
 		cp.appendSystemPath();
-	
+		cp.appendClassPath(new LoaderClassPath(ExpressionResult.class.getClassLoader()));
 //		cp.importPackage("java.lang");
 		cp.importPackage(JMXHelper.class.getPackage().getName());
 		cp.importPackage("javax.script");
@@ -178,11 +214,11 @@ public class ExpressionCompiler {
 		StringBuilder nameBuffer = new StringBuilder("{\n\tfinal StringBuilder nBuff = new StringBuilder();");
 		StringBuilder valueBuffer = new StringBuilder("{\n\tfinal StringBuilder nBuff = new StringBuilder();");
 		processName(nameExpr, nameBuffer);
-		nameBuffer.append("\n\t$4.objectName(nBuff);\n}");
+		nameBuffer.append("\n\ter.objectName(nBuff);\n}");
 		log.log("Generated Name Code:\n%s", nameBuffer);
 		
 		processValue(valueExpr, valueBuffer);
-		valueBuffer.append("\n\t$4.value(nBuff);\n}");
+		valueBuffer.append("\n\ter.value(nBuff);\n}");
 		log.log("Generated Value Code:\n%s", valueBuffer);
 		
 		
@@ -191,7 +227,8 @@ public class ExpressionCompiler {
 		try {
 			processorCtClass = cp.makeClass(className, abstractExpressionProcessorCtClass);
 			// Add default ctor
-			CtConstructor defaultCtor = CtNewConstructor.copy(abstractExpressionProcessorCtClass.getDeclaredConstructor(new CtClass[0]), processorCtClass, null);
+			CtConstructor defaultCtor = CtNewConstructor.make(new CtClass[] {expressionResultCtClass}, new CtClass[0], processorCtClass); 
+					//CtNewConstructor.copy(abstractExpressionProcessorCtClass.getDeclaredConstructor(new CtClass[] {expressionResultCtClass}), processorCtClass, null);
 			processorCtClass.addConstructor(defaultCtor);
 			// =======================================================================
 			// Add do name method
@@ -222,7 +259,7 @@ public class ExpressionCompiler {
 			// =======================================================================
 			processorCtClass.writeFile(System.getProperty("java.io.tmpdir") + File.separator + "heliosjmx");
 			Class<ExpressionProcessor> clazz = processorCtClass.toClass();
-			return clazz.getDeclaredConstructor();
+			return clazz.getDeclaredConstructor(ExpressionResult.class);
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to generate Expression Processor Class for ["  + fullExpression + "]", ex);
 		}
@@ -263,17 +300,19 @@ public class ExpressionCompiler {
 	
 	public static void main(String[] args) {
 		log.log("Testing ExpressionCompiler");
+		final TSDBSubmitter submitter = new TSDBSubmitter("localhost", 4242).addRootTag("app", "StockTrader").addRootTag("host", "ro-dev9");
+		final ExpressionResult er = submitter.newExpressionResult();
 		//getInstance().get("{domain}.gc.{attr:Foo}::type={key:type},type={key:name}->{attr:A/B/C}");
 //		getInstance().get("{domain}.gc.{attr:Foo}::{allkeys}->{attr:A/B/C}");
-		getInstance().get("{domain}.gc.{eval:d(nuthin):ON.getKeyProperty('Foo');}::{allkeys}->{attr:A/B/C}");
+		getInstance().get("{domain}.gc.{eval:d(nuthin):ON.getKeyProperty('Foo');}::{allkeys}->{attr:A/B/C}", er);
 		ManagementFactory.getMemoryMXBean().gc();
 		try {
-			MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+			MBeanServer server = ManagementFactory.getPlatformMBeanServer();			
 			final String agentId = server.getAttribute(MBeanServerDelegate.DELEGATE_NAME, "MBeanServerId").toString();
 			for(ObjectName on: server.queryNames(JMXHelper.objectName(ManagementFactory.GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE + ",*"), null)) {
 				Map<String, Object> attrValues = JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on));
-				ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}"); 
-				ExpressionResult er = ep.process(agentId, attrValues, on, null);
+				ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}", er); 
+				CharSequence m = ep.process(agentId, attrValues, on);
 				log.log("Expr [%s]: %s", on, er);
 			}
 		} catch (Exception ex) {
@@ -288,9 +327,9 @@ public class ExpressionCompiler {
 			log.log("Connected to HMaster. ServerID: [%s]", agentId);
 			for(ObjectName on: server.queryNames(JMXHelper.objectName(ManagementFactory.GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE + ",*"), null)) {
 				Map<String, Object> attrValues = JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on));
-				ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}"); 
-				ExpressionResult er = ep.process(agentId, attrValues, on, null);
-				log.log("Expr [%s]: %s", on, er);
+				ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}", er); 
+				String rez = ep.process(agentId, attrValues, on).toString();
+				log.log("Expr [%s]: %s", on, rez);
 			}
 			Set<String> memoryPoolNames = new HashSet<String>(5);
 			int index = 0;
@@ -301,14 +340,14 @@ public class ExpressionCompiler {
 			
 			ExpressionProcessor ep = ExpressionCompiler.getInstance()
 //					.get("{domain}::{allkeys},pool={attr:MemoryPoolNames([0])}->{attr:LastGCInfo}");
-					.get("{domain}::{allkeys},pool={eval:attrValues.get('MemoryPoolNames')[0]}->1");
+					.get("{domain}::{allkeys},pool={eval:attrValues.get('MemoryPoolNames')[0]}->1", er);
 			
 			
 			for(ObjectName on: server.queryNames(JMXHelper.objectName("java.lang:type=GarbageCollector,*"), null)) {
 				final String gcName = on.getKeyProperty("name");
 				String memPoolName = ((String[])server.getAttribute(on, "MemoryPoolNames"))[0];
 				log.log("GC: [%s], First Pool: [%s]", gcName, memPoolName);
-				ExpressionResult er = ep.process(agentId, JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on, server)), on, null);
+				String rez = ep.process(agentId, JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on, server)), on).toString();
 				log.log("ER: %s", er);
 			}
 			
