@@ -49,7 +49,7 @@ public interface ExpressionProcessor {
 	 * @param loopers The iterables to nest the execution with
 	 * @return The expression result rendered to a char sequence
 	 */
-	public CharSequence process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, final boolean outer, Iterable<?>...loopers);
+	public CharSequence process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, final boolean outer, Object...loopers);
 	
 	/**
 	 * Executes a trace for one value extracted from the values collected from the passed JMX ObjectName
@@ -59,6 +59,6 @@ public interface ExpressionProcessor {
 	 * @param loopers The outer loopers iterables to nest the execution with
 	 * @return The expression result rendered to a char sequence
 	 */
-	public CharSequence process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, Iterable<?>...loopers);
+	public CharSequence process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, Object...loopers);
 
 }

@@ -24,12 +24,15 @@
  */
 package com.heliosapm.jmx.expr;
 
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Map;
 
 import javax.management.ObjectName;
 import javax.script.Bindings;
 import javax.script.CompiledScript;
 
+import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.opentsdb.ExpressionResult;
 
 /**
@@ -53,19 +56,41 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.jmx.expr.ExpressionProcessor#process(java.lang.String, java.util.Map, javax.management.ObjectName, java.lang.Iterable[])
+	 * @see com.heliosapm.jmx.expr.ExpressionProcessor#process(java.lang.String, java.util.Map, javax.management.ObjectName, java.lang.Object[])
 	 */
-	public CharSequence process(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final Iterable<?>...loopers) {
+	public CharSequence process(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final Object...loopers) {
+		return process(sourceId, attrValues, objectName, true, loopers);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.jmx.expr.ExpressionProcessor#process(java.lang.String, java.util.Map, javax.management.ObjectName, boolean, java.lang.Object[])
+	 */
+	public CharSequence process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, final boolean outer, Object...loopers) {
 		doName(sourceId, attrValues, objectName);
 		doValue(sourceId, attrValues, objectName);
 		return er.renderPut();
+		
 	}
 	
-	protected Object invokeEval(final Object cs, final Bindings bindings) {
+	/**
+	 * Invokes a script evaluation
+	 * @param cs The compiled script to invoke
+	 * @param bindings The script bindings
+	 * @return the result of the script invocation
+	 */
+	protected static Object invokeEval(final Object cs, final Bindings bindings) {
 		return invokeEval(cs, bindings, null);
 	}
 	
-	protected Object invokeEval(final Object cs, final Bindings bindings, final Object defaultValue) {
+	/**
+	 * Invokes a script evaluation
+	 * @param cs The compiled script to invoke
+	 * @param bindings The script bindings
+	 * @param defaultValue The default value returned if the script invocation throws an exception
+	 * @return the result of the script invocation
+	 */
+	protected static Object invokeEval(final Object cs, final Bindings bindings, final Object defaultValue) {
 		try {
 			return ((CompiledScript)cs).eval(bindings);
 		} catch (Exception x) {
@@ -74,8 +99,38 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 		}
 	}
 	
+	/**
+	 * Executes the name part of the expression
+	 * @param sourceId A unique id identifying where the values and object name were collected from
+	 * @param attrValues A map of attribute values keyed by the attribute name
+	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
+	 */
 	protected abstract void doName(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName);
 	
+	/**
+	 * Executes the value part of the expression
+	 * @param sourceId A unique id identifying where the values and object name were collected from
+	 * @param attrValues A map of attribute values keyed by the attribute name
+	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
+	 */
 	protected abstract void doValue(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName);
+	
+	/**
+	 * Returns the passed object cast or wrapped as an {@link Iterable}
+	 * @param iterable The object to cast or wrap to an Iterable
+	 * @return the  {@link Iterable}
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> Iterable<T> iter(final Object iterable) {
+		if(iterable==null) throw new IllegalArgumentException("The passed iterable was null");
+		if(iterable instanceof Iterable) {
+			return (Iterable<T>)iterable;
+		}
+		if(iterable.getClass().isArray()) {
+			return (Iterable<T>) Arrays.asList(ArrayUtils.flatten(iterable));			
+		}
+		throw new IllegalArgumentException("The passed object could not be itered [" + iterable.getClass().getName() + "]");
+	}
+	
 
 }
