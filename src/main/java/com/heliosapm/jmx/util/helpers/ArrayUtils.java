@@ -6,7 +6,9 @@ package com.heliosapm.jmx.util.helpers;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
 
 /**
  * <p>Title: ArrayUtils</p>
@@ -123,6 +125,30 @@ public class ArrayUtils {
 		}
 		return (T[])currentArr;
 		
+	}
+	
+	/**
+	 * Converts or casts the passed object to an {@link Iterable}
+	 * @param obj The object to cast or convert
+	 * @return an {@link Iterable}
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> Iterable<T> toIterable(final Object obj) {
+		if(obj==null) throw new IllegalArgumentException("The passed object was null");
+		final Class<?> clazz = obj.getClass();
+		if(obj instanceof Iterable) {
+			return (Iterable<T>)obj;
+		} else if(clazz.isArray()) {
+			T[] arr = flatten(obj);
+			Collection<T> iter = new ArrayList<T>(arr.length);
+			Collections.addAll(iter, arr);
+			return iter;
+		} else if(obj instanceof Map) {
+			Map<Object, Object> map = (Map<Object, Object>)obj;
+			return (Iterable<T>)map.entrySet();
+		} else {
+			throw new IllegalArgumentException("Don't know how to iterate type [" + clazz.getName() + "]");
+		}
 	}
 	
 	

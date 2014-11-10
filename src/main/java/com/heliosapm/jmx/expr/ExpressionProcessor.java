@@ -28,8 +28,6 @@ import java.util.Map;
 
 import javax.management.ObjectName;
 
-import com.heliosapm.opentsdb.ExpressionResult;
-
 /**
  * <p>Title: ExpressionProcessor</p>
  * <p>Description: Defines an expression processor which extracts and traces values sampled from a JMX MBean</p> 

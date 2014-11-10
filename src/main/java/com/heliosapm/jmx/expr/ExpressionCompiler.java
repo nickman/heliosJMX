@@ -92,6 +92,7 @@ public class ExpressionCompiler {
 	public static final Pattern FULL_EXPR = Pattern.compile("(.*?)\\s*?\\->(.*?)");
 	public static final Pattern TOKEN_PATTERN = Pattern.compile("\\{(.*?)(?::(.*?))?\\}");
 	public static final Pattern LOOPERS_PATTERN = Pattern.compile("foreach\\((.*?)\\)\\s+" + FULL_EXPR.pattern());
+	public static final Pattern LOOPER_INSTANCE_PATTERN = Pattern.compile("\\{iter(\\d+)\\}");
 	
 	/*
 	 * Loopers represent Iterables.
