@@ -151,6 +151,16 @@ public class ArrayUtils {
 		}
 	}
 	
+	public static <T> Iterable<T>[] toIterables(final Object...objs) {
+		if(objs==null || objs.length==0) throw new IllegalArgumentException("The passed object array was null or empty");
+		Iterable[] iters = new Iterable[objs.length];
+		for(int i = 0; i < objs.length; i++) {
+			iters[i] = toIterable(objs[i]);
+		}
+		return iters;
+	}
+
+	
 	
 	public static String typeName(final Object arr) {
 		if(arr==null) throw new IllegalArgumentException("The passed object was null");

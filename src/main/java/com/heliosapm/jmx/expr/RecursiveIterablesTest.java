@@ -56,13 +56,41 @@ public class RecursiveIterablesTest {
 	}
 	
 	public void iterate() {
-		Iterator<?> lastIterator = null;
-		Set<Iterator<?>> iters = new LinkedHashSet<Iterator<?>>(this.iters.size());
-		for(Iterable<?> ia: this.iters.values()) {
-			lastIterator = ia.iterator();
-			iters.add(lastIterator);
+		final NestedIterator top = NestedIterator.group(true, false, iters.values());
+		final Stack<Object> stack = new Stack<Object>();
+		loop(top, stack);
+//		
+//		
+//		
+//		
+//		final Iterable<Iterator<?>> mainIter = ResettingIterable.group(true, false, iters.values());
+//		final Stack<Object> stack = new Stack<Object>();
+//		loop(null, mainIter.iterator(), stack);
+//		Iterator<?> lastIterator = null;
+//		Set<Iterator<?>> iters = new LinkedHashSet<Iterator<?>>(this.iters.size());
+//		for(Iterable<?> ia: this.iters.values()) {
+//			lastIterator = ia.iterator();
+//			iters.add(lastIterator);
+//		}
+//		iterate(iters, lastIterator, null);
+	}
+	
+	protected void loop(NestedIterator<?> iter, Stack<Object> scope) {
+		if(!iter.hasNested()) {			
+			while(iter.hasNext()) {
+				try {
+					scope.push(iter.next());
+					groupComplete(scope);
+				} finally {
+					scope.pop();
+				}
+			}			
+		} else {
+			if(iter.hasNext()) {
+				scope.push(iter.next());
+			}
+			loop((NestedIterator<?>) iter.nested(), scope);
 		}
-		iterate(iters, lastIterator, null);
 	}
 	
 	protected void iterate(final Collection<Iterator<?>> iterables, Iterator<?> lastIterator, Stack<Object> stack) {		
