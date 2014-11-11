@@ -59,6 +59,7 @@ import org.cliffc.high_scale_lib.NonBlockingHashMap;
 
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
+import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.opentsdb.ExpressionResult;
 import com.heliosapm.opentsdb.TSDBSubmitter;
@@ -267,8 +268,10 @@ public class ExpressionCompiler {
 			// Collect looper directives
 			// =======================================================================
 			if(isLooper && maxIter >= 0) {
-				String[] looperExpressions = LOOPER_SPLITTER.split(looperExpr);
-				
+				String[] looperExpressions = ArrayUtils.trim(LOOPER_SPLITTER.split(looperExpr));
+				if(looperExpressions.length > 0) {
+					
+				}
 			}
 		
 			

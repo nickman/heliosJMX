@@ -3,6 +3,7 @@ package com.heliosapm.jmx.expr;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
@@ -30,10 +31,14 @@ public class Directives {
 	/** The directive matching expression for a JavaScript eval  */
 	public static final Pattern EVAL_EXPR = Pattern.compile("\\{eval:(?:d\\((.*?)\\):)?(.*)\\}");
 	
+	/** The directive matching expression for an array of objects (literals)  */
+	public static final Pattern ARR_EXPR = Pattern.compile("\\[(.*?)\\]");
 	
 	
 	/** The directive matching expression for an AttributeDirective */
 	public static final Pattern ATTR_EXPR = Pattern.compile("\\{attr:(.*?)\\}");
+	/** Comma separated values splitter */
+	public static final Pattern CSV_SPLIT = Pattern.compile(",");
 	
 	/** The directive matching string for all ObjectName key/value pairs */
 	public static final String ALL_KEYVALUES = "{allkeys}";
@@ -54,7 +59,8 @@ public class Directives {
 			new DomainDirective(),
 			new ObjectNameKeyDirective(),
 			new ObjectNameKeyValueDirective(),
-			new EvalDirective()
+			new EvalDirective(),
+			new ArrayDirective()
 	)));	
 	
 	
@@ -214,6 +220,54 @@ public class Directives {
 			return ALL_KEYVALUES.equals(directive);
 		}
 		
+	}
+	
+	/**
+	 * <p>Title: ArrayDirective</p>
+	 * <p>Description: Directive processor that creates an array of objects
+	 * from an expression such as <pre>['Foo', 'Bar', 37]</pre>
+	 * </p> 
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.jmx.expr.Directives.ArrayDirective</code></p>
+	 */
+	public static class ArrayDirective implements DirectiveCodeProvider {
+		
+		@Override
+		public void generate(final String directive, final CodeBuilder code) {
+			final Set<String> values = new LinkedHashSet<String>();
+			Matcher m = ARR_EXPR.matcher(directive);
+			m.matches();
+			String csv = m.group(1);
+			String[] parsedValues = CSV_SPLIT.split(csv);
+			for(String s: parsedValues) {
+				s = s.trim().replace("\"", "").replace("'", "");
+				if(isNumber(s)) {
+					values.add(s);
+				} else {
+					values.add("\"" + s + "\"");
+				}
+				
+			}
+			code.append("\n\t = new Object[]");
+			code.append(values.toString().replace('[', '{').replace(']', '}'));
+			code.append(";");
+		}
+		
+		public boolean match(final String directive) {
+			return patternMatch(directive, ARR_EXPR);
+		}
+		
+	}
+	
+	
+	public static boolean isNumber(final String s) {
+		try {
+			new Double(s);
+			return true;
+		} catch (Exception x) {
+			return false;
+		}
 	}
 	
 	

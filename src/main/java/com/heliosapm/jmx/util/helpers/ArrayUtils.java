@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -57,6 +58,22 @@ public class ArrayUtils {
 		return target;
 	}
 	
+	/**
+	 * Trims all the strings in the passed array, 
+	 * removing any entries that are null or empty
+	 * @param strings The array to trim
+	 * @return the trimmed array
+	 */
+	public static String[] trim(String...strings) {
+		if(strings==null) return new String[0];
+		List<String> result = new ArrayList<String>();
+		for(int i = 0; i < strings.length; i++) {
+			if(strings[i]==null) continue;			
+			strings[i] = strings[i].trim();
+			if(!strings[i].isEmpty()) result.add(strings[i]);
+		}
+		return result.toArray(new String[0]);
+	}
 	
 	
 	/**

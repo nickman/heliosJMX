@@ -37,8 +37,10 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.script.Bindings;
 import javax.script.Compilable;
@@ -54,6 +56,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
+import com.sun.org.apache.bcel.internal.generic.GETSTATIC;
 
 /**
  * <p>Title: StateService</p>
@@ -89,31 +92,41 @@ public class StateService {
 		"maximumSize=5120," + 
 		"expireAfterWrite=15m," +
 		"expireAfterAccess=15m," +
-		"softValues," +
+		"weakValues," +
 		"recordStats";
 	
 	/** A set of javascript helper source code file names */
 	public static final Set<String> JS_HELPERS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
-			"math.js"
+			"math.js", "helpers.js"
 	)));
-	
+	/** The script engine manager */
+	private final ScriptEngineManager sem = new ScriptEngineManager();  // TODO: add optional config for extra classpath
 	/** The simple state cache  */
 	private final Cache<Object, Object> simpleStateCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build(); 
 	/** The cache for long deltas */
 	private final Cache<Object, long[]> longDeltaCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_LONG_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build();
 	/** The cache for double deltas */
 	private final Cache<Object, double[]> doubleDeltaCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_DOUBLE_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build();
-	/** The compiled script cache  */
-	private final Cache<String, CompiledScript> scriptCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_SCRIPT_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build();
+	/** The compiled script cache keyed by the script extension */
+	private final Cache<String, Cache<String, CompiledScript>> scriptCache = CacheBuilder.newBuilder().concurrencyLevel(CORES).initialCapacity(16).recordStats().build();
 	/** The scoped script bindings cache  */
 	private final Cache<Object, Bindings> bindingsCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_BINDING_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build();
 	/** Instance simple logger */
 	private final SLogger log = SimpleLogger.logger(getClass());
-	/** The script engine */
-	private final ScriptEngine engine; 
-	/** The script compiler */
-	private final Compilable compiler;
-	/** The engine level bindings (shared amongst all scripts */
+//	/** The script engine */
+//	private final ScriptEngine engine; 
+//	/** The script compiler */
+//	private final Compilable compiler;
+	/** The script engines keyed by script extension */
+	private final Map<String, ScriptEngine> engines = new ConcurrentHashMap<String, ScriptEngine>(); 
+	/** The script compilers keyed by script extension */
+	private final Map<String, Compilable> compilers = new ConcurrentHashMap<String, Compilable>();
+	
+	
+	
+	
+	
+	/** The engine level bindings (shared amongst all scripts) */
 	private final Bindings engineBindings;
 	
 	/**
@@ -133,13 +146,23 @@ public class StateService {
 	
 	/**
 	 * Returns the cached compiled script for the passed source code, compiling it if it does not exist
+	 * @param extension The script extension
 	 * @param code The source code to get the compiled script for
 	 * @return the compiled script
 	 */
-	public CompiledScript getCompiledScript(final String code) {
+	public CompiledScript getCompiledScript(final String extension, final String code) {
 		if(code==null || code.trim().isEmpty()) throw new IllegalArgumentException("The passed code was null or empty");
+		if(extension==null || extension.trim().isEmpty()) throw new IllegalArgumentException("The passed extension was null or empty");
+		final String key = extension.trim().toLowerCase();
+		final Compilable compiler = getCompilerForExtension(key);
 		try {
-			return scriptCache.get(code, new Callable<CompiledScript>() {
+			final Cache<String, CompiledScript> extensionCache = scriptCache.get(key, new Callable<Cache<String, CompiledScript>>(){
+				@Override
+				public Cache<String, CompiledScript> call() throws Exception {					
+					return CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_SCRIPT_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build();
+				}
+			});
+			return extensionCache.get(code, new Callable<CompiledScript>() {
 				@Override
 				public CompiledScript call() throws Exception {
 					return compiler.compile(code);
@@ -322,14 +345,72 @@ public class StateService {
 	}
 	
 	/**
+	 * Returns the ScriptEngine for the passed script extension
+	 * @param extension The script extension
+	 * @return the associated ScriptEngine
+	 */
+	public ScriptEngine getEngineForExtension(final String extension) {
+		if(extension==null || extension.trim().isEmpty()) throw new IllegalArgumentException("The passed extension was null");
+		final String key = extension.trim().toLowerCase();
+		ScriptEngine se = engines.get(key);
+		if(se==null) {
+			synchronized(engines) {
+				se = engines.get(key);
+				if(se==null) {
+					try {
+						se = sem.getEngineByExtension(key); 
+					} catch (Exception ex) {
+						throw new RuntimeException("No script engine found for extension [" + key + "]");
+					}
+					if(!(se instanceof Compilable)) {
+						throw new RuntimeException("Script engine does not support Compilable\n" + renderEngine(se));
+					}
+					installScriptEngine(se);
+				}
+			}
+		}
+		return se;
+	}
+	
+	/**
+	 * Returns the Compiler for the passed script extension
+	 * @param extension The script extension
+	 * @return the associated Compiler
+	 */
+	public Compilable getCompilerForExtension(final String extension) {
+		if(extension==null || extension.trim().isEmpty()) throw new IllegalArgumentException("The passed extension was null");
+		final String key = extension.trim().toLowerCase();
+		Compilable compiler = compilers.get(key);
+		if(compiler==null) {
+			synchronized(compilers) {
+				compiler = compilers.get(key);
+				if(compiler==null) {
+					final ScriptEngine se = getEngineForExtension(key);
+					if(!(se instanceof Compilable)) {
+						throw new RuntimeException("Script engine does not support Compilable\n" + renderEngine(se));
+					}
+					compiler = (Compilable)se;
+					for(String ext: se.getFactory().getExtensions()) {
+						String extKey = ext.trim().toLowerCase();
+						if(!compilers.containsKey(extKey)) {
+							compilers.put(extKey, compiler);							
+						}
+					}					
+				}
+			}
+		}
+		return compiler;		
+	}
+	
+	
+	/**
 	 * Finds a JS script engine that works with <a href="http://mathjs.org/">math.js</a>
 	 * due to a <a href="https://github.com/mozilla/rhino/issues/127">JDK Rhino issue</a>
 	 * @return A JS script engine that works or null if one could not be found
 	 */
 	private ScriptEngine findEngine() {
 		final String javaHome = URLHelper.toURL(new File(System.getProperty("java.home"))).toString().toLowerCase();		
-		ScriptEngine se = null;
-		ScriptEngineManager sem = new ScriptEngineManager();
+		ScriptEngine se = null;		
 		Set<ScriptEngineFactory> nativeFirstScriptEngines = new LinkedHashSet<ScriptEngineFactory>();
 		List<ScriptEngineFactory> tmp = new ArrayList<ScriptEngineFactory>(sem.getEngineFactories());
 		for(Iterator<ScriptEngineFactory> iter = tmp.iterator(); iter.hasNext(); ) {
@@ -360,29 +441,50 @@ public class StateService {
 				log.loge("Discarding engine [%s] v. [%s]", sef.getEngineName(), sef.getEngineVersion());
 			}
 		}
-		throw new RuntimeException("No compatible script engine found. Try Nashorn, Rhino or see https://github.com/mozilla/rhino/issues/127");
-		
+		throw new RuntimeException("No compatible script engine found. Try Nashorn, Rhino or see https://github.com/mozilla/rhino/issues/127");		
+	}
+	
+	private void installScriptEngine(final ScriptEngine se) {
+		final Set<String> addedExtensions = new HashSet<String>();
+		se.setBindings(engineBindings, ScriptContext.ENGINE_SCOPE);
+		for(String ext: se.getFactory().getExtensions()) {
+			String extKey = ext.trim().toLowerCase();
+			if(!engines.containsKey(extKey)) {
+				engines.put(extKey, se);
+				addedExtensions.add(extKey);
+			}
+		}
+		log.log("Installed ScriptEngine\n%s", renderEngine(se, addedExtensions));		
 	}
 	
 	/**
 	 * Creates a new StateService
 	 */
 	private StateService() {
-		engine = findEngine();
-		StringBuilder b = new StringBuilder("==============================\n\tSelected JS Engine:");
-		b.append("\n\tEngine: [").append(engine.getFactory().getEngineName()).append("] version ").append(engine.getFactory().getEngineVersion());
-		b.append("\n\tLanguage: [").append(engine.getFactory().getLanguageName()).append("] version ").append(engine.getFactory().getLanguageVersion());
-		b.append("\n\tMime Types: ").append(engine.getFactory().getMimeTypes().toString());
-		b.append("\n\tExtensions: ").append(engine.getFactory().getExtensions().toString());
-		URL location = null;
-		try { location = engine.getFactory().getClass().getProtectionDomain().getCodeSource().getLocation(); } catch (Exception x) {/* No Op */}		
-		b.append("\n\tSEF: ").append(engine.getFactory().getClass().getName()).append("  CP:").append(location);
-		log.log(b);
-		
-		compiler = (Compilable)engine;
-		engineBindings = engine.createBindings();
+		engineBindings = new SimpleBindings();
 		engineBindings.put("stateService", this);		
-		engine.setBindings(engineBindings, ScriptContext.ENGINE_SCOPE);
+		//engine.setBindings(engineBindings, ScriptContext.ENGINE_SCOPE);
+		
+		// need to get a specific JS engine
+		installScriptEngine(findEngine());
+		for(ScriptEngineFactory foundSef: sem.getEngineFactories()) {
+			for(String ext: foundSef.getExtensions()) {
+				if(!engines.containsKey(ext.trim().toLowerCase())) {
+					installScriptEngine(foundSef.getScriptEngine());
+					break;
+				}
+			}
+		}
+//		
+//		StringBuilder b = new StringBuilder("==============================\n\tSelected JS Engine:");
+//		b.append("\n\tEngine: [").append(engine.getFactory().getEngineName()).append("] version ").append(engine.getFactory().getEngineVersion());
+//		b.append("\n\tLanguage: [").append(engine.getFactory().getLanguageName()).append("] version ").append(engine.getFactory().getLanguageVersion());
+//		b.append("\n\tMime Types: ").append(engine.getFactory().getMimeTypes().toString());
+//		b.append("\n\tExtensions: ").append(engine.getFactory().getExtensions().toString());
+//		URL location = null;
+//		try { location = engine.getFactory().getClass().getProtectionDomain().getCodeSource().getLocation(); } catch (Exception x) {/* No Op */}		
+//		b.append("\n\tSEF: ").append(engine.getFactory().getClass().getName()).append("  CP:").append(location);
+//		log.log(b);
 		
 		loadJavaScriptHelpers();
 		
@@ -410,11 +512,12 @@ public class StateService {
 				}
 				isReader = new InputStreamReader(is);
 				try {
-					Object c = compiler.compile(isReader);
+					Object c = getCompilerForExtension("js").compile(isReader); 
 					log.log("Compiled [%s] to [%s]:[%s]", fileName, c.getClass().getName(), c);
 				} catch (Exception ex) {
 					log.log("Compilation of [%s] Failed. Using Eval", fileName);
-					engine.eval(isReader);
+					getEngineForExtension("js").eval(isReader);
+					
 				}
 				
 				log.log("Loaded JS Helper [%s]", fileName);
@@ -426,6 +529,34 @@ public class StateService {
 			}
 		}
 		
+	}
+	
+	/**
+	 * Renders an informative string about the passed script engine
+	 * @param se The ScriptEngine to inform on
+	 * @return the ScriptEngine description
+	 */
+	public static String renderEngine(final ScriptEngine se) {
+		return renderEngine(se, null);
+	}
+	
+	
+	/**
+	 * Renders an informative string about the passed script engine
+	 * @param se The ScriptEngine to inform on
+	 * @param actualExtensions The actual installed extensions
+	 * @return the ScriptEngine description
+	 */
+	public static String renderEngine(final ScriptEngine se, final Set<String> actualExtensions) {
+		if(se==null) throw new IllegalArgumentException("The passed script engine was null");
+		final ScriptEngineFactory sef = se.getFactory();
+		StringBuilder b = new StringBuilder("ScriptEngine [");
+		b.append("\n\tEngine:").append(sef.getEngineName()).append(" v.").append(sef.getEngineVersion());
+		b.append("\n\tLanguage:").append(sef.getLanguageName()).append(" v.").append(sef.getLanguageVersion());
+		b.append("\n\tExtensions:").append(actualExtensions==null ? sef.getExtensions().toString() : actualExtensions.toString());
+		b.append("\n\tMIME Types:").append(sef.getMimeTypes().toString());
+		b.append("\n\tShort Names:").append(sef.getMimeTypes().toString());
+		return b.toString();
 	}
 
 }
