@@ -30,6 +30,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -56,7 +57,6 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
-import com.sun.org.apache.bcel.internal.generic.GETSTATIC;
 
 /**
  * <p>Title: StateService</p>
@@ -74,6 +74,10 @@ public class StateService {
 	
 	/** The number of processors in the current JVM */
 	public static final int CORES = ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors();
+
+	/** The conf property name for a list of comma separated URLs to additional classpaths to add to the script engine factory classloader */
+	public static final String SCRIPT_CLASSPATH_PROP = "com.heliosapm.jmx.stateservice.classpath";
+	
 	
 	/** The conf property name for the cache spec for the simple object cache */
 	public static final String STATE_CACHE_PROP = "com.heliosapm.jmx.stateservice.simplecachespec";
@@ -100,7 +104,7 @@ public class StateService {
 			"math.js", "helpers.js"
 	)));
 	/** The script engine manager */
-	private final ScriptEngineManager sem = new ScriptEngineManager();  // TODO: add optional config for extra classpath
+	private final ScriptEngineManager sem;
 	/** The simple state cache  */
 	private final Cache<Object, Object> simpleStateCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build(); 
 	/** The cache for long deltas */
@@ -142,6 +146,16 @@ public class StateService {
 			}
 		}
 		return instance;
+	}
+	
+	/**
+	 * Determines if a script engine is registered that can handle a script of the passed extension
+	 * @param extension The extension to test
+	 * @return true if supported, false otherwise
+	 */
+	public boolean isExtensionSupported(final String extension) {
+		if(extension==null || extension.trim().isEmpty()) return false; //throw new IllegalArgumentException("The passed extension was null or empty");
+		return engines.containsKey(extension.trim().toLowerCase());
 	}
 	
 	/**
@@ -461,6 +475,7 @@ public class StateService {
 	 * Creates a new StateService
 	 */
 	private StateService() {
+		sem = new ScriptEngineManager(getScriptClasspath());
 		engineBindings = new SimpleBindings();
 		engineBindings.put("stateService", this);		
 		//engine.setBindings(engineBindings, ScriptContext.ENGINE_SCOPE);
@@ -468,6 +483,9 @@ public class StateService {
 		// need to get a specific JS engine
 		installScriptEngine(findEngine());
 		for(ScriptEngineFactory foundSef: sem.getEngineFactories()) {
+			if(foundSef.getExtensions().contains("js")) continue;			
+			log.log("Located Additional ScriptEngine Impl:%s", foundSef.getScriptEngine());
+			//log.log("Located Additional ScriptEngine Impl:\n", renderEngine(foundSef.getScriptEngine()));
 			for(String ext: foundSef.getExtensions()) {
 				if(!engines.containsKey(ext.trim().toLowerCase())) {
 					installScriptEngine(foundSef.getScriptEngine());
@@ -488,6 +506,23 @@ public class StateService {
 		
 		loadJavaScriptHelpers();
 		
+	}
+	
+	private ClassLoader getScriptClasspath() {
+		String[] paths = ArrayUtils.trim(ConfigurationHelper.getSystemThenEnvProperty(SCRIPT_CLASSPATH_PROP, "").split(","));
+		if(paths.length==0) return Thread.currentThread().getContextClassLoader();
+		Set<URL> urls = new HashSet<URL>();
+		for(String path: paths) {
+			try {
+				URL url = URLHelper.toURL(path);
+				if(URLHelper.resolves(url)) {
+					urls.add(url);
+				}
+			} catch (Exception x) { /* No Op */ }
+		}
+		if(urls.isEmpty()) return Thread.currentThread().getContextClassLoader();
+		log.log("Script Extra Classpath: %s", urls.toString());
+		return new URLClassLoader(urls.toArray(new URL[urls.size()]), Thread.currentThread().getContextClassLoader());
 	}
 	
 	private boolean areWeJarred() {
@@ -555,7 +590,7 @@ public class StateService {
 		b.append("\n\tLanguage:").append(sef.getLanguageName()).append(" v.").append(sef.getLanguageVersion());
 		b.append("\n\tExtensions:").append(actualExtensions==null ? sef.getExtensions().toString() : actualExtensions.toString());
 		b.append("\n\tMIME Types:").append(sef.getMimeTypes().toString());
-		b.append("\n\tShort Names:").append(sef.getMimeTypes().toString());
+		b.append("\n\tShort Names:").append(sef.getNames().toString());
 		return b.toString();
 	}
 

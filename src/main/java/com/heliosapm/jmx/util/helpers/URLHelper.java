@@ -34,7 +34,17 @@ import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * <p>Title: URLHelper</p>
@@ -165,6 +175,47 @@ public class URLHelper {
 		}
 	}
 	
+	
+	/**
+	 * Reads the first <b><code>n</code></b> lines from the resource pointed to by the passed URL
+	 * @param url The URL to read the lines from
+	 * @param linesToRead The number of lines to read
+	 * @return an array of the read lines which will be at most <b><code>linesToRead</code></b> lines long
+	 */
+	public static String[] getLines(final URL url, final int linesToRead) {
+		if(url==null) throw new IllegalArgumentException("The passed URL was null");
+		if(linesToRead < 1) throw new IllegalArgumentException("Invalid number of lines [" + linesToRead + "]. Must be >= 1");
+		InputStream is = null;
+		BufferedReader br = null;
+		InputStreamReader isr = null;
+		URLConnection connection = null;		
+		try {
+			connection = url.openConnection();
+			connection.setConnectTimeout(1000);
+			connection.setReadTimeout(1000);
+			connection.connect();
+			is = connection.getInputStream();
+			isr = new InputStreamReader(is);
+			br = new BufferedReader(isr);
+			String line = null;
+			final List<String> strLines = new ArrayList<String>(linesToRead);
+			int linesRead = 0;
+			while((line=br.readLine())!=null && linesRead < linesToRead) {
+				strLines.add(line);
+				linesRead++;
+			}
+			return strLines.toArray(new String[strLines.size()]);
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to read " + linesToRead + " from [" + url + "]");
+		} finally {
+			if(br!=null) try { br.close(); } catch (Exception x) {/* No Op */}
+			if(isr!=null) try { isr.close(); } catch (Exception x) {/* No Op */}
+			if(is!=null) try { is.close(); } catch (Exception x) {/* No Op */}
+		}
+		
+	}
+	
+	
 	/**
 	 * Returns the URL for the passed file
 	 * @param file the file to get the URL for
@@ -283,6 +334,44 @@ public class URLHelper {
 		}
 	}
 	
+	/** A host verifier that always returns true */
+	public static final HostnameVerifier YESMAN_HOSTVERIFIER = new HostnameVerifier() {
+		@Override
+		public boolean verify(String hostName, SSLSession sslSession) {
+			return true;
+		}
+	};
+	
+	
+	/** A trust manager that trusts all certs */
+	public static final TrustManager[] YESMAN_TRUSTMANAGER = new TrustManager[] {
+		new X509TrustManager() {
+			public X509Certificate[] getAcceptedIssuers() {
+				return null;
+			}
+			public void checkClientTrusted(X509Certificate[] certs, String authType) {		
+				/* No Op */
+			}
+			public void checkServerTrusted(X509Certificate[] certs, String authType) {
+				/* No Op */
+			}
+		}
+	};	
+	
+	/** An SSL Context that uses the YESMAN_TRUSTMANAGER */
+	public static final SSLContext YESMAN_SSLCONTEXT; 
+	
+	static {
+		SSLContext ctx = null;
+		try {
+			ctx = SSLContext.getInstance("SSL");
+			ctx.init(null, YESMAN_TRUSTMANAGER, new java.security.SecureRandom());
+		} catch (Throwable t) {
+			ctx = null;
+		}
+		YESMAN_SSLCONTEXT = ctx;
+	}
+	
 	/**
 	 * Determines if the passed URL resolves
 	 * @param url The URL to test
@@ -291,13 +380,23 @@ public class URLHelper {
 	public static boolean resolves(final URL url) {
 		if(url==null) return false;
 		InputStream is = null;
+		HttpsURLConnection httpsConn = null;
 		try {
+			if("https".equals(url.getProtocol().toLowerCase())) {
+				httpsConn = (HttpsURLConnection)url.openConnection();
+				httpsConn.setHostnameVerifier(YESMAN_HOSTVERIFIER);
+				httpsConn.setSSLSocketFactory(YESMAN_SSLCONTEXT.getSocketFactory());
+				is = httpsConn.getInputStream();
+				return true;
+			}
 			is = url.openStream();
 			return true;
 		} catch (Exception e) {
+			e.printStackTrace(System.err);
 			return false;
-		} finally {
+		} finally {			
 			if(is!=null) try { is.close(); } catch (Exception e) {/* No Op */}
+			if(httpsConn!=null) try { httpsConn.disconnect(); } catch (Exception e) {/* No Op */}
 		}
 	}
 	

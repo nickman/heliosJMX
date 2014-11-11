@@ -268,6 +268,10 @@ public class ExpressionCompiler {
 			// Collect looper directives
 			// =======================================================================
 			if(isLooper && maxIter >= 0) {
+				// LOOPER_INSTANCE_PATTERN = Pattern.compile("\\{iter(\\d+)\\}")
+				Set<String> looperNames = new HashSet<String>();
+				Matcher m = LOOPER_INSTANCE_PATTERN.matcher(looperExpr);
+				
 				String[] looperExpressions = ArrayUtils.trim(LOOPER_SPLITTER.split(looperExpr));
 				if(looperExpressions.length > 0) {
 					

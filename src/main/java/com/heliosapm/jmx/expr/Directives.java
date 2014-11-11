@@ -29,7 +29,7 @@ public class Directives {
 	public static final Pattern KEYVALUE_EXPR = Pattern.compile("\\{keyvalue:(.*?)\\}");
 
 	/** The directive matching expression for a JavaScript eval  */
-	public static final Pattern EVAL_EXPR = Pattern.compile("\\{eval:(?:d\\((.*?)\\):)?(.*)\\}");
+	public static final Pattern EVAL_EXPR = Pattern.compile("\\{eval(.*?):(?:d\\((.*?)\\):)?(.*)\\}");
 	
 	/** The directive matching expression for an array of objects (literals)  */
 	public static final Pattern ARR_EXPR = Pattern.compile("\\[(.*?)\\]");
@@ -79,10 +79,12 @@ public class Directives {
 		public void generate(final String directive, final CodeBuilder code) {
 			Matcher m = EVAL_EXPR.matcher(directive);
 			m.matches();
-			final String defaultValue = m.group(1);
-			final String sourceCode = m.group(2);
+			final String ext = m.group(1);
+			final String extension = (ext!=null && !ext.trim().isEmpty()) ? ext.trim().toLowerCase() : "js";
+			final String defaultValue = m.group(2);
+			final String sourceCode = m.group(3);
 			final String evalKey = "eval" + evalSerial.incrementAndGet();
-			CompiledScript cs = state.getCompiledScript(sourceCode);
+			CompiledScript cs = state.getCompiledScript(extension, sourceCode);
 			state.put(evalKey, cs);
 			code.append("\n\tBindings b = StateService.getInstance().getBindings(\"").append(evalKey).append("\");");
 			code.append("\n\tb.put(\"sourceId\", $1);");
