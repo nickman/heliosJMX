@@ -3,6 +3,8 @@
  */
 package com.heliosapm.jmx.expr;
 
+import java.util.Stack;
+
 /**
  * <p>Title: CodeBuilder</p>
  * <p>Description: Helper class for building javassist code sequences</p>
@@ -14,6 +16,8 @@ package com.heliosapm.jmx.expr;
 public class CodeBuilder {
 	/** The running code buffer */
 	protected final StringBuilder buff = new StringBuilder();
+	/** The save/restore position stack */
+	protected final Stack<Integer> saveStack = new Stack<Integer>();
 	
 	/**
 	 * Creates a new CodeBuilder
@@ -41,6 +45,34 @@ public class CodeBuilder {
 	public CodeBuilder reset() {
 		buff.setLength(0);
 		return this;
+	}
+	
+	/**
+	 * Pushes the current buffer size onto the save/restore stack
+	 * @return this code builder
+	 */
+	public CodeBuilder push() {
+		saveStack.push(buff.length());
+		return this;
+	}
+	
+	/**
+	 * Restores the buff content saved at the most recent {@link #push()}
+	 * @return this code builder
+	 */
+	public CodeBuilder pop() {
+		int pos = saveStack.pop();
+		buff.setLength(pos);
+		return this;
+	}
+	
+	/**
+	 * Returns the next code position that would
+	 * be returned if the save/restore stack was popped
+	 * @return the next popped code position 
+	 */
+	public int peek() {
+		return saveStack.peek();
 	}
 	
 	/**

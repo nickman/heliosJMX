@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
@@ -93,7 +94,7 @@ public class ExpressionCompiler {
 	public static final Pattern TOKEN_PATTERN = Pattern.compile("\\{(.*?)(?::(.*?))?\\}");
 	public static final Pattern LOOPERS_PATTERN = Pattern.compile("foreach\\((.*?)\\)\\s+" + FULL_EXPR.pattern());
 	public static final Pattern LOOPER_INSTANCE_PATTERN = Pattern.compile("\\{iter(\\d+)\\}");
-	
+	public static final Pattern LOOPER_SPLITTER = Pattern.compile("\\|");
 	/*
 	 * Loopers represent Iterables.
 	 * If loopers are passed as (a, b, c), then the logic flow would be
@@ -195,42 +196,93 @@ public class ExpressionCompiler {
 		throw new RuntimeException("Failed to find method named [" + name + "] in CtClass [" + clazz.getName() + "]");
 	}
 	
+	private boolean isLooper(final String fullExpression) {
+		return LOOPERS_PATTERN.matcher(fullExpression).matches();
+	}
+	
 	private Constructor<ExpressionProcessor> build(final String fullExpression, final ExpressionResult er) {
-		Matcher m = FULL_EXPR.matcher(fullExpression);
-		if(!m.matches()) throw new RuntimeException("Invalid full expression: [" + fullExpression + "]");
-		String nameExpr = m.group(1).trim();
-		String valueExpr = m.group(2).trim();
+		final boolean isLooper = isLooper(fullExpression);
+		final String looperExpr;
+		final String nameExpr;
+		final String valueExpr;
+		final Matcher fullExpressionMatcher;
+		final int maxIter = maxIterator(fullExpression);
+		if(isLooper) {
+			fullExpressionMatcher = LOOPERS_PATTERN.matcher(fullExpression);
+			if(!fullExpressionMatcher.matches()) throw new RuntimeException("Invalid expression: [" + fullExpression + "]");
+			looperExpr = fullExpressionMatcher.group(1);
+			nameExpr = fullExpressionMatcher.group(2);
+			valueExpr = fullExpressionMatcher.group(3);
+		} else {
+			fullExpressionMatcher = FULL_EXPR.matcher(fullExpression);
+			if(!fullExpressionMatcher.matches()) throw new RuntimeException("Invalid expression: [" + fullExpression + "]");
+			looperExpr = null;
+			nameExpr = fullExpressionMatcher.group(1);
+			valueExpr = fullExpressionMatcher.group(2);			
+		}
 		ClassPool cp = new ClassPool();
 		cp.appendSystemPath();
 		cp.appendClassPath(new LoaderClassPath(ExpressionResult.class.getClassLoader()));
-//		cp.importPackage("java.lang");
 		cp.importPackage(JMXHelper.class.getPackage().getName());
 		cp.importPackage("javax.script");
-		//cp.importPackage(StateService.class.getPackage().getName());
+		
+
+//		===================================================================
+/*
+ * Next:
+ * 	at start, determine if we're a foreach loop or not: i.e. matches LOOPERS_PATTERN
+ * 	if not, it's the same as now.
+ * 
+ *  if it is:
+ *  	find all iter symbols
+ *  	define looping variables for each one
+ *  	implement the nested iterator loop  
+ *  	(impl should save # of symbolic loopers 
+ *  		and by derivation, the number of parameterized loopers required)
+ *  
+ *  	!!!  parameterized loopers are always inner to symbolics  !!!
+ *  
+ *  	execution is nested loop on iterables, action is:
+ *  		bind looper variables
+ *  		resolve all opens 
+ *  		execute process
+ * 		
+ */
+//		===================================================================		
 		
 		
 		
 		CtClass processorCtClass = null;
 		final String className = PROCESSOR_PACKAGE + ".ExpressionProcessorImpl" + classSerial.incrementAndGet();
-		StringBuilder nameBuffer = new StringBuilder("{\n\tfinal StringBuilder nBuff = new StringBuilder();");
-		StringBuilder valueBuffer = new StringBuilder("{\n\tfinal StringBuilder nBuff = new StringBuilder();");
-		processName(nameExpr, nameBuffer);
-		nameBuffer.append("\n\ter.objectName(nBuff);\n}");
-		log.log("Generated Name Code:\n%s", nameBuffer);
-		
-		processValue(valueExpr, valueBuffer);
-		valueBuffer.append("\n\ter.value(nBuff);\n}");
-		log.log("Generated Value Code:\n%s", valueBuffer);
 		
 		
-		
-//		log.log("Generated Tags Code:\n%s", tagsBuffer);
 		try {
 			processorCtClass = cp.makeClass(className, abstractExpressionProcessorCtClass);
 			// Add default ctor
 			CtConstructor defaultCtor = CtNewConstructor.make(new CtClass[] {expressionResultCtClass}, new CtClass[0], processorCtClass); 
-					//CtNewConstructor.copy(abstractExpressionProcessorCtClass.getDeclaredConstructor(new CtClass[] {expressionResultCtClass}), processorCtClass, null);
 			processorCtClass.addConstructor(defaultCtor);
+		
+
+			// =======================================================================
+			// Collect looper directives
+			// =======================================================================
+			if(isLooper && maxIter >= 0) {
+				String[] looperExpressions = LOOPER_SPLITTER.split(looperExpr);
+				
+			}
+		
+			
+			
+			// CodeBuilder for naming and value
+			final CodeBuilder codeBuffer = new CodeBuilder().append("{\n\tfinal StringBuilder nBuff = new StringBuilder();");
+			// =======================================================================
+			// Collect name directives
+			// =======================================================================
+
+			processName(nameExpr, codeBuffer);
+			codeBuffer.append("\n\ter.objectName(nBuff);\n}");
+			log.log("Generated Name Code:\n%s", codeBuffer);
+
 			// =======================================================================
 			// Add do name method
 			// =======================================================================
@@ -240,9 +292,22 @@ public class ExpressionCompiler {
 //			for(CtClass ct: doNameMethod.getParameterTypes()) {
 //				ct.setModifiers(ct.getModifiers() | Modifier.FINAL);
 //			}
-			doNameMethod.setBody(nameBuffer.toString());
+			doNameMethod.setBody(codeBuffer.render());
 			doNameMethod.setModifiers(doNameMethod.getModifiers() & ~Modifier.ABSTRACT);
 			processorCtClass.addMethod(doNameMethod);
+
+			
+			
+			// Reset the code buffer
+			codeBuffer.pop();
+			
+			// =======================================================================
+			// Collect value directives
+			// =======================================================================
+			processValue(valueExpr, codeBuffer);
+			codeBuffer.append("\n\ter.value(nBuff);\n}");
+			log.log("Generated Value Code:\n%s", codeBuffer);
+			
 			// =======================================================================
 			// Add do value method
 			// =======================================================================
@@ -252,7 +317,7 @@ public class ExpressionCompiler {
 				ct.setModifiers(ct.getModifiers() | Modifier.FINAL);
 			}
 			
-			doValueMethod.setBody(valueBuffer.toString());
+			doValueMethod.setBody(codeBuffer.render());
 			doValueMethod.setModifiers(doValueMethod.getModifiers() & ~Modifier.ABSTRACT);
 			processorCtClass.addMethod(doValueMethod);
 			// =======================================================================
@@ -281,7 +346,7 @@ public class ExpressionCompiler {
 	public static final Pattern NAME_TAG_SPLITTER = Pattern.compile("::");
 	
 	
-	protected void processName(final String fullExpression, final StringBuilder nameCode) {
+	protected void processName(final String fullExpression, final CodeBuilder nameCode) {
 		String[] metricAndTags = NAME_TAG_SPLITTER.split(fullExpression);
 		if(metricAndTags.length!=2) throw new RuntimeException("Expression [" + fullExpression + "] did not split to 2 segments");
 		if(metricAndTags[0]==null || metricAndTags[0].trim().isEmpty()) throw new RuntimeException("MetricName segment in [" + fullExpression + "] was null or empty");
@@ -293,7 +358,7 @@ public class ExpressionCompiler {
 		build(metricAndTags[1], nameCode);		
 	}
 	
-	protected void processValue(final String valueExpression, final StringBuilder valueCode) {
+	protected void processValue(final String valueExpression, final CodeBuilder valueCode) {
 		if(valueExpression==null || valueExpression.trim().isEmpty()) throw new RuntimeException("Value Expression was null or empty");
 		String valueExpr = valueExpression.trim();
 		build(valueExpr, valueCode);				
@@ -376,6 +441,22 @@ public class ExpressionCompiler {
 	}
 	
 	/**
+	 * Finds the maximum looper iteration id, which is also the 
+	 * minimum number of symbolic and parameterized loopers 
+	 * @param expr The expression
+	 * @return the max iter id, or -1 if none were found
+	 */
+	public int maxIterator(final String expr) {
+		final Matcher m = LOOPER_INSTANCE_PATTERN.matcher(expr);
+		TreeSet<Integer> iterIds = new TreeSet<Integer>();
+		while(m.find()) {
+			iterIds.add(Integer.parseInt(m.group(1)));
+		}
+		if(iterIds.isEmpty()) return -1;
+		return iterIds.last();
+	}
+	
+	/**
 	 * Builds the method:
 	 * 	<pre>
 	 * 		doName(
@@ -386,7 +467,7 @@ public class ExpressionCompiler {
 	 *  </pre> 
 	 *  @param nameSegment The name portion of the raw expression
 	 */
-	protected void build(final String nameSegment, final StringBuilder nameCode) {
+	protected void build(final String nameSegment, final CodeBuilder nameCode) {
 		//localVar nBuff builds the metric name
         int lstart = 0;
         int matcherStart = 0;
@@ -407,7 +488,7 @@ public class ExpressionCompiler {
 	}
 	
 	
-	protected void resolveDirective(final String directive, final StringBuilder nameCode) {
+	protected void resolveDirective(final String directive, final CodeBuilder nameCode) {
 		for(DirectiveCodeProvider provider: providers) {
 			if(provider.match(directive)) {
 				provider.generate(directive, nameCode);

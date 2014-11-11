@@ -59,19 +59,11 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	 * @see com.heliosapm.jmx.expr.ExpressionProcessor#process(java.lang.String, java.util.Map, javax.management.ObjectName, java.lang.Object[])
 	 */
 	public CharSequence process(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final Object...loopers) {
-		return process(sourceId, attrValues, objectName, true, loopers);
-	}
-	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.jmx.expr.ExpressionProcessor#process(java.lang.String, java.util.Map, javax.management.ObjectName, boolean, java.lang.Object[])
-	 */
-	public CharSequence process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, final boolean outer, Object...loopers) {
 		doName(sourceId, attrValues, objectName);
 		doValue(sourceId, attrValues, objectName);
-		return er.renderPut();
-		
+		return er.renderPut();		
 	}
+	
 	
 	/**
 	 * Invokes a script evaluation

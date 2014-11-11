@@ -49,15 +49,15 @@ public class NestedIterator<E> implements Iterator<E> {
 	
 	
 	public static NestedIterator<?> group(final boolean resetable, final boolean removable, final Object...iterables) {
-		return group(resetable, removable, ArrayUtils.toIterables(iterables));
+		return _group(resetable, removable, ArrayUtils.toIterables(iterables));
 	}
 	
 	public static NestedIterator<?> group(final boolean resetable, final boolean removable, final Collection<Object> iterables) {
-		return group(resetable, removable, ArrayUtils.toIterables(iterables.toArray()));
+		return _group(resetable, removable, ArrayUtils.toIterables(iterables.toArray()));
 	}
 	
 	
-	public static NestedIterator<?> group(final boolean resetable, final boolean removable, final Iterable<?>...iterables) {
+	private static NestedIterator<?> _group(final boolean resetable, final boolean removable, final Iterable<?>...iterables) {
 		if(iterables==null || iterables.length==0) throw new IllegalArgumentException("No iterables provided. Must provide at least one");
 		NestedIterator ni = null;
 		NestedIterator top = null;

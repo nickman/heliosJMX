@@ -123,8 +123,20 @@ public class ArrayUtils {
 			currentArr = reduce(currentArr);
 			currentType = currentArr.getClass().getComponentType();
 		}
-		return (T[])currentArr;
-		
+		return (T[])currentArr;		
+	}
+	
+	/**
+	 * Determines if the passed object is or can be converted to an {@link Iterable}
+	 * @param obj the object to test
+	 * @return true if the passed object is or can be converted to an {@link Iterable}, false otherwise
+	 */
+	public static boolean isIterable(final Object obj) {
+		if(obj==null) return false;
+		if(obj instanceof Iterable) return true;
+		if(obj.getClass().isArray()) return true;
+		if(obj instanceof Map) return true;
+		return false;
 	}
 	
 	/**

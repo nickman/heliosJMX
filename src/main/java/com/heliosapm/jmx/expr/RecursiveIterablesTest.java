@@ -24,11 +24,12 @@
  */
 package com.heliosapm.jmx.expr;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
@@ -56,9 +57,11 @@ public class RecursiveIterablesTest {
 	}
 	
 	public void iterate() {
-		final NestedIterator top = NestedIterator.group(true, false, iters.values());
+		final NestedIterator<?> top = NestedIterator.group(true, false, iters.values().toArray());
 		final Stack<Object> stack = new Stack<Object>();
 		loop(top, stack);
+		log("Total Items: %s", fullList.size());
+		log("Unique Items: %s", uniqueList.size());
 //		
 //		
 //		
@@ -86,34 +89,29 @@ public class RecursiveIterablesTest {
 				}
 			}			
 		} else {
-			if(iter.hasNext()) {
-				scope.push(iter.next());
-			}
-			loop((NestedIterator<?>) iter.nested(), scope);
+			while(iter.hasNext()) {
+				try {
+					scope.push(iter.next());
+					loop((NestedIterator<?>) iter.nested(), scope);
+				} finally {
+					scope.pop();
+				}
+			}			
 		}
 	}
 	
-	protected void iterate(final Collection<Iterator<?>> iterables, Iterator<?> lastIterator, Stack<Object> stack) {		
-		if(stack==null) stack = new Stack<Object>();
-		for(Iterator<?> iterator: iterables) {
-			if(iterator.hasNext()) {				
-				if(iterator==lastIterator) {					
-					groupComplete(stack);
-					iterate(iterables, lastIterator, stack);
-					
-				} else {
-					stack.push(iterator.next());
-				}
-			}
-		}
-		
-	}
+	protected final List<Object> fullList = new ArrayList<Object>();
+	protected final Set<Object> uniqueList = new HashSet<Object>();
 
 	protected void groupComplete(Collection<?> args) {
+		fullList.add(args.toString());
+		uniqueList.add(args.toString());
 		log("Group Complete: %s", args.toString());
 	}
 	
 	protected void groupComplete(final Object...args) {
+		fullList.add(args.toString());
+		uniqueList.add(args.toString());
 		log("Group Complete: %s", Arrays.toString(args));
 	}
 	

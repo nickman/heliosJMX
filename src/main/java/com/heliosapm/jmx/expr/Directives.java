@@ -70,7 +70,7 @@ public class Directives {
 		static final StateService state = StateService.getInstance();
 		
 		@Override
-		public void generate(final String directive, final StringBuilder code) {
+		public void generate(final String directive, final CodeBuilder code) {
 			Matcher m = EVAL_EXPR.matcher(directive);
 			m.matches();
 			final String defaultValue = m.group(1);
@@ -114,7 +114,7 @@ public class Directives {
 	public static class ObjectNameKeyValueDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final StringBuilder code) {
+		public void generate(final String directive, final CodeBuilder code) {
 			Matcher m = KEY_EXPR.matcher(directive);
 			m.matches();
 			String arg = m.group(1);
@@ -145,7 +145,7 @@ public class Directives {
 	public static class ObjectNameKeyDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final StringBuilder code) {
+		public void generate(final String directive, final CodeBuilder code) {
 			Matcher m = KEY_EXPR.matcher(directive);
 			m.matches();
 			String arg = m.group(1);
@@ -176,7 +176,7 @@ public class Directives {
 	public static class AttributeDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final StringBuilder code) {
+		public void generate(final String directive, final CodeBuilder code) {
 			Matcher m = ATTR_EXPR.matcher(directive);
 			m.matches();
 			String arg = m.group(1);
@@ -206,7 +206,7 @@ public class Directives {
 	public static class AllKeysDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final StringBuilder code) {
+		public void generate(final String directive, final CodeBuilder code) {
 			code.append("\n\tnBuff.append($3.getKeyPropertyListString());");
 		}
 		
@@ -227,7 +227,7 @@ public class Directives {
 	public static class DomainDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final StringBuilder code) {
+		public void generate(final String directive, final CodeBuilder code) {
 			code.append("\n\tnBuff.append($3.getDomain());");
 		}
 		

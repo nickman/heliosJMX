@@ -38,23 +38,13 @@ import javax.management.ObjectName;
 
 public interface ExpressionProcessor {
 	
-	/**
-	 * Executes a trace for one value extracted from the values collected from the passed JMX ObjectName
-	 * @param sourceId A unique id identifying where the values and object name were collected from
-	 * @param attrValues A map of attribute values keyed by the attribute name
-	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
-	 * @param outer Specifies if the passed loopers are looped outside any expression based loopers (true) or inside (false)
-	 * @param loopers The iterables to nest the execution with
-	 * @return The expression result rendered to a char sequence
-	 */
-	public CharSequence process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, final boolean outer, Object...loopers);
 	
 	/**
 	 * Executes a trace for one value extracted from the values collected from the passed JMX ObjectName
 	 * @param sourceId A unique id identifying where the values and object name were collected from
 	 * @param attrValues A map of attribute values keyed by the attribute name
 	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
-	 * @param loopers The outer loopers iterables to nest the execution with
+	 * @param loopers The loopers iterables to nest the execution with
 	 * @return The expression result rendered to a char sequence
 	 */
 	public CharSequence process(final String sourceId, Map<String, Object> attrValues, ObjectName objectName, Object...loopers);

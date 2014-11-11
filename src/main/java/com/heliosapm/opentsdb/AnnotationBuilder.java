@@ -24,8 +24,6 @@
  */
 package com.heliosapm.opentsdb;
 
-import java.util.Collection;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -34,85 +32,13 @@ import org.json.JSONObject;
 
 /**
  * <p>Title: AnnotationBuilder</p>
- * <p>Description: </p> 
+ * <p>Description: Fluent style OpenTSDB annotation builder</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.opentsdb.AnnotationBuilder</code></p>
  */
 
 public class AnnotationBuilder {
-	/*
-	 * startTime: int  (req)
-	 * endTime: int
-	 * tsuid: String
-	 * description: String
-	 * notes: String
-	 * custom: Map<String, String>
-	 * 
-
-ES Server:  http://10.5.202.22:9200
-
-Example GET Request
-
-http://localhost:4242/api/annotation?start_time=1369141261&tsuid=000001000001000001
-
-Example POST Request
-
-{
-  "startTime":"1369141261",
-  "tsuid":"000001000001000001",
-  "description": "Testing Annotations",
-  "notes": "These would be details about the event, the description is just a summary",
-  "custom": {
-      "owner": "jdoe",
-      "dept": "ops"
-  }
-}
-
-
-Example Response
-
-{
-    "tsuid": "000001000001000001",
-    "description": "Testing Annotations",
-    "notes": "These would be details about the event, the description is just a summary",
-    "custom": {
-        "owner": "jdoe",
-        "dept": "ops"
-    },
-    "endTime": 0,
-    "startTime": 1369141261
-}
-
-Query 3 - Specific Time Series
-
-What if you want a specific timeseries? You have to include every tag and coresponding value.
-
-m=sum:cpu.system{host=web1,dc=lax}
-
-This will return the data from timeseries #6 only.
-
-[
-    {
-        "metric": "cpu.system",
-        "tags": {
-            "dc": "lax",
-            "host": "web1"
-        },
-        "aggregated_tags": [],
-        "tsuids": [
-            "0102050101"
-        ],
-        "dps": {
-            "1346846400": 15.199999809265137
-        }
-    }
-]
-
-
-	 * 
-	 * 
-	 */
 	
 	/** Unix epoch timestamp, in seconds, marking the time when the annotation event should be recorded */
 	protected final int startTime;

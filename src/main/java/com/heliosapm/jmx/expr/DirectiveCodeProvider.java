@@ -48,7 +48,7 @@ public interface DirectiveCodeProvider {
 	 * @param directive The directive to generate the code for
 	 * @param code The code buffer to append to
 	 */
-	public void generate(final String directive, final StringBuilder code);
+	public void generate(final String directive, final CodeBuilder code);
 	
 	/**
 	 * Indicates if the passed directive should be processed by this provider
