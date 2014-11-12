@@ -234,7 +234,7 @@ public class JavaScriptEngineFactory implements ScriptEngineFactory {
         names.add("java");
         names = Collections.unmodifiableList(names);
         extensions = names;
-        mimeTypes = new ArrayList<String>(0);
+        mimeTypes = new ArrayList<String>(Arrays.asList("text/java"));
         mimeTypes = Collections.unmodifiableList(mimeTypes);
     }
 }

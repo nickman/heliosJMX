@@ -35,25 +35,29 @@ import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.WatchEvent;
-import java.nio.file.WatchEvent.Kind;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.DelayQueue;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.management.MBeanNotificationInfo;
+import javax.management.Notification;
 import javax.management.NotificationBroadcasterSupport;
 import javax.management.remote.JMXConnectorServer;
 import javax.management.remote.JMXConnectorServerFactory;
 import javax.management.remote.JMXServiceURL;
 
+import org.cliffc.high_scale_lib.NonBlockingHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,10 +66,10 @@ import com.google.common.cache.CacheBuilder;
 import com.heliosapm.jmx.concurrency.JMXManagedThreadPool;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
-import com.heliosapm.jmx.util.helpers.StateService;
 import com.heliosapm.jmx.util.helpers.SystemClock;
 import com.heliosapm.jmx.util.helpers.URLHelper;
-import com.sun.nio.sctp.Notification;
+import com.heliosapm.script.StateService;
+
 
 
 /**
@@ -86,7 +90,8 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	/** The descriptors of the JMX notifications emitted by this service */
 	private static final MBeanNotificationInfo[] notificationInfos = new MBeanNotificationInfo[] {
 		new MBeanNotificationInfo(new String[] {NOTIF_DIR_NEW, NOTIF_DIR_DELETE}, Notification.class.getName(), "A directory change event"),
-		new MBeanNotificationInfo(new String[] {NOTIF_FILE_NEW, NOTIF_FILE_DELETE, NOTIF_FILE_MOD}, Notification.class.getName(), "A file change event")
+		new MBeanNotificationInfo(new String[] {NOTIF_FILE_NEW, NOTIF_FILE_DELETE, NOTIF_FILE_MOD}, Notification.class.getName(), "A file change event"),
+		new MBeanNotificationInfo(new String[] {NOTIF_UNKNOWN_DELETE}, Notification.class.getName(), "A deletion of unknown type event")
 	};
 	
 	
@@ -121,6 +126,8 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	protected WatchService watcher = null;
 	/** The JMX notification serial number generator */
 	protected final AtomicLong notificationIdFactory = new AtomicLong();
+	/** WatchEventType typed event handlers */
+	protected final Map<WatchEventType, Set<FileChangeEventHandler>> eventHandlers;
 	
 	
 	
@@ -143,9 +150,17 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	}
 	
 	public static void main(String[] args) {
+		System.setProperty(INITIAL_DIRS_PROP, System.getProperty("java.io.tmpdir") + File.separator + "hotdir");
+		try {
+			JMXServiceURL surl = new JMXServiceURL("service:jmx:jmxmp://0.0.0.0:8006");
+			JMXConnectorServer server = JMXConnectorServerFactory.newJMXConnectorServer(surl, null, JMXHelper.getHeliosMBeanServer());
+			server.start();
+		} catch (Exception ex) {
+			ex.printStackTrace(System.err);
+		}		
 		
 		ScriptFileWatcher sfw = getInstance();
-		sfw.addWatchDirectory("/tmp/hotdir");
+		sfw.addWatchDirectory(System.getProperty("java.io.tmpdir") + File.separator + "hotdir");
 		
 		SystemClock.sleep(10000000);
 	}
@@ -156,37 +171,113 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 */
 	private ScriptFileWatcher() {
 		super(new JMXManagedThreadPool(NOTIF_THREAD_POOL_OBJECT_NAME, "WatcherNotificationThreadPool", CORES, CORES, 1024, 60000, 100, 90), notificationInfos);
+		keepRunning.set(true);
 		try {
 			watcher = FileSystems.getDefault().newWatchService();
 		} catch (Exception ex) {
 			log.error("Failed to create default WatchService", ex);
 			throw new RuntimeException("Failed to create default WatchService", ex);
 		}
+		String[] initialDirs = ConfigurationHelper.getSystemThenEnvPropertyArray(INITIAL_DIRS_PROP, "");
+		for(String dir: initialDirs) {
+			final File f = new File(dir);
+			if(f.exists() && f.isDirectory()) {
+				hotDirNames.add(f.getAbsolutePath());
+			}
+		}
 		eventHandlerPool = new JMXManagedThreadPool(THREAD_POOL_OBJECT_NAME, "FileWatcherThreadPool", CORES, CORES * 2, 1024, 60000, 100, 90);
 		hotDirs = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(DIR_CACHE_PROP, DIR_CACHE_DEFAULT_SPEC)).build();
 		scriptManager = StateService.getInstance();
+		Map<WatchEventType, Set<FileChangeEventHandler>> tmpHandlerMap = new EnumMap<WatchEventType, Set<FileChangeEventHandler>>(WatchEventType.class);
+		for(WatchEventType type: WatchEventType.values()) {
+			tmpHandlerMap.put(type, new NonBlockingHashSet<FileChangeEventHandler>());
+		}		
+		eventHandlers = Collections.unmodifiableMap(tmpHandlerMap);
 		Runtime.getRuntime().addShutdownHook(new Thread(){
 			public void run() {
 				shutdown();
 			}
 		});
 		JMXHelper.registerMBean(OBJECT_NAME, this);
+		registerEventHandler(newDirectoryHandler);
+		registerEventHandler(newFileHandler);
+		registerEventHandler(deletedFileHandler);
+		registerEventHandler(deletedDirectoryHandler);
 		startFileEventListener();
-		try {
-			JMXServiceURL surl = new JMXServiceURL("service:jmx:jmxmp://0.0.0.0:8006");
-			JMXConnectorServer server = JMXConnectorServerFactory.newJMXConnectorServer(surl, null, JMXHelper.getHeliosMBeanServer());
-			server.start();
-		} catch (Exception ex) {
-			ex.printStackTrace(System.err);
-		}
 		
 	}
+	
+	/** The inside event handler for new directories */
+	private FileChangeEventHandler newDirectoryHandler = new AbstractFileChangeEventHandler(WatchEventType.DIR_NEW) {
+		@Override
+		public void eventFired(final FileEvent event) {
+			if(!event.exists()) return;
+			log.debug("Processing new Dir event for [{}]", event.getFileName());
+			addWatchDirectory(event.getFileName(), event);			
+		}
+	};
+	
+	/** The inside event handler for new files */
+	private FileChangeEventHandler newFileHandler = new AbstractFileChangeEventHandler(WatchEventType.FILE_MOD) {
+		@Override
+		public void eventFired(final FileEvent event) {
+			if(!event.exists()) return;
+			final String name = event.getFileName();
+			if(!hotFileNames.contains(name)) {
+				synchronized(hotFileNames) {
+					if(!hotFileNames.contains(name)) {
+						log.debug("Processing new File event for [{}]", event.getFileName());
+						addWatchFile(event.getFileName(), event);						
+						return;
+					}
+				}
+			}
+			log.debug("Processing modified File event for [{}]", event.getFileName());
+		}
+	};
+	
+	/** The inside event handler for deleted files */
+	private FileChangeEventHandler deletedFileHandler = new AbstractFileChangeEventHandler(WatchEventType.FILE_DELETE) {
+		@Override
+		public void eventFired(final FileEvent event) {
+			final String name = event.getFileName();			
+			if(hotFileNames.contains(name)) {
+				synchronized(hotFileNames) {
+					if(hotFileNames.contains(name)) {
+						log.debug("Processing deleted File event for [{}]", event.getFileName());
+						removeWatchFile(event.getFileName(), event);						
+						return;
+					}
+				}
+			}			
+		}
+	};
+	
+	/** The inside event handler for deleted directories */
+	private FileChangeEventHandler deletedDirectoryHandler = new AbstractFileChangeEventHandler(WatchEventType.DIR_DELETE) {
+		@Override
+		public void eventFired(final FileEvent event) {
+			final String name = event.getFileName();			
+			if(hotDirNames.contains(name)) {
+				synchronized(hotDirNames) {
+					if(hotDirNames.contains(name)) {
+						log.debug("Processing deleted Directory event for [{}]", event.getFileName());
+						removeWatchDirectory(event.getFileName(), event);						
+						return;
+					}
+				}
+			}			
+		}
+	};
+	
+	
+	
 	
 	/**
 	 * Stops the ScriptFileWatcher
 	 */
 	void shutdown() {
-		
+		keepRunning.set(false);
 		instance = null;
 	}
 	
@@ -202,13 +293,17 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 //			updateWatchers();
 			watchKeyThread = new Thread("ScriptFileWatcherWatchKeyThread"){
 				WatchKey watchKey = null;
+				
+				
+				//==========================================================================================================
+				//		WATCH KEY THREAD
+				//==========================================================================================================
 				public void run() {
 					log.info("Started HotDeployer File Watcher Thread");
 					while(keepRunning.get()) {
 						try {
 							watchKey = watcher.take();
-							log.info("Got watch key for [" + watchKey.watchable() + "]");
-							log.debug("File Event Queue:", processingQueue.size());
+							log.info("Got watch key for [" + watchKey.watchable() + "]");							
 					    } catch (InterruptedException ie) {
 					        interrupted();
 					        // check state
@@ -220,7 +315,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 								if (kind == OVERFLOW) {
 									log.warn("OVERFLOW OCCURED");
 									if(!watchKey.reset()) {
-										log.info("Hot Dir for watch key [", watchKey, "] is no longer valid");
+										log.warn("Hot Dir for watch key [", watchKey, "] is no longer valid");
 										watchKey.cancel();
 										Path dir = (Path)watchKey.watchable();
 										hotDirNames.remove(dir.toFile().getAbsolutePath());
@@ -236,11 +331,16 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 						boolean valid = watchKey.reset();
 						// FIXME:  This stops polling completely.
 					    if (!valid) {
-					    	log.warn("Watch Key for [" , watchKey , "] is no longer valid. Polling will stop");
-					        break;
+					    	log.warn("Watch Key for [{}] is no longer valid. Polling will stop", watchKey.watchable());
+					        //break;
 					    }
 					}
+					// when we reach here, the watch key thread has stopped
+					if(keepRunning.get()) {
+						log.error("UNEXPECTED STOP ON WATCH KEY THREAD", new Throwable());
+					}
 				}
+				//==========================================================================================================
 			};
 			watchKeyThread.setDaemon(true);
 			keepRunning.set(true);
@@ -281,6 +381,27 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	}
 	
 	
+	
+	/**
+	 * Registers a new event handler
+	 * @param handler the handler to register
+	 */
+	public void registerEventHandler(final FileChangeEventHandler handler) {
+		for(WatchEventType type: handler.getSupportedEvents()) {
+			eventHandlers.get(type).add(handler);
+		}
+	}
+	
+	/**
+	 * Unregisters an event handler
+	 * @param handler the handler to unregister
+	 */
+	public void removeEventHandler(final FileChangeEventHandler handler) {
+		for(WatchEventType type: handler.getSupportedEvents()) {
+			eventHandlers.get(type).remove(handler);
+		}
+	}
+	
 	/**
 	 * Enqueues a file event, removing any older instances that this instance will replace.
 	 * The delay of the enqueued event will be set according to the event type.
@@ -296,6 +417,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		}
 	}
 	
+	
 	/**
 	 * Enqueues a file event, removing any older instances that this instance will replace
 	 * @param delay The delay to add to the passed file event to give the queue a chance to conflate obsolete events already queued
@@ -303,10 +425,15 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 */
 	protected void enqueueFileEvent(final long delay, final FileEvent fe) {
 		int removes = 0;
-		while(processingQueue.remove(fe)) {removes++;};
+		while(processingQueue.remove(fe)) {removes++;}
 		fe.addDelay(delay);
-		processingQueue.add(fe);
-		log.debug("Queued File Event for [{}] and dropped [{}] older versions", fe.toShortString(), removes );
+		if(delay<1) {
+			processEventAsync(fe);
+			log.debug("Async Executed File Event for [{}] and dropped [{}] older versions", fe.toShortString(), removes );
+		} else {		
+			processingQueue.add(fe);
+			log.debug("Queued File Event for [{}] and dropped [{}] older versions", fe.toShortString(), removes );
+		}
 	}
 	
 	/**
@@ -315,7 +442,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 */
 	protected void scanHotDirsAtStart() {
 		for(String hotDirPathName: hotDirNames) {
-			treeScan(new File(hotDirPathName), true);
+			treeScan(new File(hotDirPathName), true, true);
 		}
 	}	
 	
@@ -324,16 +451,18 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 * Performs a recursive tree scan
 	 * @param dir The directory to scan
 	 * @param activateFiles true to activate found scripts
+	 * @param noDelay true to enqueue with no delay, false otherwise
 	 */
-	protected void treeScan(final File dir, final boolean activateFiles) {
-		if(dir==null || !dir.exists() || !dir.isDirectory() || shouldIgnore(dir.getAbsoluteFile().toPath())) return;		
+	protected void treeScan(final File dir, final boolean activateFiles, final boolean noDelay) {
+		if(dir==null || !dir.exists() || !dir.isDirectory()) return;		
 		for(final File dirFile: dir.listFiles()) {
 			if(dirFile.isDirectory()) {
-				addWatchDirectory(dirFile.getAbsolutePath());
-				treeScan(dirFile, activateFiles);
+				if(noDelay) enqueueFileEvent(0, new FileEvent(dirFile.getAbsolutePath(), ENTRY_CREATE));
+				else enqueueFileEvent(new FileEvent(dirFile.getAbsolutePath(), ENTRY_CREATE));
 			} else {
 				if(activateFiles) {
-					// compile  // TODO:  need cache of tracked files, how they link to compiled scripts and the compile call
+					if(noDelay) enqueueFileEvent(0, new FileEvent(dirFile.getAbsolutePath(), ENTRY_MODIFY));
+					else enqueueFileEvent(new FileEvent(dirFile.getAbsolutePath(), ENTRY_MODIFY));
 				}
 			}
 		}
@@ -343,26 +472,15 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 * Starts the processing queue processor thread
 	 */
 	void startProcessingThread() {
-		processingThread = new Thread("SpringHotDeployerProcessingThread") {
+		processingThread = new Thread("FileEventProcessingThread") {
 			@Override
 			public void run() {
-				log.info("Started HotDeployer Queue Processor Thread");
+				log.info("Started FileEvent Queue Processor Thread");
 				while(keepRunning.get()) {
 					try {
-						final FileEvent fe = processingQueue.take();						
+						final FileEvent fe = processingQueue.take();
 						if(fe!=null) {
-							// if delete, then set file event file type according to isWatched
-							if(fe.isDelete()) {
-								
-							}
-							
-							
-							log.debug("Processing File Event [{}]", fe.getFileName());
-							if(inProcess.contains(fe)) {								
-								enqueueFileEvent(2000, fe);
-							} else {
-								log.info("PROCESING ------------> [{}]", fe);
-							}
+							processEventAsync(fe);
 						}
 					} catch (Exception e) {
 						if(interrupted()) interrupted();
@@ -372,6 +490,34 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		};
 		processingThread.setDaemon(true);
 		processingThread.start();
+	}
+	
+	/**
+	 * Asynchronously processes a file event
+	 * @param fe The file event to process
+	 * @return The future tracking the completion of the task
+	 */
+	protected Future<?> processEventAsync(final FileEvent fe) {		
+		return eventHandlerPool.submit(new Runnable(){
+			public void run() {
+				log.debug("Processing File Event [{}]", fe.toShortString());
+				// if delete, then set file event file type according to isWatched
+				if(fe.isDelete()) {
+					if(!isWatched(fe.getFileName())) return;
+					fe.setDeletedFileType(isWatchedDir(fe.getFileName()));								
+				}
+				if(inProcess.contains(fe)) {								
+					enqueueFileEvent(2000, fe);
+				} else {								
+					final Set<FileChangeEventHandler> handlers = eventHandlers.get(fe.getWatchEventType());
+					if(handlers.isEmpty()) return;
+					for(FileChangeEventHandler handler: handlers) {
+						handler.eventFired(fe);
+					}
+					log.info("PROCESSED ------------> [{}]", fe.toShortString());
+				}									
+			}
+		});
 	}
 	
 	/**
@@ -399,14 +545,15 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	}
 	
 	
-
 	
+
 	/**
 	 * Adds a directory to watch
 	 * @param watchDir the name of a directory to watch
+	 * @param fileEvent An optional file event
 	 * @throws IllegalArgumentException thrown if the passed name does not represent an existing and accessible directory
 	 */
-	public void addWatchDirectory(final String watchDir) {
+	public void addWatchDirectory(final String watchDir, final FileEvent fileEvent) {
 		if(watchDir==null || watchDir.trim().isEmpty()) throw new IllegalArgumentException("The passed directory name was null or empty");
 		final File f = new File(watchDir.trim());
 		if(!f.exists()) throw new IllegalArgumentException("The passed directory [" + f + "] does not exist");
@@ -416,13 +563,110 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			try {
 				WatchKey watchKey = path.register(watcher, ENTRY_DELETE, ENTRY_MODIFY, ENTRY_CREATE);
 				hotDirs.put(path, watchKey);
+				if(fileEvent!=null) sendNotification(fileEvent.toNotification(notificationIdFactory.incrementAndGet()));
 				log.info("Added watched deployer directory [{}]", path);
+				treeScan(f, true, fileEvent==null ? false : !fileEvent.wasDelayed());
 			} catch (Exception ex) {
 				hotDirNames.remove(f.getAbsolutePath());
 				log.error("Failed to activate directory [{}] for watch services", watchDir, ex);
 			}
 		}
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#addWatchDirectory(java.lang.String)
+	 */
+	@Override
+	public void addWatchDirectory(final String watchDir) {
+		addWatchDirectory(watchDir, null);
+	}
+	
+	/**
+	 * Removes a watched directory from being watched
+	 * @param watchDir The name of the directory
+	 * @param fileEvent The optional file event
+	 */
+	public void removeWatchDirectory(final String watchDir, final FileEvent fileEvent) {
+		if(watchDir==null || watchDir.trim().isEmpty()) throw new IllegalArgumentException("The passed directory name was null or empty");
+		final File f = new File(watchDir.trim());
+		if(f.exists()) throw new IllegalArgumentException("The passed directory [" + f + "] still exists !");
+		if(!hotDirNames.remove(watchDir)) return;
+		final Path path = Paths.get(watchDir);
+		final WatchKey watchKey = hotDirs.asMap().remove(path);
+		if(watchKey!=null) {
+			watchKey.cancel();
+			List<WatchEvent<?>> events = null;
+			while(!(events=watchKey.pollEvents()).isEmpty()) {
+				events.clear();
+			}
+		}
+		if(fileEvent!=null) sendNotification(fileEvent.toNotification(notificationIdFactory.incrementAndGet()));
+		log.info("Unwatched directory [{}]", watchDir);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#removeWatchDirectory(java.lang.String)
+	 */
+	@Override
+	public void removeWatchDirectory(final String watchDir) {
+		removeWatchDirectory(watchDir, null);
+	}
+	
+	/**
+	 * Marks a file as watched
+	 * @param watchFile The file name being watched
+	 * @param fileEvent The file event
+	 */
+	public void addWatchFile(final String watchFile, final FileEvent fileEvent) {
+		if(watchFile==null || watchFile.trim().isEmpty()) throw new IllegalArgumentException("The passed file name was null or empty");
+		final File f = new File(watchFile.trim());
+		if(!f.exists()) throw new IllegalArgumentException("The passed file [" + f + "] does not exist");
+		if(f.isDirectory()) throw new IllegalArgumentException("The passed file [" + f + "] is *not* a regular file");
+		if(shouldIgnore(f.toPath())) {
+			log.info("Ignoring file [{}]", watchFile);
+			return;
+		}
+		hotFileNames.add(watchFile);
+		if(fileEvent!=null) sendNotification(fileEvent.toNotification(notificationIdFactory.incrementAndGet()));
+		log.info("Added watched  file [{}]", watchFile);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#addWatchFile(java.lang.String)
+	 */
+	@Override
+	public void addWatchFile(final String watchFile) {
+		addWatchFile(watchFile, null);
+	}
+	
+
+	/**
+	 * Removes a file from being watched
+	 * @param watchFile The file name
+	 * @param fileEvent The file event
+	 */
+	public void removeWatchFile(final String watchFile, final FileEvent fileEvent) {
+		if(watchFile==null || watchFile.trim().isEmpty()) throw new IllegalArgumentException("The passed file name was null or empty");
+		final File f = new File(watchFile.trim());
+		if(f.exists()) throw new IllegalArgumentException("The passed file [" + f + "] still exists !");
+		if(hotFileNames.remove(watchFile)) {
+			if(fileEvent!=null) sendNotification(fileEvent.toNotification(notificationIdFactory.incrementAndGet()));
+			log.info("Unwatched file [{}]", watchFile);
+		}
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#removeWatchFile(java.lang.String)
+	 */
+	@Override
+	public void removeWatchFile(final String watchFile) {
+		removeWatchFile(watchFile, null);
+	}
+	
 	
 	/**
 	 * {@inheritDoc}
@@ -455,6 +699,15 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	
 	/**
 	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getProcessingQueueDepth()
+	 */
+	@Override
+	public int getProcessingQueueDepth() {		
+		return processingQueue.size();
+	}
+	
+	/**
+	 * {@inheritDoc}
 	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getIgnoreExtensions()
 	 */
 	@Override
@@ -470,6 +723,53 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	public Set<String> getWatchedDirectories() {
 		return Collections.unmodifiableSet(hotDirNames);
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getWatchedFiles()
+	 */
+	@Override
+	public Set<String> getWatchedFiles() {
+		return Collections.unmodifiableSet(hotFileNames);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getWatchedDirectoryCount()
+	 */
+	@Override
+	public int getWatchedDirectoryCount() {
+		return hotDirNames.size();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getWatchedFileCount()
+	 */
+	@Override
+	public int getWatchedFileCount() {
+		return hotFileNames.size();
+	}
+
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getWatchKeyThreadState()
+	 */
+	@Override
+	public String getWatchKeyThreadState() {
+		return watchKeyThread==null ? "NULL" : watchKeyThread.getState().name();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getEventQueueThreadState()
+	 */
+	@Override
+	public String getEventQueueThreadState() {
+		return processingThread==null ? "NULL" : processingThread.getState().name();
+	}
+	
 	
 	/**
 	 * Determines if the passed path should be ignored or not
@@ -491,10 +791,6 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		}
 		return false;
 	}
-	
-	protected void handleDelete(final Path inactivated, final Kind<Path> eventType) {
-		log.info("Deleted [{}]", inactivated);
-		enqueueFileEvent(500, new FileEvent(inactivated.toFile().getAbsolutePath(), eventType));
-	}
+
 
 }

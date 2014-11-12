@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 
 import javax.script.CompiledScript;
 
-import com.heliosapm.jmx.util.helpers.StateService;
+import com.heliosapm.script.StateService;
 
 /**
  * <p>Title: Directives</p>

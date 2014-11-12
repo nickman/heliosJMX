@@ -22,7 +22,7 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.jmx.util.helpers;
+package com.heliosapm.script;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -57,6 +57,9 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
+import com.heliosapm.jmx.util.helpers.ArrayUtils;
+import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
+import com.heliosapm.jmx.util.helpers.URLHelper;
 
 /**
  * <p>Title: StateService</p>
@@ -87,6 +90,9 @@ public class StateService {
 	public static final String STATE_DOUBLE_CACHE_PROP = "com.heliosapm.jmx.stateservice.doublecachespec";
 	/** The conf property name for the cache spec for the script cache */
 	public static final String STATE_SCRIPT_CACHE_PROP = "com.heliosapm.jmx.stateservice.scriptcachespec";
+	/** The conf property name for the cache spec for the deployment cache */
+	public static final String STATE_DEPLOYMENT_CACHE_PROP = "com.heliosapm.jmx.stateservice.deploymentcachespec";
+	
 	/** The conf property name for the cache spec for the script binding cache */
 	public static final String STATE_BINDING_CACHE_PROP = "com.heliosapm.jmx.stateservice.bindingcachespec";
 	/** The default cache spec */

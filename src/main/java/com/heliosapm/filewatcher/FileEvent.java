@@ -33,6 +33,8 @@ import java.util.Date;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
 
+import javax.management.Notification;
+
 import com.heliosapm.jmx.util.helpers.SystemClock;
 
 /**
@@ -53,7 +55,9 @@ public class FileEvent implements Delayed {
 	/** The updateable timestamp  */
 	protected long timestamp;
 	/** The file type (file or directory) */
-	protected EventType.FileType fileType = EventType.FileType.UNKNOWN;  
+	protected WatchEventType watchEventType = null;  
+	/** Indicates if this file event was delayed */
+	protected boolean delayed = true;
 	
 	
 	/**
@@ -65,23 +69,55 @@ public class FileEvent implements Delayed {
 		this.fileName = fileName;
 		this.eventType = eventType;
 		eventTimestamp = SystemClock.time();
-		timestamp = eventTimestamp; 
-		if(!isDelete()) {
-			fileType = new File(this.fileName).isDirectory() ? EventType.FileType.DIR : EventType.FileType.FILE;
-		}
+		timestamp = eventTimestamp;
+		watchEventType = WatchEventType.assign(fileName, eventType);
 	}
 	
-	void setFileType(EventType.FileType type) {
-		if(!isDelete() || this.fileType != EventType.FileType.UNKNOWN) throw new RuntimeException();
-		this.fileType = fileType;
+	/**
+	 * Sets the file type for this event when the deleted type has been determined
+	 * @param wasDirectory true if the deleted item was a directory, false if it was a regular file
+	 */
+	void setDeletedFileType(final boolean wasDirectory) {
+		if(!watchEventType.isDelete()) throw new RuntimeException("Cannot reset the file type since ths event was not a deletion");
+		watchEventType = wasDirectory ? WatchEventType.DIR_DELETE : WatchEventType.FILE_DELETE;  		
 	}
+	
 	
 	/**
 	 * Adds a delay to the updateable timestamp
 	 * @param ms the delay to add
 	 */
 	void addDelay(long ms) {
-		timestamp+= ms;
+		if(ms<1) {
+			delayed = false;
+		} else {
+			timestamp+= ms;
+			delayed = true;
+		}
+	}
+	
+	/**
+	 * Indicates if this file event was delayed by execution through the delay queue
+	 * @return true if event was delayed, false otherwise
+	 */
+	public boolean wasDelayed() {
+		return delayed;
+	}
+	
+	/**
+	 * Indicates if the underlying file exists
+	 * @return true if the underlying file exists, false otherwise
+	 */
+	public boolean exists() {
+		return new File(fileName).exists();
+	}
+	
+	/**
+	 * Returns the watch event type
+	 * @return the watch event type
+	 */
+	public WatchEventType getWatchEventType() {
+		return watchEventType;
 	}
 	
 	
@@ -208,24 +244,23 @@ public class FileEvent implements Delayed {
 		return eventType.equals(ENTRY_DELETE);
 	}
 	
-//	public String getNotifType() {
-//		if(eventType.equals(ENTRY_DELETE)) {
-//			
-//		}
-//	}
-//	
-//	public Notification toNotification(final long notificationId) {
-//		Notification notif = new Notification();
-//		
-//		return notif;
-//	}
+	
+	/**
+	 * Creates a JMX notification from this file event
+	 * @param notificationId The sender supplied sequence
+	 * @return the notification
+	 */
+	public Notification toNotification(final long notificationId) {
+		Notification notif = new Notification(watchEventType.jmxNotif, ScriptFileWatcher.OBJECT_NAME, notificationId, System.currentTimeMillis(), toShortString());
+		return notif;
+	}
 	
 	/**
 	 * Returns a short toString with the file name and event type
 	 * @return a short toString with the file name and event type
 	 */
 	public String toShortString() {
-		return new StringBuilder("fe:").append(fileName).append("[").append(eventType).append("]").toString();
+		return new StringBuilder("FileChangeEvent:").append(fileName).append("[").append(watchEventType).append("]/[").append(eventType.name()).append("]").toString();
 	}
 
 
@@ -238,8 +273,8 @@ public class FileEvent implements Delayed {
 		StringBuilder builder = new StringBuilder();
 		builder.append("FileEvent [fileName=");
 		builder.append(fileName);
-		builder.append(", eventType=");
-		builder.append(eventType);
+		builder.append(", watchEventType=");
+		builder.append(watchEventType);
 		builder.append(", eventTimestamp=");
 		builder.append(new Date(eventTimestamp));
 		builder.append(", timestamp=");

@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2007, Helios Development Group and individual contributors
+ * Copyright 2014, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -22,34 +22,22 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.filewatcher;
+package com.heliosapm.script;
 
 /**
- * <p>Title: EventType</p>
- * <p>Description: Enumerates all the possible file watcher events that can be handled by the watch service</p> 
+ * <p>Title: DeploymentStatus</p>
+ * <p>Description: Enumerates the possible statuses of a deployment</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.filewatcher.EventType</code></p>
+ * <p><code>com.heliosapm.script.DeploymentStatus</code></p>
  */
 
-public enum EventType {
-	FILE_NEW,
-	FILE_MOD,
-	FILE_DELETE,
-	DIR_NEW,
-	DIR_DELETE;
-	
-	
-	public enum FileType {
-		FILE,
-		DIR,
-		UNKNOWN;
-	}
-	
-	public enum OpType {
-		NEW,
-		MOD,
-		DELETE;
-	}
-	
+public enum DeploymentStatus {
+	INIT,
+	IGNORED,
+	PAUSED,
+	DOWN,
+	BROKEN,
+	UP,
+	NOONFIG;
 }
