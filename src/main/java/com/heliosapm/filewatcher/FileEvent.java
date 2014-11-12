@@ -24,9 +24,10 @@
  */
 package com.heliosapm.filewatcher;
 
+import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
+
+import java.io.File;
 import java.nio.file.Path;
-import java.nio.file.StandardWatchEventKinds;
-import java.nio.file.WatchEvent;
 import java.nio.file.WatchEvent.Kind;
 import java.util.Date;
 import java.util.concurrent.Delayed;
@@ -51,6 +52,8 @@ public class FileEvent implements Delayed {
 	protected final long eventTimestamp;
 	/** The updateable timestamp  */
 	protected long timestamp;
+	/** The file type (file or directory) */
+	protected EventType.FileType fileType = EventType.FileType.UNKNOWN;  
 	
 	
 	/**
@@ -58,11 +61,19 @@ public class FileEvent implements Delayed {
 	 * @param fileName The filename for which a change was noticed
 	 * @param eventType The file change type
 	 */
-	public FileEvent(String fileName, Kind<Path> eventType) {
+	public FileEvent(final String fileName, final Kind<Path> eventType) {
 		this.fileName = fileName;
 		this.eventType = eventType;
 		eventTimestamp = SystemClock.time();
 		timestamp = eventTimestamp; 
+		if(!isDelete()) {
+			fileType = new File(this.fileName).isDirectory() ? EventType.FileType.DIR : EventType.FileType.FILE;
+		}
+	}
+	
+	void setFileType(EventType.FileType type) {
+		if(!isDelete() || this.fileType != EventType.FileType.UNKNOWN) throw new RuntimeException();
+		this.fileType = fileType;
 	}
 	
 	/**
@@ -187,6 +198,34 @@ public class FileEvent implements Delayed {
 			return false;
 		}
 		return true;
+	}
+	
+	/**
+	 * Indicates if this evebt represents a deletion
+	 * @return true if this evebt represents a deletion
+	 */
+	public boolean isDelete() {
+		return eventType.equals(ENTRY_DELETE);
+	}
+	
+//	public String getNotifType() {
+//		if(eventType.equals(ENTRY_DELETE)) {
+//			
+//		}
+//	}
+//	
+//	public Notification toNotification(final long notificationId) {
+//		Notification notif = new Notification();
+//		
+//		return notif;
+//	}
+	
+	/**
+	 * Returns a short toString with the file name and event type
+	 * @return a short toString with the file name and event type
+	 */
+	public String toShortString() {
+		return new StringBuilder("fe:").append(fileName).append("[").append(eventType).append("]").toString();
 	}
 
 
