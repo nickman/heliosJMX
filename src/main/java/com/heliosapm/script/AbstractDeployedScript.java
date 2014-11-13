@@ -25,14 +25,20 @@
 package com.heliosapm.script;
 
 import java.io.File;
+import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 import javax.management.ObjectName;
 
+import org.json.JSONObject;
+
+import com.heliosapm.filewatcher.ScriptFileWatcher;
+import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 
 /**
@@ -46,17 +52,24 @@ import com.heliosapm.jmx.util.helpers.URLHelper;
 
 public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	/** The underlying executable component */
-	protected T executable = null;
+	protected WeakReference<T> executable = null;
 	/** The originating source file */
 	protected final File sourceFile;	
 	/** The source file extension */
 	protected final String extension;
 	/** The configuration for this deployment */
-	protected final Map<String, Object> config = new ConcurrentHashMap<String, Object>();	
+	protected final Map<String, Object> config = new ConcurrentHashMap<String, Object>();
+	
+	/** The schedule time in seconds */
+	protected int schedule  = ConfigurationHelper.getIntSystemThenEnvProperty(DEFAULT_SCHEDULE_PROP, DEFAULT_SCHEDULE);
+	
 	/** The status of this deployment */
 	protected final AtomicReference<DeploymentStatus> status = new AtomicReference<DeploymentStatus>(DeploymentStatus.INIT);
 	/** The last mod time  */
 	protected final AtomicLong lastModTime = new AtomicLong(System.currentTimeMillis());
+	/** The effective timestamp of the current status  */
+	protected final AtomicLong statusTime = new AtomicLong(System.currentTimeMillis());
+	
 	/** The last execute time  */
 	protected final AtomicLong lastExecTime = new AtomicLong(-1L);
 	/** The last error time  */
@@ -65,19 +78,63 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	protected final AtomicLong execCount = new AtomicLong(-1L);
 	/** The error count since the last reset  */
 	protected final AtomicLong errorCount = new AtomicLong(-1L);
+	
+	/** The deployment's JMX ObjectName */
+	protected final ObjectName objectName;
 
 	
 	/**
 	 * Creates a new AbstractDeployedScript
 	 * @param sourceFile The originating source file
-	 * @param executable The underlying executable component
 	 */
-	public AbstractDeployedScript(File sourceFile, final T executable) {
-		this.executable = executable;
+	public AbstractDeployedScript(File sourceFile) {
+//		this.executable = new WeakReference<T>(executable);
 		this.sourceFile = sourceFile;
 		String tmp = URLHelper.getFileExtension(sourceFile);
 		if(tmp==null || tmp.trim().isEmpty()) throw new RuntimeException("The source file [" + sourceFile + "] has no extension");
 		extension = tmp.toLowerCase();
+		objectName = null; // FIXME
+	}
+	
+	/**
+	 * Sets the status for this deployment
+	 * @param status The status to set to
+	 * @return the prior status
+	 */
+	protected DeploymentStatus setStatus(final DeploymentStatus status) {
+		final DeploymentStatus priorStatus = this.status.getAndSet(status);
+		if(priorStatus!=status) {
+			statusTime.set(System.currentTimeMillis());
+		}
+		return priorStatus;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#setExecutable(java.lang.Object)
+	 */
+	@Override
+	public void setExecutable(final T executable) {
+		if(executable==null) throw new IllegalArgumentException("The passed executable was null");
+		this.executable = new WeakReference<T>(executable);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#setSchedulePeriod(java.lang.Object)
+	 */
+	@Override
+	public void setSchedulePeriod(Object period) {
+		if(period==null) throw new IllegalArgumentException("The passed period was null");
+		if(period instanceof Number) {
+			schedule = ((Number)period).intValue();
+		} else {
+			try {
+				schedule = new Double(period.toString().trim()).intValue();
+			} catch (Exception ex) {
+				throw new IllegalArgumentException("Could not determine period from object [" + period + "]");
+			}
+		}
 	}
 
 	/**
@@ -100,14 +157,20 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 
 
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getExecutable()
-	 */
-	@Override
-	public T getExecutable() {
-		return executable;
-	}
+//	/**
+//	 * {@inheritDoc}
+//	 * @see com.heliosapm.script.DeployedScript#getExecutable()
+//	 */
+//	@Override
+//	public T getExecutable() {
+//		if(executable==null) throw new RuntimeException("Executable has not been initialized");
+//		T t = executable.get();
+//		if(t==null) {
+//			try { undeploy(); } catch (Exception x) {/* No Op */}
+//			throw new RuntimeException("Executable has been gc'ed");
+//		}
+//		return t;
+//	}
 
 	/**
 	 * {@inheritDoc}
@@ -137,6 +200,13 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
 		if(value==null) throw new IllegalArgumentException("The passed value was null");
 		config.put(key, value);
+		if(SCHEDULE_KEY.equals(key)) {
+			try {
+				
+			} catch (Exception x) {
+				
+			}
+		}
 	}
 	
 	/**
@@ -231,8 +301,16 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	 */
 	@Override
 	public ObjectName getObjectName() {
-		// TODO Auto-generated method stub
-		return null;
+		return objectName;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#pause()
+	 */
+	@Override
+	public void pause() {
+		setStatus(DeploymentStatus.PAUSED);		
 	}
 
 	/**
@@ -241,8 +319,23 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	 */
 	@Override
 	public String toJSON() {
-		// TODO Auto-generated method stub
-		return null;
+		JSONObject json = new JSONObject();
+		json.put("sourceFile", this.sourceFile.getAbsolutePath());
+		json.put("extension", this.extension);
+		json.put("objectName", this.objectName.toString());
+		json.put("status", this.status);
+		json.put("statusTime", this.statusTime.get());
+		json.put("lastModTime", this.lastModTime.get());
+		json.put("lastExecTime", this.lastExecTime.get());
+		json.put("lastErrorTime", this.lastErrorTime.get());
+		json.put("execCount", this.execCount.get());
+		json.put("errorCount", this.errorCount.get());
+		JSONObject cfig = new JSONObject();
+		for(Map.Entry<String, Object> entry: config.entrySet()) {
+			try { cfig.put(entry.getKey(), entry.getValue()); } catch (Exception x) {/* No Op */}
+		}
+		json.put("config", cfig);
+		return json.toString();
 	}
 
 	/**
@@ -251,9 +344,11 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	 */
 	@Override
 	public int getSchedulePeriod() {
-		// TODO Auto-generated method stub
-		return 0;
+		return schedule;
 	}
+	
+	/** Pattern to replace the skip entry in a source header */
+	public static final Pattern SKIP_REPLACER = Pattern.compile("skip=(.*?),|$|\\s");
 
 	/**
 	 * {@inheritDoc}
@@ -264,11 +359,14 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 		String header = URLHelper.getLines(URLHelper.toURL(sourceFile), 1)[0].trim();
 		String newHeader = null;
 		if(header.startsWith("//")) {
-			newHeader = header;
+			if(recompile) {
+				newHeader = SKIP_REPLACER.matcher(header).replaceAll(ScriptFileWatcher.SKIP_PATTERN + ",");
+			} else {
+				newHeader = header;
+			}
 		} else {
-			newHeader = "//";
+			newHeader = recompile ? ("//" + ScriptFileWatcher.SKIP_PATTERN) : "//";  
 		}
-		
 		URLHelper.writeToURL(URLHelper.toURL(sourceFile), (newHeader + "\n" + source).getBytes(), false);
 
 	}
@@ -279,8 +377,27 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	 */
 	@Override
 	public void undeploy() {
-		// TODO Auto-generated method stub
-
+		executable.enqueue();
+		config.clear();
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#isExecutable()
+	 */
+	@Override
+	public boolean isExecutable() {
+		return status.get().canExec;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#isScheduleExecutable()
+	 */
+	@Override
+	public boolean isScheduleExecutable() {
+		return status.get().canSchedulerExec;
+	}
+	
 
 }

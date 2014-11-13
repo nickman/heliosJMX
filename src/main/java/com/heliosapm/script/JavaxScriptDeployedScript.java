@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2014, Helios Development Group and individual contributors
+ * Copyright 2007, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -24,28 +24,49 @@
  */
 package com.heliosapm.script;
 
+import java.io.File;
+import java.util.Set;
+
+import javax.script.CompiledScript;
+
 /**
- * <p>Title: DeploymentStatus</p>
- * <p>Description: Enumerates the possible statuses of a deployment</p> 
+ * <p>Title: JavaxScriptDeployedScript</p>
+ * <p>Description: </p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.DeploymentStatus</code></p>
+ * <p><code>com.heliosapm.script.JavaxScriptDeployedScript</code></p>
  */
 
-public enum DeploymentStatus {
-	INIT(false, false),
-	READY(true, false),	
-	PAUSED(true, false),
-	DOWN(false, false),
-	BROKEN(false, false),
-	UP(true, true),
-	NOONFIG(false, false);
-	
-	private DeploymentStatus(boolean canExec, boolean canSchedulerExec) {
-		this.canExec = canExec;
-		this.canSchedulerExec = canSchedulerExec;
+public class JavaxScriptDeployedScript extends AbstractDeployedScript<CompiledScript> {
+
+	public JavaxScriptDeployedScript(File sourceFile) {
+		super(sourceFile);
+		// TODO Auto-generated constructor stub
 	}
-	
-	public final boolean canExec;
-	public final boolean canSchedulerExec;
+
+	@Override
+	public Set<String> getInvocables() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Object execute() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Object invoke(String name, Object... args) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public CompiledScript getExecutable() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+
 }

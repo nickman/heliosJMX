@@ -40,11 +40,27 @@ import javax.management.ObjectName;
 
 public interface DeployedScript<T> {
 	
+	/** The config name for the default schedule if a deployment does not provide one */
+	public static final String DEFAULT_SCHEDULE_PROP = "com.heliosapm.deployment.defaultschedule";
+	/** The internal config key for the schedule */
+	public static final String SCHEDULE_KEY = "schedule";	
+	
+	/** The default schedule if not configured */
+	public static final int DEFAULT_SCHEDULE = 15;
+	
+	
+	
 	/**
 	 * Returns the absolute file name of the source deployment
 	 * @return the absolute file name of the source deployment
 	 */
 	public String getFileName();
+	
+	/**
+	 * Updates the executable
+	 * @param executable The executable
+	 */
+	public void setExecutable(final T executable);
 	
 	/**
 	 * Returns the file extension
@@ -176,6 +192,12 @@ public interface DeployedScript<T> {
 	public int getSchedulePeriod();
 	
 	/**
+	 * Sets the deployment's scheduled execution period
+	 * @param period An integral number
+	 */
+	public void setSchedulePeriod(Object period);
+	
+	/**
 	 * Writes this new source the originating source file.
 	 * The header will be flagged to tell the file watcher to skip if recompile is enabled.
 	 * @param source The source to write
@@ -189,8 +211,22 @@ public interface DeployedScript<T> {
 	public void undeploy();
 	
 	
+	/**
+	 * Pauses the deployment, meaning it will not be invoked by the scheduler
+	 */
+	public void pause();
 	
+	/**
+	 * Indicates if the deployment can be executed (manually)
+	 * @return true if the deployment can be executed, false otherwise
+	 */
+	public boolean isExecutable();
 	
+	/**
+	 * Indicates if the deployment can be executed by the scheduler
+	 * @return true if the deployment can be executed by the scheduler, false otherwise
+	 */
+	public boolean isScheduleExecutable();
 	
 	
 }

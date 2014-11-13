@@ -29,8 +29,10 @@ import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
 import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -57,6 +59,7 @@ import javax.management.remote.JMXConnectorServer;
 import javax.management.remote.JMXConnectorServerFactory;
 import javax.management.remote.JMXServiceURL;
 
+import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.cliffc.high_scale_lib.NonBlockingHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,7 +69,6 @@ import com.google.common.cache.CacheBuilder;
 import com.heliosapm.jmx.concurrency.JMXManagedThreadPool;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
-import com.heliosapm.jmx.util.helpers.SystemClock;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.StateService;
 
@@ -128,11 +130,8 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	protected final AtomicLong notificationIdFactory = new AtomicLong();
 	/** WatchEventType typed event handlers */
 	protected final Map<WatchEventType, Set<FileChangeEventHandler>> eventHandlers;
-	
-	
-	
-
-	
+	/** Map of root watched directory keyed by the watched directory */
+	protected final Map<File, File> rootDirs = new NonBlockingHashMap<File, File>();
 	
 	/**
 	 * Acquires the ScriptFileWatcher singleton instance
@@ -150,19 +149,38 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	}
 	
 	public static void main(String[] args) {
-		System.setProperty(INITIAL_DIRS_PROP, System.getProperty("java.io.tmpdir") + File.separator + "hotdir");
+		String initialHotDir = System.getProperty("java.io.tmpdir") + File.separator + "hotdir";
+		System.setProperty(INITIAL_DIRS_PROP, initialHotDir);
+		System.err.println("Initial HotDir:" + initialHotDir);
+		JMXConnectorServer server = null;
 		try {
 			JMXServiceURL surl = new JMXServiceURL("service:jmx:jmxmp://0.0.0.0:8006");
-			JMXConnectorServer server = JMXConnectorServerFactory.newJMXConnectorServer(surl, null, JMXHelper.getHeliosMBeanServer());
+			server = JMXConnectorServerFactory.newJMXConnectorServer(surl, null, JMXHelper.getHeliosMBeanServer());
 			server.start();
 		} catch (Exception ex) {
-			ex.printStackTrace(System.err);
+			ex.printStackTrace(System.err);			
 		}		
 		
 		ScriptFileWatcher sfw = getInstance();
 		sfw.addWatchDirectory(System.getProperty("java.io.tmpdir") + File.separator + "hotdir");
-		
-		SystemClock.sleep(10000000);
+		final JMXConnectorServer svr = server;
+		new Thread("ExitWatcher") {
+			public void run() {
+				BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+				while(true) {
+					try {
+						String s = br.readLine();
+						if(s.equalsIgnoreCase("exit")) {
+							svr.stop();
+							System.exit(0);
+						}
+					} catch (Exception ex) {
+						/* No Op */
+					}
+				}				
+			}
+		}.start();
+		//SystemClock.sleep(10000000);
 	}
 	
 
@@ -177,13 +195,6 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		} catch (Exception ex) {
 			log.error("Failed to create default WatchService", ex);
 			throw new RuntimeException("Failed to create default WatchService", ex);
-		}
-		String[] initialDirs = ConfigurationHelper.getSystemThenEnvPropertyArray(INITIAL_DIRS_PROP, "");
-		for(String dir: initialDirs) {
-			final File f = new File(dir);
-			if(f.exists() && f.isDirectory()) {
-				hotDirNames.add(f.getAbsolutePath());
-			}
 		}
 		eventHandlerPool = new JMXManagedThreadPool(THREAD_POOL_OBJECT_NAME, "FileWatcherThreadPool", CORES, CORES * 2, 1024, 60000, 100, 90);
 		hotDirs = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(DIR_CACHE_PROP, DIR_CACHE_DEFAULT_SPEC)).build();
@@ -204,7 +215,22 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		registerEventHandler(deletedFileHandler);
 		registerEventHandler(deletedDirectoryHandler);
 		startFileEventListener();
+		addDefaultHotDirs();
 		
+		
+	}
+	
+	/**
+	 * Adds the default hot directories
+	 */
+	private void addDefaultHotDirs() {
+		String[] initialDirs = ConfigurationHelper.getSystemThenEnvPropertyArray(INITIAL_DIRS_PROP, "");
+		for(String dir: initialDirs) {
+			final File f = new File(dir).getAbsoluteFile();
+			if(f.exists() && f.isDirectory()) {
+				addWatchDirectory(f.getAbsolutePath(), new FileEvent(f.getAbsolutePath(), ENTRY_CREATE));
+			}
+		}		
 	}
 	
 	/** The inside event handler for new directories */
@@ -554,8 +580,8 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 * @throws IllegalArgumentException thrown if the passed name does not represent an existing and accessible directory
 	 */
 	public void addWatchDirectory(final String watchDir, final FileEvent fileEvent) {
-		if(watchDir==null || watchDir.trim().isEmpty()) throw new IllegalArgumentException("The passed directory name was null or empty");
-		final File f = new File(watchDir.trim());
+		if(watchDir==null || watchDir.trim().isEmpty()) throw new IllegalArgumentException("The passed directory name was null or empty");		
+		final File f = new File(watchDir.trim()).getAbsoluteFile();
 		if(!f.exists()) throw new IllegalArgumentException("The passed directory [" + f + "] does not exist");
 		if(!f.isDirectory()) throw new IllegalArgumentException("The passed directory [" + f + "] is *not* a directory");		
 		if(hotDirNames.add(f.getAbsolutePath())) {
@@ -565,12 +591,41 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 				hotDirs.put(path, watchKey);
 				if(fileEvent!=null) sendNotification(fileEvent.toNotification(notificationIdFactory.incrementAndGet()));
 				log.info("Added watched deployer directory [{}]", path);
+				final String rootDirName = getRootDir(watchDir);
+				if(rootDirName!=null) {
+					rootDirs.put(f, new File(rootDirName));
+				}
 				treeScan(f, true, fileEvent==null ? false : !fileEvent.wasDelayed());
 			} catch (Exception ex) {
 				hotDirNames.remove(f.getAbsolutePath());
 				log.error("Failed to activate directory [{}] for watch services", watchDir, ex);
 			}
+		} 
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getRootDir(java.lang.String)
+	 */
+	@Override
+	public String getRootDir(final String watchDir) {
+		if(watchDir==null || watchDir.trim().isEmpty()) throw new IllegalArgumentException("The passed directory name was null or empty");
+		final File f = new File(watchDir.trim()).getAbsoluteFile();
+		if(!f.exists()) throw new IllegalArgumentException("The passed directory [" + f + "] does not exist");
+		if(!f.isDirectory()) throw new IllegalArgumentException("The passed directory [" + f + "] is *not* a directory");		
+		if(!isWatchedDir(watchDir)) return null;
+		File parent = f.getParentFile();
+		File watchedParent = null;
+		while(parent != null) {
+			if(isWatchedDir(parent.getAbsolutePath())) {
+				watchedParent = parent;
+				parent = parent.getParentFile();
+			} else {
+				break;
+			}
+			
 		}
+		return watchedParent==null ? null : watchedParent.getAbsolutePath();
 	}
 	
 	/**
@@ -589,9 +644,10 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 */
 	public void removeWatchDirectory(final String watchDir, final FileEvent fileEvent) {
 		if(watchDir==null || watchDir.trim().isEmpty()) throw new IllegalArgumentException("The passed directory name was null or empty");
-		final File f = new File(watchDir.trim());
+		final File f = new File(watchDir.trim()).getAbsoluteFile();
 		if(f.exists()) throw new IllegalArgumentException("The passed directory [" + f + "] still exists !");
 		if(!hotDirNames.remove(watchDir)) return;
+		rootDirs.remove(f);
 		final Path path = Paths.get(watchDir);
 		final WatchKey watchKey = hotDirs.asMap().remove(path);
 		if(watchKey!=null) {
@@ -704,6 +760,20 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	@Override
 	public int getProcessingQueueDepth() {		
 		return processingQueue.size();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getRootDirs()
+	 */
+	@Override
+	public Map<String, String> getRootDirs() {
+		Map<String, String> roots = new HashMap<String, String>(rootDirs.size());
+		for(Map.Entry<File, File> entry: rootDirs.entrySet()) {
+			roots.put(entry.getKey().getAbsolutePath(), entry.getValue().getAbsolutePath());
+		}
+		return roots;
+		
 	}
 	
 	/**

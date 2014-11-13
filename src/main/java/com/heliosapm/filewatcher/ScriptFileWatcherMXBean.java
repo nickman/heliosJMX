@@ -24,7 +24,9 @@
  */
 package com.heliosapm.filewatcher;
 
+import java.io.File;
 import java.lang.management.ManagementFactory;
+import java.util.Map;
 import java.util.Set;
 
 import javax.management.ObjectName;
@@ -204,6 +206,19 @@ public interface ScriptFileWatcherMXBean {
 	 */
 	public String getEventQueueThreadState();
 	
+	/**
+	 * Finds the root watched directory for the passed directory name
+	 * @param watchDir The name of the watched directory to find the watched root for
+	 * @return The root watched directory, or null if the passed directory is not watched or if the 
+	 * passed directory is the root (i.e. the parent of the directory is not watched)
+	 */
+	public String getRootDir(String watchDir);
+	
+	/**
+	 * Returns a map of root watched directories keyed by each non-root watched directory
+	 * @return a map of root watched directories 
+	 */
+	public Map<String, String> getRootDirs();
 	
 	
 }

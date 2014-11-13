@@ -714,7 +714,7 @@ public class JMXHelper {
 			server.registerMBean(mbean, objectName);
 		} catch(Exception e) {
 			//throw new RuntimeException("Failed to register MBean [" + objectName + "]", e);
-			System.err.println("Failed to register MBean [" + objectName + "]");
+			System.err.println("Failed to register MBean [" + objectName + "]:" + e);
 		}
 	}
 	
