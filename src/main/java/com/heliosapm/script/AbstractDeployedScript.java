@@ -26,7 +26,12 @@ package com.heliosapm.script;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -39,6 +44,7 @@ import org.json.JSONObject;
 
 import com.heliosapm.filewatcher.ScriptFileWatcher;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
+import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 
 /**
@@ -57,6 +63,10 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	protected final File sourceFile;	
 	/** The source file extension */
 	protected final String extension;
+	/** The root watched directory */
+	protected final String rootDir;
+	/** The path segments */
+	protected final String[] pathSegments;
 	/** The configuration for this deployment */
 	protected final Map<String, Object> config = new ConcurrentHashMap<String, Object>();
 	
@@ -93,7 +103,38 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 		String tmp = URLHelper.getFileExtension(sourceFile);
 		if(tmp==null || tmp.trim().isEmpty()) throw new RuntimeException("The source file [" + sourceFile + "] has no extension");
 		extension = tmp.toLowerCase();
-		objectName = null; // FIXME
+		rootDir = ScriptFileWatcher.getInstance().getRootDir(sourceFile.getAbsolutePath());
+		pathSegments = calcPathSegments();
+		objectName = JMXHelper.objectName(new StringBuilder("org.heliosapm.deployments:")	// TODO: deployments vs. templates vs. config  vs. fixtures
+			.append("path=").append(join("/", pathSegments)).append(",")
+			.append("name=").append(sourceFile.getName()).append(",")
+			.append("extension=").append(extension)
+		);
+	}
+	
+	/**
+	 * Builds the path segments for this file
+	 * @return the path segments for this file
+	 */
+	protected String[] calcPathSegments() {
+		final File rootFile = new File(rootDir); 
+		if(rootFile.equals(sourceFile.getParentFile())) {
+			return new String[]{rootFile.getName()}; 
+		}
+		final List<String> segments = new ArrayList<String>();
+		segments.add(rootFile.getName());
+		Collections.addAll(segments, rootFile.toPath().relativize(sourceFile.getParentFile().toPath()).toString().replace("\\", "/").split("/"));
+		return segments.toArray(new String[segments.size()]);
+	}
+	
+	/**
+	 * Joins an array of strings to a delim separated string
+	 * @param delim The delimeter 
+	 * @param segs The array to join
+	 * @return the joined string
+	 */
+	protected String join(final String delim, final String[] segs) {
+		return Arrays.toString(segs).replace("]", "").replace("[", "").replace(" ", "").replace(",", delim);
 	}
 	
 	/**
@@ -156,21 +197,38 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	}
 
 
-
-//	/**
-//	 * {@inheritDoc}
-//	 * @see com.heliosapm.script.DeployedScript#getExecutable()
-//	 */
-//	@Override
-//	public T getExecutable() {
-//		if(executable==null) throw new RuntimeException("Executable has not been initialized");
-//		T t = executable.get();
-//		if(t==null) {
-//			try { undeploy(); } catch (Exception x) {/* No Op */}
-//			throw new RuntimeException("Executable has been gc'ed");
-//		}
-//		return t;
-//	}
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#getRoot()
+	 */
+	@Override
+	public String getRoot() {
+		return rootDir;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#getPathSegments()
+	 */
+	@Override
+	public String[] getPathSegments() {
+		return pathSegments;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#getExecutable()
+	 */
+	@Override
+	public T getExecutable() {
+		if(executable==null) throw new RuntimeException("Executable has not been initialized");
+		T t = executable.get();
+		if(t==null) {
+			try { undeploy(); } catch (Exception x) {/* No Op */}
+			throw new RuntimeException("Executable has been gc'ed");
+		}
+		return t;
+	}
 
 	/**
 	 * {@inheritDoc}

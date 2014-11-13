@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 
 import javax.script.Bindings;
 import javax.script.Compilable;
@@ -53,13 +52,18 @@ import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
 import javax.script.SimpleBindings;
 
+import org.cliffc.high_scale_lib.NonBlockingHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.heliosapm.SimpleLogger;
-import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
+import com.heliosapm.script.compilers.DeploymentCompiler;
+import com.heliosapm.script.compilers.GroovyCompiler;
+import com.heliosapm.script.compilers.JSR223Compiler;
 
 /**
  * <p>Title: StateService</p>
@@ -121,16 +125,28 @@ public class StateService {
 	private final Cache<String, Cache<String, CompiledScript>> scriptCache = CacheBuilder.newBuilder().concurrencyLevel(CORES).initialCapacity(16).recordStats().build();
 	/** The scoped script bindings cache  */
 	private final Cache<Object, Bindings> bindingsCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_BINDING_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build();
-	/** Instance simple logger */
-	private final SLogger log = SimpleLogger.logger(getClass());
+	
+	//===========================================================================================
+	//		Deployment Management
+	//===========================================================================================
+	/** The compiled deployment cache  */
+	private final Cache<String, DeployedScript<?>> deploymentCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_DEPLOYMENT_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build();
+	/** The deployment compilers keyed by script extension */
+	private final Map<String, DeploymentCompiler<?>> deploymentCompilers = new NonBlockingHashMap<String, DeploymentCompiler<?>>(16);
+	/** The catch-all deployment compiler */
+	private final DeploymentCompiler<CompiledScript> catchAllCompiler;
+	//===========================================================================================
+	
+	/** Instance logger */
+	private final Logger log = LoggerFactory.getLogger(getClass());
 //	/** The script engine */
 //	private final ScriptEngine engine; 
 //	/** The script compiler */
 //	private final Compilable compiler;
 	/** The script engines keyed by script extension */
-	private final Map<String, ScriptEngine> engines = new ConcurrentHashMap<String, ScriptEngine>(); 
+	private final Map<String, ScriptEngine> engines = new NonBlockingHashMap<String, ScriptEngine>(16); 
 	/** The script compilers keyed by script extension */
-	private final Map<String, Compilable> compilers = new ConcurrentHashMap<String, Compilable>();
+	private final Map<String, Compilable> compilers = new NonBlockingHashMap<String, Compilable>(16);
 	
 	
 	
@@ -162,6 +178,19 @@ public class StateService {
 	public boolean isExtensionSupported(final String extension) {
 		if(extension==null || extension.trim().isEmpty()) return false; //throw new IllegalArgumentException("The passed extension was null or empty");
 		return engines.containsKey(extension.trim().toLowerCase());
+	}
+	
+	/**
+	 * Installs a deployment compiler
+	 * @param deploymentCompiler The deployment compiler to install
+	 */
+	protected void installDeploymentCompiler(final DeploymentCompiler<?> deploymentCompiler) {
+		if(deploymentCompiler==null) throw new IllegalArgumentException("DeploymentCompiler was null");
+		final String[] extensions = deploymentCompiler.getSupportedExtensions();		
+		for(String extension: extensions) {			
+			deploymentCompilers.put(extension, deploymentCompiler);			
+		}
+		log.info("Installed DeploymentCompiler [{}] for extensions {}", deploymentCompiler.getClass().getSimpleName(), Arrays.toString(extensions));
 	}
 	
 	/**
@@ -393,9 +422,34 @@ public class StateService {
 	}
 	
 	/**
-	 * Returns the Compiler for the passed script extension
+	 * Retrieves the executable deployed script for the passed source file, creating it if it does not exist
+	 * @param sourceFile The source file to the the deployed script for
+	 * @return the deployed script instance
+	 */
+	public DeployedScript<?> getDeployedScript(final String sourceFile) {
+		if(sourceFile==null || sourceFile.trim().isEmpty()) throw new IllegalArgumentException("The passed source file was null or empty");
+		final File f = new File(sourceFile.trim()).getAbsoluteFile();
+		if(!f.exists()) throw new IllegalArgumentException("The passed file [" + f + "] does not exist");
+		if(!f.isFile()) throw new IllegalArgumentException("The passed file [" + f + "] is *not* a regular file");		
+		// TODO:  Check for linked files !
+		try {
+			return deploymentCache.get(f.getAbsolutePath(), new Callable<DeployedScript<?>>(){
+				@Override
+				public DeployedScript<?> call() throws Exception {
+					DeploymentCompiler<?> compiler = deploymentCompilers.get(URLHelper.getFileExtension(f));
+					return compiler.deploy(sourceFile);					
+				}
+			});
+			//Cache<String, DeployedScript<?>> deploymentCache
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to get deployment script for file [" + sourceFile + "]", ex);
+		}
+	}
+	
+	/**
+	 * Returns the DeploymentCompiler for the passed script extension
 	 * @param extension The script extension
-	 * @return the associated Compiler
+	 * @return the associated DeploymentCompiler
 	 */
 	public Compilable getCompilerForExtension(final String extension) {
 		if(extension==null || extension.trim().isEmpty()) throw new IllegalArgumentException("The passed extension was null");
@@ -458,7 +512,7 @@ public class StateService {
 		        return se;
 			} catch (Exception ex) {
 				se = null;
-				log.loge("Discarding engine [%s] v. [%s]", sef.getEngineName(), sef.getEngineVersion());
+				log.warn("Discarding engine [{}] v. [{}]", sef.getEngineName(), sef.getEngineVersion());
 			}
 		}
 		throw new RuntimeException("No compatible script engine found. Try Nashorn, Rhino or see https://github.com/mozilla/rhino/issues/127");		
@@ -474,7 +528,7 @@ public class StateService {
 				addedExtensions.add(extKey);
 			}
 		}
-		log.log("Installed ScriptEngine\n%s", renderEngine(se, addedExtensions));		
+		log.info("Installed ScriptEngine\n{}", renderEngine(se, addedExtensions));		
 	}
 	
 	/**
@@ -484,14 +538,11 @@ public class StateService {
 		sem = new ScriptEngineManager(getScriptClasspath());
 		engineBindings = new SimpleBindings();
 		engineBindings.put("stateService", this);		
-		//engine.setBindings(engineBindings, ScriptContext.ENGINE_SCOPE);
-		
 		// need to get a specific JS engine
 		installScriptEngine(findEngine());
 		for(ScriptEngineFactory foundSef: sem.getEngineFactories()) {
 			if(foundSef.getExtensions().contains("js")) continue;			
-			log.log("Located Additional ScriptEngine Impl:%s", foundSef.getScriptEngine());
-			//log.log("Located Additional ScriptEngine Impl:\n", renderEngine(foundSef.getScriptEngine()));
+			log.info("Located Additional ScriptEngine Impl:{}", foundSef.getScriptEngine());
 			for(String ext: foundSef.getExtensions()) {
 				if(!engines.containsKey(ext.trim().toLowerCase())) {
 					installScriptEngine(foundSef.getScriptEngine());
@@ -499,21 +550,15 @@ public class StateService {
 				}
 			}
 		}
-//		
-//		StringBuilder b = new StringBuilder("==============================\n\tSelected JS Engine:");
-//		b.append("\n\tEngine: [").append(engine.getFactory().getEngineName()).append("] version ").append(engine.getFactory().getEngineVersion());
-//		b.append("\n\tLanguage: [").append(engine.getFactory().getLanguageName()).append("] version ").append(engine.getFactory().getLanguageVersion());
-//		b.append("\n\tMime Types: ").append(engine.getFactory().getMimeTypes().toString());
-//		b.append("\n\tExtensions: ").append(engine.getFactory().getExtensions().toString());
-//		URL location = null;
-//		try { location = engine.getFactory().getClass().getProtectionDomain().getCodeSource().getLocation(); } catch (Exception x) {/* No Op */}		
-//		b.append("\n\tSEF: ").append(engine.getFactory().getClass().getName()).append("  CP:").append(location);
-//		log.log(b);
-		
+		installDeploymentCompiler(new GroovyCompiler());
 		loadJavaScriptHelpers();
-		
+		catchAllCompiler = new JSR223Compiler(this);
 	}
 	
+	/**
+	 * Checks for sysprop/env defined extra classpath for the script engines and installs it if found
+	 * @return the class loader to use for the script engine manager
+	 */
 	private ClassLoader getScriptClasspath() {
 		String[] paths = ArrayUtils.trim(ConfigurationHelper.getSystemThenEnvProperty(SCRIPT_CLASSPATH_PROP, "").split(","));
 		if(paths.length==0) return Thread.currentThread().getContextClassLoader();
@@ -527,7 +572,7 @@ public class StateService {
 			} catch (Exception x) { /* No Op */ }
 		}
 		if(urls.isEmpty()) return Thread.currentThread().getContextClassLoader();
-		log.log("Script Extra Classpath: %s", urls.toString());
+		log.info("Script Extra Classpath: {}", urls.toString());
 		return new URLClassLoader(urls.toArray(new URL[urls.size()]), Thread.currentThread().getContextClassLoader());
 	}
 	
@@ -538,7 +583,7 @@ public class StateService {
 	
 	private void loadJavaScriptHelpers() {
 		for(String fileName: JS_HELPERS) {
-			log.log("Loading JS Helper [%s]", fileName);
+			log.info("Loading JS Helper [{}]", fileName);
 			InputStream is = null; 
 			InputStreamReader isReader = null;
 			try {
@@ -548,22 +593,22 @@ public class StateService {
 					is = new FileInputStream("./src/main/resources/javascript/" + fileName);
 				}
 				if(is==null) {
-					log.loge("Could not find JS Helper File [%s]", fileName);
+					log.error("Could not find JS Helper File [{}]", fileName);
 					continue;
 				}
 				isReader = new InputStreamReader(is);
 				try {
 					Object c = getCompilerForExtension("js").compile(isReader); 
-					log.log("Compiled [%s] to [%s]:[%s]", fileName, c.getClass().getName(), c);
+					log.info("Compiled [{}] to [{}]:[{}]", fileName, c.getClass().getName(), c);
 				} catch (Exception ex) {
-					log.log("Compilation of [%s] Failed. Using Eval", fileName);
+					log.info("Compilation of [{}] Failed. Using Eval", fileName);
 					getEngineForExtension("js").eval(isReader);
 					
 				}
 				
-				log.log("Loaded JS Helper [%s]", fileName);
+				log.info("Loaded JS Helper [{}]", fileName);
 			} catch (Exception ex) {
-				log.loge("Failed to load JS Helper [%s] : %s", fileName, ex);
+				log.error("Failed to load JS Helper [{}]", fileName, ex);
 			} finally {
 				if(isReader!=null) try { isReader.close(); } catch (Exception x) {/* No Op */}
 				if(is!=null) try { is.close(); } catch (Exception x) {/* No Op */}

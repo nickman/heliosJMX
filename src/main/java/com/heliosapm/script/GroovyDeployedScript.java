@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2007, Helios Development Group and individual contributors
+ * Copyright 2014, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -24,32 +24,31 @@
  */
 package com.heliosapm.script;
 
+import groovy.lang.Script;
+
 import java.io.File;
 import java.lang.ref.WeakReference;
+import java.util.HashSet;
 import java.util.Set;
 
-import javax.script.CompiledScript;
-import javax.script.Invocable;
-import javax.script.ScriptContext;
-
 /**
- * <p>Title: JavaxScriptDeployedScript</p>
+ * <p>Title: GroovyDeployedScript</p>
  * <p>Description: </p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.JavaxScriptDeployedScript</code></p>
+ * <p><code>com.heliosapm.script.GroovyDeployedScript</code></p>
  */
 
-public class JavaxScriptDeployedScript extends AbstractDeployedScript<CompiledScript> {
+public class GroovyDeployedScript extends AbstractDeployedScript<Script> {
 
 	/**
-	 * Creates a new JavaxScriptDeployedScript
-	 * @param sourceFile The source file
-	 * @param cs The compiled script
+	 * Creates a new GroovyDeployedScript
+	 * @param sourceFile
+	 * @param gscript The compiled groovy script
 	 */
-	public JavaxScriptDeployedScript(final File sourceFile, final CompiledScript cs) {
+	public GroovyDeployedScript(File sourceFile, final Script gscript) {
 		super(sourceFile);
-		executable = new WeakReference<CompiledScript>(cs);
+		executable = new WeakReference<Script>(gscript);
 	}
 
 	/**
@@ -58,7 +57,7 @@ public class JavaxScriptDeployedScript extends AbstractDeployedScript<CompiledSc
 	 */
 	@Override
 	public Set<String> getInvocables() {
-		return getExecutable().getEngine().getContext().getBindings(ScriptContext.ENGINE_SCOPE).keySet();		
+		return new HashSet<String>(0);
 	}
 
 	/**
@@ -67,11 +66,7 @@ public class JavaxScriptDeployedScript extends AbstractDeployedScript<CompiledSc
 	 */
 	@Override
 	public Object execute() {
-		try {
-			return getExecutable().eval();
-		} catch (Exception ex) {
-			throw new RuntimeException("Failed to execute deployed script [" + this.getFileName() + "]", ex);
-		}
+		return getExecutable().run();
 	}
 
 	/**
@@ -80,12 +75,7 @@ public class JavaxScriptDeployedScript extends AbstractDeployedScript<CompiledSc
 	 */
 	@Override
 	public Object invoke(String name, Object... args) {
-		try {
-			Invocable inv = (Invocable)getExecutable();
-			return inv.invokeFunction(name, args);
-		} catch (Exception ex) {
-			throw new RuntimeException("Failed to execute invocable [" + name + "] in script [" + this.getFileName() + "]", ex);
-		}
+		return getExecutable().invokeMethod(name, args);
 	}
 
 }

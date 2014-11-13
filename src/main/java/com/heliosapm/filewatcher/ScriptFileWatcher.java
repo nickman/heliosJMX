@@ -171,7 +171,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 					try {
 						String s = br.readLine();
 						if(s.equalsIgnoreCase("exit")) {
-							svr.stop();
+							if(svr!=null) svr.stop();
 							System.exit(0);
 						}
 					} catch (Exception ex) {
@@ -625,7 +625,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			}
 			
 		}
-		return watchedParent==null ? null : watchedParent.getAbsolutePath();
+		return watchedParent==null ? f.getAbsolutePath() : watchedParent.getAbsolutePath();
 	}
 	
 	/**
@@ -849,7 +849,8 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	protected boolean shouldIgnore(final Path path) {
 		if(path==null) return true;
 		final File f = path.toFile();
-		if(ignoredExtensions.contains(URLHelper.getFileExtension(f, "").trim().toLowerCase())) return true;
+		final String extension = URLHelper.getFileExtension(f, "").trim().toLowerCase();
+		if(extension.isEmpty() || ignoredExtensions.contains(extension)) return true;
 		final String name = f.getName().toLowerCase();
 		for(final String pref: ignoredPrefixes) {
 			if(name.startsWith(pref)) return true;

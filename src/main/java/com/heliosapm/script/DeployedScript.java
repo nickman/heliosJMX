@@ -57,6 +57,18 @@ public interface DeployedScript<T> {
 	public String getFileName();
 	
 	/**
+	 * Returns the root watched directory for this file
+	 * @return the root watched directory for this file
+	 */
+	public String getRoot();
+	
+	/**
+	 * Returns the path segments of this file's root watched directory down to this file's directory
+	 * @return the path segments 
+	 */
+	public String[] getPathSegments();
+	
+	/**
 	 * Updates the executable
 	 * @param executable The executable
 	 */

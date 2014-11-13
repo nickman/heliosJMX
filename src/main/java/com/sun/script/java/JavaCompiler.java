@@ -39,7 +39,7 @@ import javax.tools.*;
 
 /**
  * <p>Title: JavaCompiler</p>
- * <p>Description: Simple interface to Java compiler using JSR 199 Compiler API.</p> 
+ * <p>Description: Simple interface to Java compiler using JSR 199 DeploymentCompiler API.</p> 
  * <p>Project: <a href="https://github.com/nickman/javax-scripting">JSR-233 Java Scripting</a></p>
  * <p>Packaged and maintained by Whitehead (nwhitehead AT heliosdev DOT org)</p>
  * <p><code>com.sun.script.java.JavaCompiler</code></p>
