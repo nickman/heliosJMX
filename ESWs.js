@@ -1,25 +1,29 @@
 //var wsurl = "ws://pdk-pt-cetsd-01:9400/websocket";
 var wsurl = "ws://localhost:9400/websocket";
-var ws = new WebSocket(wsurl);
-ws.onclose = function(evt) {
+var wsSub = new WebSocket(wsurl);
+var subInterval = -1;
+wsSub.onclose = function(evt) {
 	if(evt.wasClean) console.info("WebSocket Closed")
 	else console.error("WebSocket Closed: [%s]", evt.reason);
 }
-ws.onopen = function(evt) {
+wsSub.onopen = function(evt) {
 	console.info("WebSocket Connected")	
-	setInterval(function() {
-		if(ws.bufferedAmount == 0) {
-			go();
+	subInterval = setInterval(function() {
+		if(wsSub.bufferedAmount == 0) {
+			console.debug("Starting SubGo");
+			subgo();
 		}
 	}, 100);
 }
-ws.onmessage = function(messageEvent) {
+wsSub.onmessage = function(messageEvent) {
 	console.group("WebSocket Message:")
 	console.info("%s", messageEvent.data);
 	console.groupEnd();
-	ws.close();
+	
 }
 
-function go() {
-	ws.send('{"type" : "subscribe", "data" : {"topic": "mytopic", "subscriber" : "nicholas"}}');
+function subgo() {
+	console.info("Canceling Interval %s", subInterval);
+	clearInterval(subInterval);
+	wsSub.send('{"type" : "subscribe", "data" : {"topic": "mytopic", "subscriber" : "nicholas"}}');
 }
