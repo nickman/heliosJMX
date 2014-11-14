@@ -88,11 +88,13 @@
 			  <version>${groovy.version}</version>
 			</dependency>
 	
+			<!-- 
 			<dependency>
 			  <groupId>org.elasticsearch</groupId>
 			  <artifactId>elasticsearch-client-groovy</artifactId>
 			  <version>0.10.0</version>
 			</dependency>
+			 -->
 
 		<!-- Runtime -->
 			<dependency>
@@ -111,13 +113,16 @@
 			  <groupId>org.mozilla</groupId>
 			  <artifactId>rhino</artifactId>
 			  <version>${rhino.version}</version>
+			  <scope>runtime</scope>
 			</dependency>
-			
+
+			<!-- 
 			<dependency>
-			  <groupId>org.apache.bsf</groupId>
-			  <artifactId>bsf-api</artifactId>
-			  <version>3.0-beta3</version>
+			  <groupId>org.helios.scripting</groupId>
+			  <artifactId>engines</artifactId>
+			  <version>1.0-SNAPSHOT</version>
 			</dependency>
+			-->			
 			
 			<dependency>
 		    	<groupId>org.unix4j</groupId>

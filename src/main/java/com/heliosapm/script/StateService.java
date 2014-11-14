@@ -569,12 +569,16 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 		installScriptEngine(findEngine());
 		for(ScriptEngineFactory foundSef: sem.getEngineFactories()) {
 			if(foundSef.getExtensions().contains("js")) continue;			
-			log.info("Located Additional ScriptEngine Impl:{}", foundSef.getScriptEngine());
-			for(String ext: foundSef.getExtensions()) {
-				if(!engines.containsKey(ext.trim().toLowerCase())) {
-					installScriptEngine(foundSef.getScriptEngine());
-					break;
+			try {				
+				for(String ext: foundSef.getExtensions()) {
+					if(!engines.containsKey(ext.trim().toLowerCase())) {
+						installScriptEngine(foundSef.getScriptEngine());
+						break;
+					}
 				}
+				log.info("Located Additional ScriptEngine Impl:{}", foundSef.getScriptEngine());
+			} catch (Throwable ex) {
+				log.warn("Failed to install SEF [{}]. Skipping.", foundSef.getClass().getName());				
 			}
 		}
 		registerCacheMBeans();
@@ -635,39 +639,67 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 	}
 	
 	private void loadJavaScriptHelpers() {
+		final boolean inJar = areWeJarred();
+		final ScriptEngine se = getEngineForExtension("js");
 		for(String fileName: JS_HELPERS) {
 			log.info("Loading JS Helper [{}]", fileName);
-			InputStream is = null; 
-			InputStreamReader isReader = null;
 			try {
-				if(areWeJarred()) {
-					is = getClass().getClassLoader().getResourceAsStream("/javascript/" + fileName);
-				} else {
-					is = new FileInputStream("./src/main/resources/javascript/" + fileName);
-				}
-				if(is==null) {
-					log.error("Could not find JS Helper File [{}]", fileName);
-					continue;
-				}
-				isReader = new InputStreamReader(is);
-				try {
-					Object c = getCompilerForExtension("js").compile(isReader); 
-					log.info("Compiled [{}] to [{}]:[{}]", fileName, c.getClass().getName(), c);
-				} catch (Exception ex) {
-					log.info("Compilation of [{}] Failed. Using Eval", fileName);
-					getEngineForExtension("js").eval(isReader);
-					
-				}
-				
-				log.info("Loaded JS Helper [{}]", fileName);
+				loadJavaScriptFrom(se, inJar, "/javascript/" + fileName, "./src/main/resources/javascript/" + fileName);
 			} catch (Exception ex) {
 				log.error("Failed to load JS Helper [{}]", fileName, ex);
-			} finally {
-				if(isReader!=null) try { isReader.close(); } catch (Exception x) {/* No Op */}
-				if(is!=null) try { is.close(); } catch (Exception x) {/* No Op */}
 			}
 		}
+		final String expected = "{\"foo\":123}";
+		boolean jsonSupport = testScript(se, "var a = {\"foo\": 123}; JSON.stringify(a);", expected);
+		if(!jsonSupport) {
+			log.info("JSON.stringify not implemented. Loading backup");
+			loadJavaScriptFrom(se, inJar, "/javascript/json/json2.js", "./src/main/resources/javascript/json/json2.js");
+			jsonSupport = testScript(se, "var a = {'\"foo\": 123}; JSON.stringify(a);", expected);			
+		}
+		log.info("JSON.stringify supported after backup: {}", jsonSupport);
+	}
 		
+	
+	private void loadJavaScriptFrom(final ScriptEngine se, final boolean inJar, final String jarPath, final String devPath) {
+		InputStream is = null; 
+		InputStreamReader isReader = null;
+		String path = inJar ? jarPath : devPath;
+		try {
+			if(inJar) {
+				is = getClass().getClassLoader().getResourceAsStream(path);
+			} else {
+				is = new FileInputStream(path);
+			}
+			if(is==null) {
+				throw new Exception("Could not find JS Helper File [" + path + "]");					
+			}
+			isReader = new InputStreamReader(is);
+			try {
+				((Compilable)se).compile(isReader);				
+				log.info("Compiled [{}]", path);
+			} catch (Exception ex) {
+				log.info("Compilation of [{}] Failed. Using Eval", path);
+				se.eval(isReader);				
+			}			
+			log.info("Loaded JS Helper [{}]", path);			
+		} catch (Exception ex) {
+			throw new RuntimeException(ex);
+		} finally {
+			if(isReader!=null) try { isReader.close(); } catch (Exception x) {/* No Op */}
+			if(is!=null) try { is.close(); } catch (Exception x) {/* No Op */}			
+		}
+	}
+	
+	public static boolean testScript(final ScriptEngine se, final String script, final Object expected) {
+		try {
+			Object a = se.eval(script);
+			if(expected!=null) {
+				return expected.equals(a);
+			}
+			return true;
+		} catch (Exception ex) {
+			return false;
+		}
 	}
 	
 	/**
