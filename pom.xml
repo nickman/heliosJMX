@@ -88,6 +88,11 @@
 			  <version>${groovy.version}</version>
 			</dependency>
 	
+			<dependency>
+			  <groupId>org.elasticsearch</groupId>
+			  <artifactId>elasticsearch-client-groovy</artifactId>
+			  <version>0.10.0</version>
+			</dependency>
 
 		<!-- Runtime -->
 			<dependency>

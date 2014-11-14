@@ -43,7 +43,7 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> {
 
 	/**
 	 * Creates a new GroovyDeployedScript
-	 * @param sourceFile
+	 * @param sourceFile The groovy source file
 	 * @param gscript The compiled groovy script
 	 */
 	public GroovyDeployedScript(File sourceFile, final Script gscript) {

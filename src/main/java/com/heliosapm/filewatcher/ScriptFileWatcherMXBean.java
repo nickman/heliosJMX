@@ -48,11 +48,9 @@ public interface ScriptFileWatcherMXBean {
 	/** The MBean ObjectName for the file watcher's thread pool */
 	public static final ObjectName THREAD_POOL_OBJECT_NAME = JMXHelper.objectName("com.heliosapm.filewatcher:service=ThreadPool");
 
-	/** The MBean ObjectName for the file watcher's JMX notification thread pool */
-	public static final ObjectName NOTIF_THREAD_POOL_OBJECT_NAME = JMXHelper.objectName("com.heliosapm.filewatcher:service=NotificationThreadPool");
-
 	/** The number of CPU cores available to the JVM */
 	public static final int CORES = ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors();
+	
 	
 	/** The conf property name for the startup watched dirs */
 	public static final String INITIAL_DIRS_PROP = "com.heliosapm.filewatcher.initialdirs";

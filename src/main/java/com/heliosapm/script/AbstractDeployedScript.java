@@ -26,7 +26,6 @@ package com.heliosapm.script;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -85,9 +84,9 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	/** The last error time  */
 	protected final AtomicLong lastErrorTime = new AtomicLong(-1L);
 	/** The execution count since the last reset  */
-	protected final AtomicLong execCount = new AtomicLong(-1L);
+	protected final AtomicLong execCount = new AtomicLong(0L);
 	/** The error count since the last reset  */
-	protected final AtomicLong errorCount = new AtomicLong(-1L);
+	protected final AtomicLong errorCount = new AtomicLong(0L);
 	
 	/** The deployment's JMX ObjectName */
 	protected final ObjectName objectName;
@@ -103,12 +102,12 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 		String tmp = URLHelper.getFileExtension(sourceFile);
 		if(tmp==null || tmp.trim().isEmpty()) throw new RuntimeException("The source file [" + sourceFile + "] has no extension");
 		extension = tmp.toLowerCase();
-		rootDir = ScriptFileWatcher.getInstance().getRootDir(sourceFile.getAbsolutePath());
+		rootDir = ScriptFileWatcher.getInstance().getRootDir(sourceFile.getParentFile().getAbsolutePath());
 		pathSegments = calcPathSegments();
-		objectName = JMXHelper.objectName(new StringBuilder("org.heliosapm.deployments:")	// TODO: deployments vs. templates vs. config  vs. fixtures
+		objectName = JMXHelper.objectName(new StringBuilder("com.heliosapm.deployments:")	// TODO: deployments vs. templates vs. config  vs. fixtures
 			.append("path=").append(join("/", pathSegments)).append(",")
-			.append("name=").append(sourceFile.getName()).append(",")
-			.append("extension=").append(extension)
+			.append("extension=").append(extension).append(",")
+			.append("name=").append(sourceFile.getName())			
 		);
 	}
 	
@@ -298,14 +297,21 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getSource()
+	 * @see com.heliosapm.script.DeployedScriptMXBean#returnSourceBytes()
 	 */
 	@Override
-	public byte[] getSource() {
+	public byte[] returnSourceBytes() {
 		return URLHelper.getBytesFromURL(URLHelper.toURL(sourceFile));
 	}
 	
-	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#returnSource()
+	 */
+	@Override
+	public String returnSource() {
+		return URLHelper.getTextFromURL(URLHelper.toURL(sourceFile), 1000, 1000);
+	}
 
 	/**
 	 * {@inheritDoc}
@@ -457,5 +463,64 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 		return status.get().canSchedulerExec;
 	}
 	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#addConfiguration(java.lang.String, java.lang.String)
+	 */
+	@Override
+	public void addConfiguration(final String key, final String value) {
+		addConfiguration(key, (Object)value);		
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#executeForString()
+	 */
+	@Override
+	public String executeForString() {		
+		Object obj = execute();
+		return obj==null ? null : obj.toString();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getConfigString(java.lang.String)
+	 */
+	@Override
+	public String getConfigString(final String key) {
+		Object obj = getConfig(key);
+		return obj==null ? null : obj.toString();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getConfigurationMap()
+	 */
+	@Override
+	public Map<String, String> getConfigurationMap() {
+		final Map<String, String> map = new HashMap<String, String>(config.size());
+		for(Map.Entry<String, Object> entry: config.entrySet()) {
+			map.put(entry.getKey(), entry.getValue().toString());
+		}
+		return map;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getStatusName()
+	 */
+	@Override
+	public String getStatusName() {		
+		return getStatus().name();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#setSchedulePeriodInt(int)
+	 */
+	@Override
+	public void setSchedulePeriodInt(final int period) {
+		setSchedulePeriod(period);		
+	}
 
 }

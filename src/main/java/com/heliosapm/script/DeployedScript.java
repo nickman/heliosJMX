@@ -38,7 +38,7 @@ import javax.management.ObjectName;
  * @param <T> The type of the underlying executable script
  */
 
-public interface DeployedScript<T> {
+public interface DeployedScript<T> extends DeployedScriptMXBean {
 	
 	/** The config name for the default schedule if a deployment does not provide one */
 	public static final String DEFAULT_SCHEDULE_PROP = "com.heliosapm.deployment.defaultschedule";
@@ -74,17 +74,6 @@ public interface DeployedScript<T> {
 	 */
 	public void setExecutable(final T executable);
 	
-	/**
-	 * Returns the file extension
-	 * @return the file extension
-	 */
-	public String getExtension();
-	
-	/**
-	 * Returns a set of the names of sub-invocables in the executable
-	 * @return a set of the names of sub-invocables in the executable
-	 */
-	public Set<String> getInvocables();
 	
 	/**
 	 * Returns the executable deployment
@@ -134,42 +123,6 @@ public interface DeployedScript<T> {
 	public DeploymentStatus getStatus();
 	
 	/**
-	 * Returns the deployment's script source code
-	 * @return the deployment's script source code
-	 */
-	public byte[] getSource();
-	
-	/**
-	 * Returns the timestamp of the last modification
-	 * @return the timestamp of the last modification
-	 */
-	public long getLastModTime();
-	
-	/**
-	 * Returns the timestamp of the last execution
-	 * @return the timestamp of the last execution
-	 */
-	public long getLastExecTime();
-	
-	/**
-	 * Returns the timestamp of the last error
-	 * @return the timestamp of the last error
-	 */
-	public long getLastErrorTime();
-	
-	/**
-	 * Returns the total number of executions since the last reset
-	 * @return the total number of executions since the last reset
-	 */
-	public long getExecutionCount();
-	
-	/**
-	 * Returns the total number of errors since the last reset
-	 * @return the total number of errors since the last reset
-	 */
-	public long getErrorCount();
-	
-	/**
 	 * Executes the underlying executable script
 	 * @return the execution return value
 	 */
@@ -184,61 +137,10 @@ public interface DeployedScript<T> {
 	public Object invoke(String name, Object...args);
 	
 	/**
-	 * Returns this deployment's calculated ObjectName
-	 * @return the deployment's ObjectName
-	 */
-	public ObjectName getObjectName();
-	
-	/**
-	 * Returns a JSON rendering of this deployment
-	 * @return a JSON rendering of this deployment
-	 */
-	public String toJSON();
-	
-	/**
-	 * Returns the deployment's scheduled execution period, or more accurately,
-	 * the number of seconds delay between the end of one execution and the next.
-	 * If the returned value is less than one, it will not be scheduled.
-	 * @return the scheduling period in seconds.
-	 */
-	public int getSchedulePeriod();
-	
-	/**
 	 * Sets the deployment's scheduled execution period
 	 * @param period An integral number
 	 */
 	public void setSchedulePeriod(Object period);
-	
-	/**
-	 * Writes this new source the originating source file.
-	 * The header will be flagged to tell the file watcher to skip if recompile is enabled.
-	 * @param source The source to write
-	 * @param recompile If true, will recompile the deployment
-	 */
-	public void updateSource(String source, boolean recompile);
-	
-	/**
-	 * Undeploys this deployment
-	 */
-	public void undeploy();
-	
-	
-	/**
-	 * Pauses the deployment, meaning it will not be invoked by the scheduler
-	 */
-	public void pause();
-	
-	/**
-	 * Indicates if the deployment can be executed (manually)
-	 * @return true if the deployment can be executed, false otherwise
-	 */
-	public boolean isExecutable();
-	
-	/**
-	 * Indicates if the deployment can be executed by the scheduler
-	 * @return true if the deployment can be executed by the scheduler, false otherwise
-	 */
-	public boolean isScheduleExecutable();
 	
 	
 }

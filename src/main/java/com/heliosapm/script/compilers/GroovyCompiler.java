@@ -34,15 +34,12 @@ import java.util.Arrays;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
-import javax.script.CompiledScript;
-
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilerConfiguration;
 
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.GroovyDeployedScript;
-import com.heliosapm.script.JavaxScriptDeployedScript;
 
 /**
  * <p>Title: GroovyCompiler</p>
@@ -100,7 +97,7 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	public Script compile(final URL source) throws CompilerException {
 		if(source==null) throw new IllegalArgumentException("The passed source URL was null");
 		final String extension = URLHelper.getExtension(source, "").trim().toLowerCase();
-		if("groovy".equals(extension)) throw new RuntimeException("Source type [" + extension + "] in source URL [" + source + "] is not supported by this compiler");
+		if(!"groovy".equals(extension)) throw new RuntimeException("Source type [" + extension + "] in source URL [" + source + "] is not supported by this compiler");
 		String sourceCode = URLHelper.getTextFromURL(source, 1000, 1000);
 		String headerLine = EOL_SPLITTER.split(sourceCode, 2)[0].trim();
 		GroovyShell shellToUse = groovyShell;
@@ -124,13 +121,9 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	 * @see com.heliosapm.script.compilers.DeploymentCompiler#deploy(java.lang.String)
 	 */
 	@Override
-	public DeployedScript<Script> deploy(final String sourceFile) {
-		try {
-			final Script executable = compile(new File(sourceFile).toURI().toURL());
-			return new GroovyDeployedScript(new File(sourceFile), executable);
-		} catch (Exception ex) {
-			throw new RuntimeException(ex);
-		}		
+	public DeployedScript<Script> deploy(final String sourceFile) throws CompilerException {
+		final Script executable = compile(URLHelper.toURL(new File(sourceFile)));
+		return new GroovyDeployedScript(new File(sourceFile), executable);		
 	}
 	
 

@@ -51,8 +51,9 @@ public interface DeploymentCompiler<T> {
 	 * Prepares a DeployedScript from the passed source file and executable instance
 	 * @param sourceFile The source file 
 	 * @return the deployed script
+	 * @throws CompilerException thrown if the compilation fails
 	 */
-	public DeployedScript<T> deploy(final String sourceFile);
+	public DeployedScript<T> deploy(final String sourceFile) throws CompilerException;
 	
 	/**
 	 * Returns an array of the source file extensions supported by this compiler.

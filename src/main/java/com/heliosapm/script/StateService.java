@@ -42,6 +42,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
+import javax.management.MBeanNotificationInfo;
+import javax.management.NotificationBroadcasterSupport;
 import javax.script.Bindings;
 import javax.script.Compilable;
 import javax.script.CompiledScript;
@@ -58,8 +60,13 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalListener;
+import com.google.common.cache.RemovalNotification;
+import com.heliosapm.jmx.cache.CacheStatistics;
+import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
+import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.compilers.DeploymentCompiler;
 import com.heliosapm.script.compilers.GroovyCompiler;
@@ -73,7 +80,7 @@ import com.heliosapm.script.compilers.JSR223Compiler;
  * <p><code>com.heliosapm.jmx.util.helpers.StateService</code></p>
  */
 
-public class StateService { 
+public class StateService extends NotificationBroadcasterSupport implements RemovalListener<Object, Object> { 
 	/** The singleton instance */
 	private static volatile StateService instance = null;
 	/** The singleton instance ctor lock */
@@ -81,6 +88,12 @@ public class StateService {
 	
 	/** The number of processors in the current JVM */
 	public static final int CORES = ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors();
+	
+	/** The descriptors of the JMX notifications emitted by this service */
+	private static final MBeanNotificationInfo[] notificationInfos = new MBeanNotificationInfo[] {
+		// TODO: add infos
+	};
+	
 
 	/** The conf property name for a list of comma separated URLs to additional classpaths to add to the script engine factory classloader */
 	public static final String SCRIPT_CLASSPATH_PROP = "com.heliosapm.jmx.stateservice.classpath";
@@ -106,8 +119,8 @@ public class StateService {
 		"maximumSize=5120," + 
 		"expireAfterWrite=15m," +
 		"expireAfterAccess=15m," +
-		"weakValues," +
-		"recordStats";
+		"weakValues" +
+		",recordStats";
 	
 	/** A set of javascript helper source code file names */
 	public static final Set<String> JS_HELPERS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
@@ -432,15 +445,28 @@ public class StateService {
 		if(!f.exists()) throw new IllegalArgumentException("The passed file [" + f + "] does not exist");
 		if(!f.isFile()) throw new IllegalArgumentException("The passed file [" + f + "] is *not* a regular file");		
 		// TODO:  Check for linked files !
+		// TODO:  Events
+		// TODO:  Schedule
+		// TODO:  Pre-Check Extension Support
+		// TODO:  File Deletion --> Undeploy
 		try {
 			return deploymentCache.get(f.getAbsolutePath(), new Callable<DeployedScript<?>>(){
 				@Override
 				public DeployedScript<?> call() throws Exception {
-					DeploymentCompiler<?> compiler = deploymentCompilers.get(URLHelper.getFileExtension(f));
-					return compiler.deploy(sourceFile);					
+					try {
+						DeploymentCompiler<?> compiler = deploymentCompilers.get(URLHelper.getFileExtension(f));
+						if(compiler==null) {
+							compiler = catchAllCompiler;
+						}
+						DeployedScript<?> ds = compiler.deploy(sourceFile);					
+						JMXHelper.registerMBean(ds.getObjectName(), ds);
+						return ds;
+					} catch (Exception ex) {
+						log.error("Failed to deploy [{}]", sourceFile, ex);
+						throw ex;
+					}
 				}
 			});
-			//Cache<String, DeployedScript<?>> deploymentCache
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to get deployment script for file [" + sourceFile + "]", ex);
 		}
@@ -535,6 +561,7 @@ public class StateService {
 	 * Creates a new StateService
 	 */
 	private StateService() {
+		super(SharedNotificationExecutor.getInstance(), notificationInfos);
 		sem = new ScriptEngineManager(getScriptClasspath());
 		engineBindings = new SimpleBindings();
 		engineBindings.put("stateService", this);		
@@ -550,9 +577,35 @@ public class StateService {
 				}
 			}
 		}
+		registerCacheMBeans();
 		installDeploymentCompiler(new GroovyCompiler());
 		loadJavaScriptHelpers();
 		catchAllCompiler = new JSR223Compiler(this);
+	}
+	
+	/**
+	 * Registers all the cache MBeans
+	 */
+	private void registerCacheMBeans() {
+		registerCacheMBean(deploymentCache, "deployments");
+		registerCacheMBean(bindingsCache, "bindings");
+		registerCacheMBean(doubleDeltaCache, "doubleDeltas");
+		registerCacheMBean(longDeltaCache, "longDeltas");
+		registerCacheMBean(scriptCache, "scripts");
+		registerCacheMBean(simpleStateCache, "state");
+	}
+	
+	/**
+	 * Registers a cache MBean
+	 * @param cache The cache instance
+	 * @param name The cache name
+	 */
+	private void registerCacheMBean(final Cache<?, ?> cache, final String name) {
+		try {
+			new CacheStatistics(cache, name).register();
+		} catch (Exception ex) {
+			log.error("Failed to register cache [{}] : {}", name, ex.toString());
+		}
 	}
 	
 	/**
@@ -643,6 +696,16 @@ public class StateService {
 		b.append("\n\tMIME Types:").append(sef.getMimeTypes().toString());
 		b.append("\n\tShort Names:").append(sef.getNames().toString());
 		return b.toString();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see com.google.common.cache.RemovalListener#onRemoval(com.google.common.cache.RemovalNotification)
+	 */
+	@Override
+	public void onRemoval(final RemovalNotification<Object, Object> notification) {
+		
+		
 	}
 
 }

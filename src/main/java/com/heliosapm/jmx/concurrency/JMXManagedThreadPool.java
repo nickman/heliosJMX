@@ -80,6 +80,8 @@ public class JMXManagedThreadPool extends ThreadPoolExecutor implements ThreadFa
 			return new long[1];
 		}
 	};
+	/** An externally added exception handler */
+	protected UncaughtExceptionHandler exceptionHandler = null;
 
 	
 	/**
@@ -128,9 +130,18 @@ public class JMXManagedThreadPool extends ThreadPoolExecutor implements ThreadFa
 	 */
 	public JMXManagedThreadPool(ObjectName objectName, String poolName, int corePoolSize, int maximumPoolSize, int queueSize, long keepAliveTimeMs, int metricWindowSize, int metricDefaultPercentile) {
 		this(objectName, poolName, corePoolSize, maximumPoolSize, queueSize, keepAliveTimeMs, metricWindowSize, metricDefaultPercentile, true);
+		
+	}
+	/**
+	 * Sets the thread pool's uncaught exception handler
+	 * @param exceptionHandler the handler to set
+	 */
+	public void setUncaughtExceptionHandler(final UncaughtExceptionHandler exceptionHandler) {
+		if(exceptionHandler!=null) {
+			this.exceptionHandler = exceptionHandler;
+		}
 	}
 	
-
 	/**
 	 * Creates a new JMXManagedThreadPool
 	 * @param objectName The JMX ObjectName for this pool's MBean 
@@ -201,7 +212,9 @@ public class JMXManagedThreadPool extends ThreadPoolExecutor implements ThreadFa
 	public void uncaughtException(Thread t, Throwable e) {
 		uncaughtExceptionCount.incrementAndGet();
 		log.warn("Thread pool handled uncaught exception on thread [" + t + "]", e);
-		
+		if(exceptionHandler!=null) {
+			exceptionHandler.uncaughtException(t, e);
+		}
 	}
 
 

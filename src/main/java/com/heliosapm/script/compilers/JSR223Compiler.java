@@ -81,15 +81,9 @@ public class JSR223Compiler implements DeploymentCompiler<CompiledScript> {
 	 * @see com.heliosapm.script.compilers.DeploymentCompiler#deploy(java.lang.String)
 	 */
 	@Override
-	public DeployedScript<CompiledScript> deploy(final String sourceFile) {
-		
-		try {
-			final CompiledScript executable = compile(new File(sourceFile).toURI().toURL());
-			return new JavaxScriptDeployedScript(new File(sourceFile), executable);
-		} catch (Exception ex) {
-			throw new RuntimeException(ex);
-		}
-		
+	public DeployedScript<CompiledScript> deploy(final String sourceFile) throws CompilerException {
+		final CompiledScript executable = compile(URLHelper.toURL(new File(sourceFile)));
+		return new JavaxScriptDeployedScript(new File(sourceFile), executable);
 	}
 	
 	

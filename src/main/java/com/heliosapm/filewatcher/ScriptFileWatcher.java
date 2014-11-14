@@ -66,10 +66,13 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.heliosapm.jmx.cache.CacheStatistics;
 import com.heliosapm.jmx.concurrency.JMXManagedThreadPool;
+import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
+import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.StateService;
 
 
@@ -188,7 +191,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 * Creates a new ScriptFileWatcher
 	 */
 	private ScriptFileWatcher() {
-		super(new JMXManagedThreadPool(NOTIF_THREAD_POOL_OBJECT_NAME, "WatcherNotificationThreadPool", CORES, CORES, 1024, 60000, 100, 90), notificationInfos);
+		super(SharedNotificationExecutor.getInstance(), notificationInfos);
 		keepRunning.set(true);
 		try {
 			watcher = FileSystems.getDefault().newWatchService();
@@ -196,7 +199,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			log.error("Failed to create default WatchService", ex);
 			throw new RuntimeException("Failed to create default WatchService", ex);
 		}
-		eventHandlerPool = new JMXManagedThreadPool(THREAD_POOL_OBJECT_NAME, "FileWatcherThreadPool", CORES, CORES * 2, 1024, 60000, 100, 90);
+		eventHandlerPool = new JMXManagedThreadPool(THREAD_POOL_OBJECT_NAME, "FileWatcherThreadPool", CORES, CORES * 2, 1024, 60000, 100, 90);		
 		hotDirs = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(DIR_CACHE_PROP, DIR_CACHE_DEFAULT_SPEC)).build();
 		scriptManager = StateService.getInstance();
 		Map<WatchEventType, Set<FileChangeEventHandler>> tmpHandlerMap = new EnumMap<WatchEventType, Set<FileChangeEventHandler>>(WatchEventType.class);
@@ -216,9 +219,28 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		registerEventHandler(deletedDirectoryHandler);
 		startFileEventListener();
 		addDefaultHotDirs();
-		
-		
 	}
+	
+	/**
+	 * Registers all the cache MBeans
+	 */
+	private void registerCacheMBeans() {
+		registerCacheMBean(hotDirs, "watchedDirectories");
+	}
+	
+	/**
+	 * Registers a cache MBean
+	 * @param cache The cache instance
+	 * @param name The cache name
+	 */
+	private void registerCacheMBean(final Cache<?, ?> cache, final String name) {
+		try {
+			new CacheStatistics(cache, name).register();
+		} catch (Exception ex) {
+			log.error("Failed to register cache [{}] : {}", name, ex.toString());
+		}
+	}
+	
 	
 	/**
 	 * Adds the default hot directories
@@ -685,8 +707,9 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			return;
 		}
 		hotFileNames.add(watchFile);
+		scriptManager.getDeployedScript(fileEvent.getFileName());
 		if(fileEvent!=null) sendNotification(fileEvent.toNotification(notificationIdFactory.incrementAndGet()));
-		log.info("Added watched  file [{}]", watchFile);
+		log.info("Added watched file [{}]", watchFile);
 	}
 	
 	/**
