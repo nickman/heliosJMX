@@ -187,7 +187,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	@Override
 	public Set<ObjectName> getListenOnTargets() {
 		try {
-			final String onformat = String.format("%s:root=%s,%sextension=config,subextension=none,name=%%s", DeployedScript.CONFIG_DOMAIN, rootDir.replace(':', ';'), configDirs());
+			final String onformat = String.format("%s:root=%s,%sextension=config,subextension=*,name=%%s", DeployedScript.CONFIG_DOMAIN, rootDir.replace(':', ';'), configDirs());
 			return new HashSet<ObjectName>(Arrays.asList(
 					//com.heliosapm.configuration:
 						//root=C;\hprojects\heliosJMX\.\src\test\resources\testdir\hotdir,
