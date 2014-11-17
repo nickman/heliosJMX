@@ -159,7 +159,8 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	}
 	
 	public static void main(String[] args) {
-		String initialHotDir = System.getProperty("java.io.tmpdir") + File.separator + "hotdir";
+		String initialHotDir = "./src/test/resources/testdir/hotdir"; 
+				//System.getProperty("java.io.tmpdir") + File.separator + "hotdir";
 		System.setProperty(INITIAL_DIRS_PROP, initialHotDir);
 		System.err.println("Initial HotDir:" + initialHotDir);
 		JMXConnectorServer server = null;
@@ -172,7 +173,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		}		
 		
 		ScriptFileWatcher sfw = getInstance();
-		sfw.addWatchDirectory(System.getProperty("java.io.tmpdir") + File.separator + "hotdir");
+		sfw.addWatchDirectory(initialHotDir);  //System.getProperty("java.io.tmpdir") + File.separator + "hotdir"
 		final JMXConnectorServer svr = server;
 		new Thread("ExitWatcher") {
 			public void run() {

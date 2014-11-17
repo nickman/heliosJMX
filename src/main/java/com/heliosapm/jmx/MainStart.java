@@ -41,7 +41,8 @@ import io.hawt.embedded.Main;
 
 public class MainStart {
 	
-	protected static final String HAWT_WAR = "/home/nwhitehead/.m2/repository/io/hawt/hawtio-web/1.5-redhat-047/hawtio-web-1.5-redhat-047.war";
+	//protected static final String HAWT_WAR = "/home/nwhitehead/.m2/repository/io/hawt/hawtio-web/1.5-redhat-047/hawtio-web-1.5-redhat-047.war";
+	protected static final String HAWT_WAR = "c:\\users\\nwhitehe\\.m2\\repository\\io\\hawt\\hawtio-web\\1.4.19\\hawtio-web-1.4.19.war";
 	protected static final Logger LOG = LoggerFactory.getLogger(MainStart.class);
 
 	/**
@@ -51,6 +52,9 @@ public class MainStart {
 		LOG.info("Starting heliosJMX....");
 		final Main main = new Main();
 		main.setWar(HAWT_WAR);
+		main.setPort(9090);
+		//main.setContextPath("/");
+		System.setProperty("hawtio.authenticationEnabled", "false");
 		Thread bootThread = new Thread("HeliosJMXBootStrap") {
 			public void run() {
 				try {

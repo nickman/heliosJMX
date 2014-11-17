@@ -90,13 +90,27 @@ public class CodeBuilder {
 	}
 	
 	/**
+	 * Trims the last n characters off the end of the current buffer
+	 * @param chars The number of characters to trim
+	 * @return this CodeBuilder
+	 */
+	public CodeBuilder trim(final int chars) {
+		for(int i = 0; i < chars; i++) {
+			buff.deleteCharAt(buff.length()-1);
+		}
+		return this;
+	}
+	
+	/**
 	 * Renders the code, optionally formatted if tokens are provided
 	 * @param tokens The format tokens
 	 * @return the rendered code
 	 */
-	public String render(Object...tokens) {
+	public String render(final Object...tokens) {
 		return String.format(buff.toString(), tokens);
 	}
+	
+	
 	
 	/**
 	 * {@inheritDoc}

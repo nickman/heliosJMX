@@ -56,9 +56,21 @@ public interface DeployedScript<T> extends DeployedScriptMXBean {
 	public static final String NOTIF_CONFIG_CHANGE = NOTIF_ROOT + ".configchange";	
 	/** The jmx notification type for a config change in the deployment */
 	public static final String NOTIF_RECOMPILE = NOTIF_ROOT + ".recompile";	
+	/** The jmx notification type for a config change in a configuration source */
+	public static final String NOTIF_CONFIG_MOD = NOTIF_ROOT + ".config.change";
+	/** The jmx notification type for a new configuration source registration */
+	public static final String NOTIF_CONFIG_NEW = NOTIF_ROOT + ".config.new";	
 	
 	/** The default schedule if not configured */
 	public static final int DEFAULT_SCHEDULE = 15;
+	
+	/** The JMX domain for configurations */
+	public static final String CONFIG_DOMAIN = "com.heliosapm.configuration";
+	/** The JMX domain for fixtures */
+	public static final String FIXTURE_DOMAIN = "com.heliosapm.fixture";
+	/** The JMX domain for services */
+	public static final String SERVICE_DOMAIN = "com.heliosapm.service";
+	
 	
 	
 	/**

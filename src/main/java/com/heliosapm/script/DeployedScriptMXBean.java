@@ -41,6 +41,18 @@ import javax.management.ObjectName;
 public interface DeployedScriptMXBean {
 	
 	/**
+	 * Returns the unqualified name of the deployment with no extensions
+	 * @return the unqualified name of the deployment with no extensions
+	 */
+	public String getShortName();
+	
+	/**
+	 * Returns a set of JMX ObjectNames for MBeans that this deployment should listen on for changes
+	 * @return a set of JMX ObjectNames for MBeans that this deployment should listen on for changes
+	 */
+	public Set<ObjectName> getListenOnTargets();
+	
+	/**
 	 * Returns the last modified timestamp of the script's underlying source file
 	 * @return the last modified timestamp of the script's underlying source file
 	 */

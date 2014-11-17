@@ -50,6 +50,8 @@ import java.util.regex.Pattern;
 
 import javax.management.AttributeChangeNotification;
 import javax.management.MBeanNotificationInfo;
+import javax.management.MBeanRegistration;
+import javax.management.MBeanServer;
 import javax.management.Notification;
 import javax.management.NotificationBroadcasterSupport;
 import javax.management.ObjectName;
@@ -75,7 +77,7 @@ import com.heliosapm.jmx.util.helpers.URLHelper;
  * @param <T> The type of the underlying executable script
  */
 
-public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterSupport implements DeployedScript<T> {
+public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterSupport implements DeployedScript<T>, MBeanRegistration {
 	/** Instance logger */
 	protected final Logger log;
 	/** The underlying executable component */
@@ -83,7 +85,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	/** The originating source file */
 	protected final File sourceFile;
 	/** The linked source file */
-	protected final File linkedFile;	
+	protected final File linkedFile;
+	/** The deployment short name */
+	protected final String shortName;
 	
 	/** The checksum of the source */
 	protected long checksum = -1L;
@@ -141,7 +145,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	
 	
 	/** The deployment's insta notifications */
-	protected final Set<MBeanNotificationInfo> instanceNotificationInfos = new HashSet<MBeanNotificationInfo>();
+	protected final Set<MBeanNotificationInfo> instanceNotificationInfos = new HashSet<MBeanNotificationInfo>(Arrays.asList(notificationInfos));
 
 	/** The default deployment domain */
 	public static final String DEFAULT_DEPLOYMENT_DOMAIN = "com.heliosapm.deployments";
@@ -154,6 +158,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	public AbstractDeployedScript(File sourceFile) {
 		super(SharedNotificationExecutor.getInstance(), notificationInfos);
 		this.sourceFile = sourceFile;
+		shortName = URLHelper.getPlainFileName(sourceFile);
 		final Path link = this.sourceFile.toPath();
 		Path tmpPath = null;
 		if(Files.isSymbolicLink(link)) {
@@ -172,8 +177,45 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		log = LoggerFactory.getLogger(StringHelper.fastConcatAndDelim("/", pathSegments) + "/" + sourceFile.getName().replace('.', '_'));
 		objectName = buildObjectName();
 		checksum = URLHelper.adler32(URLHelper.toURL(sourceFile));
-		lastModified = URLHelper.getLastModified(URLHelper.toURL(sourceFile));
-		
+		lastModified = URLHelper.getLastModified(URLHelper.toURL(sourceFile));		
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getListenOnTargets()
+	 */
+	@Override
+	public Set<ObjectName> getListenOnTargets() {
+		try {
+			final String onformat = String.format("%s:root=%s,%sextension=config,subextension=none,name=%%s", DeployedScript.CONFIG_DOMAIN, rootDir.replace(':', ';'), configDirs());
+			return new HashSet<ObjectName>(Arrays.asList(
+					//com.heliosapm.configuration:
+						//root=C;\hprojects\heliosJMX\.\src\test\resources\testdir\hotdir,
+						//d1=X,
+						//d2=Y,
+						// name=jmx,
+						// extension=config,
+						//subextension=properties
+					
+					JMXHelper.objectName(String.format(onformat, pathSegments[pathSegments.length-1])),
+					JMXHelper.objectName(String.format(onformat, shortName))
+			));
+		} catch (Exception ex) {
+			log.error("Failed to get listen on targets", ex);
+			throw new RuntimeException("Failed to get listen on targets", ex);
+		}
+	}
+	
+	/**
+	 * Compiles the path segment into a set of ObjectName keypairs
+	 * @return a set of ObjectName keypairs
+	 */
+	protected String configDirs() {
+		StringBuilder b = new StringBuilder();
+		for(int i = 1; i < pathSegments.length; i++) {
+			b.append("d").append(i).append("=").append(pathSegments[i]).append(",");
+		}
+		return b.toString();
 	}
 	
 	/**
@@ -188,7 +230,41 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 				);
 	}
 	
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.NotificationBroadcasterSupport#getNotificationInfo()
+	 */
+	@Override
+	public MBeanNotificationInfo[] getNotificationInfo() {
+		if(instanceNotificationInfos.isEmpty()) {
+			return super.getNotificationInfo();			
+		}
+		return instanceNotificationInfos.toArray(new MBeanNotificationInfo[instanceNotificationInfos.size()]);
+	}
 	
+	/**
+	 * Adds a new notification type for this deployment
+	 * @param infos The notification infos to add
+	 */
+	protected void registerNotifications(final MBeanNotificationInfo...infos) {
+		if(infos==null || infos.length==0) return;
+		if(instanceNotificationInfos.isEmpty()) {
+			Collections.addAll(instanceNotificationInfos, notificationInfos);
+		}
+		int added = 0;
+		for(MBeanNotificationInfo info: infos) {
+			if(info==null) continue;
+			if(instanceNotificationInfos.add(info)) {
+				added++;
+			}
+		}
+		if(added>0) {
+			// META_CHANGED_NOTIF = new MBeanNotificationInfo(new String[] {MBEAN_INFO_CHANGED}, Notification.class.getName(), "Broadcast when an MBean's meta-data changes");
+			final Notification notif = new Notification(JMXHelper.MBEAN_INFO_CHANGED, objectName, sequence.incrementAndGet(), System.currentTimeMillis(), "Updated MBeanInfo");
+			notif.setUserData(JMXHelper.getMBeanInfo(objectName));
+			sendNotification(notif);
+		}
+	}
 	
 	
 	/**
@@ -356,6 +432,15 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	public String getFileName() {
 		return sourceFile.getAbsolutePath();
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getShortName()
+	 */
+	@Override
+	public String getShortName() {	
+		return shortName;
+	}
 
 	/**
 	 * {@inheritDoc}
@@ -413,6 +498,10 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return new HashMap<String, Object>(config);
 	}
 	
+	//==============================================================================================================================
+	//		Add Configuration Ops 
+	//==============================================================================================================================
+	
 	/**
 	 * {@inheritDoc}
 	 * @see com.heliosapm.script.DeployedScript#addConfiguration(java.util.Map)
@@ -421,16 +510,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	public void addConfiguration(final Map<String, Object> config) {
 		if(config==null) throw new IllegalArgumentException("The passed config map was null");
 		config.putAll(config);
-	}
-	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#callInvocable(java.lang.String)
-	 */
-	@Override
-	public String callInvocable(final String name) {
-		if(name==null || name.trim().isEmpty()) throw new IllegalArgumentException("The passed name was null");
-		return null;
 	}
 	
 	/**
@@ -450,6 +529,29 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 			}
 		}
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#addConfiguration(java.lang.String, java.lang.String)
+	 */
+	@Override
+	public void addConfiguration(final String key, final String value) {
+		addConfiguration(key, (Object)value);		
+	}
+	
+	
+	//==============================================================================================================================	
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#callInvocable(java.lang.String)
+	 */
+	@Override
+	public String callInvocable(final String name) {
+		if(name==null || name.trim().isEmpty()) throw new IllegalArgumentException("The passed name was null");
+		return null;
+	}
+	
 	
 	/**
 	 * {@inheritDoc}
@@ -685,14 +787,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return status.get().canSchedulerExec;
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#addConfiguration(java.lang.String, java.lang.String)
-	 */
-	@Override
-	public void addConfiguration(final String key, final String value) {
-		addConfiguration(key, (Object)value);		
-	}
 	
 	/**
 	 * {@inheritDoc}
@@ -746,10 +840,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	}
 
 	
-//	new MBeanNotificationInfo(new String[]{NOTIF_STATUS_CHANGE}, AttributeChangeNotification.class.getName(), "JMX notification broadcast when the status of a deployment changes"),
-//	new MBeanNotificationInfo(new String[]{NOTIF_CONFIG_CHANGE}, Notification.class.getName(), "JMX notification broadcast when the configuration of a deployment changes"),
-//	new MBeanNotificationInfo(new String[]{NOTIF_RECOMPILE}, Notification.class.getName(), "JMX notification broadcast when a deployment is recompiled")
-	
 	/**
 	 * Sends a status change notification
 	 * @param prior The prior status
@@ -781,22 +871,31 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 */
 	@Override
 	public Set<ObjectName> locateConfiguration() {
-		final Set<ObjectName> configs = new LinkedHashSet<ObjectName>();
-		// com.heliosapm.configuration:root=/tmp/hotdir,d1=X,d2=Y,d3=Z,name=Z,extension=config,subextension=js
-		final String deplName = getPlainDeploymentName(sourceFile.getName());
-		CodeBuilder b = new CodeBuilder("com.heliosapm.configuration:root=", rootDir, ",extension=config,subextension=*");
-		b.push();
-		b.append("name=root");
-		Collections.addAll(configs, JMXHelper.query(b.render()));
-		b.pop();
-		b.append("name=%s", deplName);
-		Collections.addAll(configs, JMXHelper.query(b.render()));
-		b.pop();
-		for(int i = 1; i < pathSegments.length; i++) {
-			b.append(",d%s=%s");
+		try {
+			final Map<String, Object> configMap = new HashMap<String, Object>();
+			final Set<ObjectName> configs = new LinkedHashSet<ObjectName>();
+			// com.heliosapm.configuration:root=/tmp/hotdir,d1=X,d2=Y,d3=Z,name=Z,extension=config,subextension=js
+			final String deplName = shortName;
+			CodeBuilder b = new CodeBuilder("com.heliosapm.configuration:root=", rootDir.replace(':',  ';'), ",extension=config,subextension=*,");
+			b.push();
+			b.append("name=root");
 			Collections.addAll(configs, JMXHelper.query(b.render()));
+			b.pop();
+			b.push();
+			b.append("name=%s", deplName);
+			Collections.addAll(configs, JMXHelper.query(b.render()));
+			b.pop();
+			for(int i = 1; i < pathSegments.length; i++) {
+				b.append("d%s=%s,", i, pathSegments[i]);				
+				Collections.addAll(configs, JMXHelper.query(b.render() + "name=" + pathSegments[i]));
+				Collections.addAll(configs, JMXHelper.query(b.render() + "name=" + deplName));
+				log.info("Config search:\n\tSearching for MBean [{}]", b.render());									
+			}
+			return configs;
+		} catch (Exception ex) {
+			log.error("Failure locating configuration MBeans", ex);
+			throw new RuntimeException("Failure locating configuration MBeans", ex);
 		}
-		return configs;
 	}
 	
 //	/**
@@ -843,7 +942,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		@Override
 		public boolean accept(final File dir, final String name) {
 			if(ext.equals(URLHelper.getExtension(new File(dir, name)))) {
-				return (plainName!=null && plainName.equals(getPlainDeploymentName(name))); 
+				return (plainName!=null && plainName.equals(URLHelper.getPlainFileName(name))); 
 			}			
 			return false;
 		}
@@ -856,7 +955,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		 * for each dir:  foo.config, foo.*.config, dir.config, dir.*.config
 		 * 
 		 */
-		final String deplName = getPlainDeploymentName(sourceFile.getName());
+		final String deplName = URLHelper.getPlainFileName(sourceFile);
 		final ConfigFileFilter cff = new ConfigFileFilter("root");
 		final File root = new File(rootDir);
 		for(File f: root.listFiles(cff)) {
@@ -888,24 +987,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return false;
 	}
 
-	/**
-	 * Extracts the plain file name (i.e. without any extensions)
-	 * @param fileName The file name to get the plain file name from
-	 * @return the plain file name
-	 */
-	protected static String getPlainDeploymentName(final String fileName) {
-		if(fileName==null || fileName.trim().isEmpty()) throw new IllegalArgumentException("The passed file name was null or empty");
-		final int dotIndex = fileName.indexOf(".");		
-		String f = fileName;
-		if(dotIndex!=-1) {
-			f = f.substring(0, dotIndex);
-		}
-		final int sepIndex = fileName.lastIndexOf(File.separatorChar);
-		if(sepIndex!=-1) {
-			f = f.substring(sepIndex+1);
-		}		
-		return f;		
-	}
+
 	
 	/**
 	 * {@inheritDoc}
@@ -933,6 +1015,49 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	public Date getLastModifiedDate() {
 		return new Date(lastModified);
 	}
+	
+	
+	//================================================================================================================================
+	//		MBeanRegistration default implementation
+	//================================================================================================================================
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanRegistration#preRegister(javax.management.MBeanServer, javax.management.ObjectName)
+	 */
+	@Override
+	public ObjectName preRegister(final MBeanServer server, final ObjectName name) throws Exception {
+		return name;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanRegistration#postRegister(java.lang.Boolean)
+	 */
+	@Override
+	public void postRegister(final Boolean registrationDone) {
+		/* No Op */
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanRegistration#preDeregister()
+	 */
+	@Override
+	public void preDeregister() throws Exception {
+		/* No Op */
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.management.MBeanRegistration#postDeregister()
+	 */
+	@Override
+	public void postDeregister() {
+		/* No Op */		
+	}
+
+	//================================================================================================================================
 	
 	
 }

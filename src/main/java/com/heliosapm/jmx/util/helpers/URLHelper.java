@@ -120,6 +120,68 @@ public class URLHelper {
 	
 	
 	/**
+	 * Returns the unqualified file name, sans extension and subextension.
+	 * Examples:<ul>  
+	 * 		<li><b><code>http://abc.com/index.html</code></b> would be <b><code>index</code></b></li>
+	 * 		<li><b><code>http://abc.com/index.abc.html</code></b> would be <b><code>index</code></b></li>
+	 * 		<li><b><code>http://abc.com/index</code></b> would be <b><code>index</code></b></li>
+	 * 		<li><b><code>http://abc.com/index.3.abc.html</code></b> would be <b><code>index.3</code></b></li>
+	 * </ul> 
+	 * @param url The URL to get the plain file name for
+	 * @return the plain file name
+	 */
+	public static String getPlainFileName(final URL url) {
+		if(url==null) throw new IllegalArgumentException("The passed URL was null");
+		String fileName = new File(url.getFile()).getName();
+		final String ext = getExtension(url);
+		final String subext = getSubExtension(url, null);
+		if(ext!=null) {
+			fileName = fileName.replace("." + ext, "");
+		}
+		if(subext!=null) {
+			fileName = fileName.replace("." + subext, "");
+		}
+		return fileName;
+	}
+
+	/**
+	 * Returns the unqualified file name, sans extension and subextension.
+	 * @param file The URL to get the plain file name for
+	 * @return the plain file name
+	 * @see {@link URLHelper#getPlainFileName(URL)} for details
+	 */
+	@SuppressWarnings("javadoc")
+	public static String getPlainFileName(final File file) {
+		return getPlainFileName(file.getName());
+	}
+	
+	/**
+	 * Returns the unqualified file name, sans extension and subextension.
+	 * @param name The URL to get the plain file name for
+	 * @return the plain file name
+	 * @see {@link URLHelper#getPlainFileName(URL)} for details
+	 */
+	@SuppressWarnings("javadoc")
+	public static String getPlainFileName(final CharSequence name) {
+		if(name==null) throw new IllegalArgumentException("The passed name was null");
+		String fileName = name.toString();
+		int index = fileName.lastIndexOf('/');
+		if(index!=-1) fileName = fileName.substring(index);
+		index = fileName.lastIndexOf(File.separatorChar);
+		if(index!=-1) fileName = fileName.substring(index);
+		final String ext = getExtension(name, null);
+		final String subext = getSubExtension(name, null);
+		if(ext!=null) {
+			fileName = fileName.replace("." + ext, "");
+		}
+		if(subext!=null) {
+			fileName = fileName.replace("." + subext, "");
+		}
+		return fileName;
+	}
+	
+	
+	/**
 	 * Reads the content of a URL as text using the default connect and read timeouts.
 	 * @param url The url to get the text from
 	 * @return a string representing the text read from the passed URL
@@ -548,6 +610,30 @@ public class URLHelper {
 		}
 		return file.substring(file.lastIndexOf(".")+1);
 	}
+	
+	/**
+	 * Returns the extension of the passed name
+	 * @param name The name to get the extension of
+	 * @param defaultValue The default value to return if there is no extension
+	 * @return the file extension, or the default value if the file has no extension
+	 */
+	public static String getExtension(final CharSequence name, final String defaultValue) {
+		if(name==null || name.toString().trim().isEmpty()) throw new IllegalArgumentException("The passed name was null or empty", new Throwable());
+		String file = name.toString().trim();
+		if(file.lastIndexOf(".")==-1) {
+			return defaultValue;
+		}
+		return file.substring(file.lastIndexOf(".")+1);		
+	}
+	
+	/**
+	 * Returns the extension of the passed name, returning null if there is no extension
+	 * @param name The name to get the extension of
+	 * @return the file extension, or the default value if the file has no extension
+	 */
+	public static String getExtension(final CharSequence name) {
+		return getExtension(name, null);
+	}
 
 	/**
 	 * Returns the extension of the passed file
@@ -569,12 +655,24 @@ public class URLHelper {
 	 * @return the subextension or the default if there was none or it was empty
 	 */
 	public static String getSubExtension(final URL url, final String defaultValue) {
-		if(url==null) throw new RuntimeException("The passed url was null", new Throwable());
+		if(url==null) throw new IllegalArgumentException("The passed url was null", new Throwable());
 		String file = url.getFile();
 		String[] segments = DOT_SPLITTER.split(file);
-		if(segments.length <= 2) return null;
+		if(segments.length <= 2) return defaultValue;
 		return segments[segments.length-2];
 	}
+	
+	/**
+	 * Returns the subextension of the passed URL which is the dot segment prior to the extension,
+	 * so if the {@link URL#getFile()} is <b><code>foo/bar.sub.ext</code></b>, the subextension
+	 * would be <b><code>sub</code></b>. Returns null if there is no subextension
+	 * @param url The URL to get the subextension for
+	 * (i.e. the {@link URL#getFile()} was, implausibly, <b><code>foo/bar..ext</code></b>. 
+	 * @return the subextension or the default if there was none or it was empty
+	 */
+	public static String getSubExtension(final URL url) {
+		return getSubExtension(url, null);
+	}	
 	
 	/**
 	 * Returns the subextension of the passed file which is the dot segment prior to the extension,
@@ -589,26 +687,47 @@ public class URLHelper {
 		return getSubExtension(toURL(file), defaultValue);
 	}
 	
-	
 	/**
-	 * Returns the extension of the passed URL's file
-	 * @param url The URL to get the extension of
-	 * @return the file extension, or null if the file has no extension
+	 * Returns the subextension of the passed file which is the dot segment prior to the extension,
+	 * so if the {@link File#getName()} is <b><code>foo/bar.sub.ext</code></b>, the subextension
+	 * would be <b><code>sub</code></b>. Returns null if there is no subextension
+	 * @param file The File to get the subextension for
+	 * (i.e. the {@link File#getName()} was, implausibly, <b><code>foo/bar..ext</code></b>. 
+	 * @return the subextension or the default if there was none or it was empty
 	 */
-	public static String getExtension(CharSequence url) {
-		return getExtension(url, null);
+	public static String getSubExtension(final File file) {
+		return getSubExtension(file, null);
+	}
+	
+
+	/**
+	 * Returns the subextension of the passed name which is the dot segment prior to the extension,
+	 * so if the name is <b><code>foo/bar.sub.ext</code></b>, the subextension
+	 * would be <b><code>sub</code></b>.
+	 * @param name The name to get the subextension for
+	 * @param defaultValue The default value if there is no subextension or it is empty
+	 * @return the subextension or the default if there was none or it was empty
+	 */
+	public static String getSubExtension(final CharSequence name, final String defaultValue) {
+		if(name==null || name.toString().trim().isEmpty()) throw new IllegalArgumentException("The passed name was null or empty", new Throwable());
+		String file = name.toString().trim();
+		String[] segments = DOT_SPLITTER.split(file);
+		if(segments.length <= 2) return defaultValue;
+		return segments[segments.length-2];
 	}
 	
 	/**
-	 * Returns the extension of the passed URL's file
-	 * @param url The URL to get the extension of
-	 * @param defaultValue The default value to return if there is no extension
-	 * @return the file extension, or the default value if the file has no extension
+	 * Returns the subextension of the passed name which is the dot segment prior to the extension,
+	 * so if the name is <b><code>foo/bar.sub.ext</code></b>, the subextension
+	 * would be <b><code>sub</code></b>. Returns null if there is no subextension
+	 * @param name The name to get the subextension for
+	 * @return the subextension or the default if there was none or it was empty
 	 */
-	public static String getExtension(CharSequence url, String defaultValue) {
-		if(url==null) throw new RuntimeException("The passed url was null", new Throwable());
-		return getExtension(toURL(url), defaultValue);
+	public static String getSubExtension(final CharSequence name) {
+		return getSubExtension(name, null);
 	}
+	
+
 	
 	/**
 	 * Returns the extension of the passed file
