@@ -38,6 +38,8 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.regex.Pattern;
+import java.util.zip.Adler32;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
@@ -58,6 +60,9 @@ public class URLHelper {
 
 	/** Text line separator */
 	public static final String EOL = System.getProperty("line.separator", "\n");
+	/** A dot splitter pattern */
+	public static final Pattern DOT_SPLITTER = Pattern.compile("\\.");
+
 	
 	/** The system property to retrieve the default client connect timeout in ms.  */
 	public static final String DEFAULT_CONNECT_TO = "sun.net.client.defaultConnectTimeout";
@@ -92,6 +97,27 @@ public class URLHelper {
 		if(t==null) throw new IllegalArgumentException(message!=null ? message : "Null parameter");
 		return t;
 	}
+	
+	/**
+	 * Returns the unqualified file name for the passed URL
+	 * @param url The URL to the file name for
+	 * @return The file name
+	 */
+	public static String getFileName(final CharSequence url) {
+		return getFileName(toURL(url));
+	}
+	
+	
+	/**
+	 * Returns the unqualified file name for the passed URL
+	 * @param url The URL to the file name for
+	 * @return The file name
+	 */
+	public static String getFileName(final URL url) {
+		if(url==null) throw new IllegalArgumentException("The passed URL was null");
+		return new File(url.getFile()).getName();
+	}
+	
 	
 	/**
 	 * Reads the content of a URL as text using the default connect and read timeouts.
@@ -307,16 +333,26 @@ public class URLHelper {
 	 * @param url The URL to get the timestamp for
 	 * @return the last modified time stamp for the passed URL
 	 */
-	public static long getLastModified(URL url) {
+	public static long getLastModified(final URL url) {
 		URLConnection conn = null;
 		try {
 			conn = nvl(url, "Passed URL was null").openConnection();
 			return conn.getLastModified();
 		} catch (Exception e) {
 			throw new RuntimeException("Failed to get LastModified for [" + url + "]", e);
-		}
+		} 
 	}
 	
+	/**
+	 * Returns the last modified time stamp for the passed file
+	 * @param file The file to get the timestamp for
+	 * @return the last modified time stamp for the passed file
+	 */
+	public static long getLastModified(final File file) {
+		if(file==null) throw new IllegalArgumentException("The passed file was null");
+		if(!file.exists()) throw new IllegalArgumentException("The passed file [" + file + "] does not exist");
+		return file.lastModified();
+	}
 	
 	/**
 	 * Determines if the passed string is a valid URL
@@ -489,6 +525,16 @@ public class URLHelper {
 	}
 	
 	/**
+	 * Returns the extension of the passed file
+	 * @param file  The file to get the extension of
+	 * @return the file extension, or null if the file has no extension
+	 */
+	public static String getExtension(final File file) {
+		return getExtension(toURL(file), null);
+	}
+	
+	
+	/**
 	 * Returns the extension of the passed URL's file
 	 * @param url The URL to get the extension of
 	 * @param defaultValue The default value to return if there is no extension
@@ -502,6 +548,47 @@ public class URLHelper {
 		}
 		return file.substring(file.lastIndexOf(".")+1);
 	}
+
+	/**
+	 * Returns the extension of the passed file
+	 * @param file The file to get the extension of
+	 * @param defaultValue The default value to return if there is no extension
+	 * @return the file extension, or the default value if the file has no extension
+	 */
+	public static String getExtension(final File file, final String defaultValue) {
+		return getExtension(toURL(file), defaultValue);
+	}
+	
+	/**
+	 * Returns the subextension of the passed URL which is the dot segment prior to the extension,
+	 * so if the {@link URL#getFile()} is <b><code>foo/bar.sub.ext</code></b>, the subextension
+	 * would be <b><code>sub</code></b>.
+	 * @param url The URL to get the subextension for
+	 * @param defaultValue The default value if there is no subextension or it is empty
+	 * (i.e. the {@link URL#getFile()} was, implausibly, <b><code>foo/bar..ext</code></b>. 
+	 * @return the subextension or the default if there was none or it was empty
+	 */
+	public static String getSubExtension(final URL url, final String defaultValue) {
+		if(url==null) throw new RuntimeException("The passed url was null", new Throwable());
+		String file = url.getFile();
+		String[] segments = DOT_SPLITTER.split(file);
+		if(segments.length <= 2) return null;
+		return segments[segments.length-2];
+	}
+	
+	/**
+	 * Returns the subextension of the passed file which is the dot segment prior to the extension,
+	 * so if the {@link File#getName()} is <b><code>foo/bar.sub.ext</code></b>, the subextension
+	 * would be <b><code>sub</code></b>.
+	 * @param file The File to get the subextension for
+	 * @param defaultValue The default value if there is no subextension or it is empty
+	 * (i.e. the {@link File#getName()} was, implausibly, <b><code>foo/bar..ext</code></b>. 
+	 * @return the subextension or the default if there was none or it was empty
+	 */
+	public static String getSubExtension(final File file, final String defaultValue) {
+		return getSubExtension(toURL(file), defaultValue);
+	}
+	
 	
 	/**
 	 * Returns the extension of the passed URL's file
@@ -528,7 +615,7 @@ public class URLHelper {
 	 * @param f The file to get the extension of
 	 * @return the file extension, or null if the file has no extension
 	 */
-	public static String getFileExtension(File f) {
+	public static String getFileExtension(final File f) {
 		return getFileExtension(f, null);
 	}
 	
@@ -564,6 +651,50 @@ public class URLHelper {
 		return getExtension(toURL(new File(f)), defaultValue);		
 	}
 	
+	/**
+	 * Sets the last modified time on the file underlying the passed URL.
+	 * Ignored if the file does not exist or if the protocol of the URL is not <b><code>file</code></b>.
+	 * @param url The URL to touch the file for
+	 * @param touchTime The time to set
+	 */
+	public static void touch(final URL url, final long touchTime) {
+		if(url==null) throw new IllegalArgumentException("The passed url was null");
+		if("file".equals(url.getProtocol())) {
+			final File f = new File(url.getFile());
+			if(f.exists()) {
+				f.setLastModified(touchTime);
+			}
+		}
+	}
 
+	/**
+	 * Sets the last modified time on the file underlying the passed URL to current.
+	 * Ignored if the file does not exist or if the protocol of the URL is not <b><code>file</code></b>.
+	 * @param url The URL to touch the file for
+	 */
+	public static void touch(final URL url) {
+		touch(url, System.currentTimeMillis());
+	}
+	
+	/**
+	 * Returns an {@link Adler32} checksum of the content from the passed URL
+	 * @param url The URL to read the content from
+	 * @return the checksum of the content
+	 */
+	public static long adler32(final URL url) {
+		if(url==null) throw new IllegalArgumentException("The passed url was null");		
+		final Adler32 ad32 = new Adler32();
+		ad32.update(URLHelper.getBytesFromURL(url));
+		return ad32.getValue();
+	}
+	
+	/**
+	 * Returns an {@link Adler32} checksum of the content from the passed file
+	 * @param file The file to read the content from
+	 * @return the checksum of the content
+	 */
+	public static long adler32(final File file) {
+		return adler32(toURL(file));
+	}
 
 }

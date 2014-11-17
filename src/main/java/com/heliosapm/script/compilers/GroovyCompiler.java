@@ -69,6 +69,7 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	 */
 	public GroovyCompiler(final CompilerConfiguration defaultConfig) {
 		this.defaultConfig = defaultConfig==null ? new CompilerConfiguration(CompilerConfiguration.DEFAULT) : defaultConfig;
+		this.defaultConfig.setTolerance(0);		
 		groovyShell = new GroovyShell(this.defaultConfig);
 	}
 	
@@ -122,11 +123,21 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	 */
 	@Override
 	public DeployedScript<Script> deploy(final String sourceFile) throws CompilerException {
-		final Script executable = compile(URLHelper.toURL(new File(sourceFile)));
-		return new GroovyDeployedScript(new File(sourceFile), executable);		
+		final Script executable;
+		try {
+			executable = compile(URLHelper.toURL(new File(sourceFile)));
+			return new GroovyDeployedScript(new File(sourceFile), executable);
+		} catch (CompilerException er) {
+			final GroovyDeployedScript gds = new GroovyDeployedScript(new File(sourceFile), null);
+			final URL sourceURL = URLHelper.toURL(sourceFile);
+			final long ad32 = URLHelper.adler32(sourceURL);
+			final long ts = URLHelper.getLastModified(sourceURL);
+			gds.setFailedExecutable(er.getDiagnostic(), ad32, ts);
+			return gds;
+		}				
 	}
 	
-
+ 
 	/**
 	 * {@inheritDoc}
 	 * @see com.heliosapm.script.compilers.DeploymentCompiler#getSupportedExtensions()
@@ -147,8 +158,8 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 			final CompilationFailedException se = (CompilationFailedException)t;
 			return new StringBuilder()
 				.append("Message: ").append(se.getMessage())
-				.append(", ProcessingUnit: ").append(se.getUnit().getPhaseDescription())
-				.append(", Module: ").append(se.getModule().getDescription())
+				.append(", ProcessingUnit: ").append(se.getUnit()==null ? "none" : se.getUnit().getPhaseDescription())
+				.append(", Module: ").append(se.getModule()==null ? "none" : se.getModule().getDescription())
 				.toString();
 		}
 		return "NonCompiler Diagnostic:" + t.toString();

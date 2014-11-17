@@ -34,6 +34,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.WatchEvent;
@@ -43,9 +44,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.DelayQueue;
 import java.util.concurrent.Future;
@@ -72,7 +75,6 @@ import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
-import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.StateService;
 
 
@@ -106,6 +108,11 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	protected final JMXManagedThreadPool eventHandlerPool; 
 	/** The watch key cache */
 	protected final Cache<Path, WatchKey> hotDirs; 
+	/** The watched templates and watch keys */
+	protected final Cache<String, WatchKey> templateWatches;
+	/** The watched templates and mappings */
+	protected final Cache<String, Set<String>> templateMappings;
+	
 	/** The keep running flag */
 	protected final AtomicBoolean keepRunning = new AtomicBoolean(false);
 	/** The processing delay queue that ensures the same file is not processed concurrently for two different events */
@@ -118,7 +125,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	protected final Set<String> hotFileNames = new CopyOnWriteArraySet<String>();
 	
 	/** Extensions to ignore */
-	protected final Set<String> ignoredExtensions = new CopyOnWriteArraySet<String>(Arrays.asList("bak"));
+	protected final Set<String> ignoredExtensions = new CopyOnWriteArraySet<String>(Arrays.asList("bak", "swp", "swx", ""));
 	/** Prefixes to ignore */
 	protected final Set<String> ignoredPrefixes = new CopyOnWriteArraySet<String>(Arrays.asList("."));	
 	/** The script cache and compiler */
@@ -200,7 +207,12 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			throw new RuntimeException("Failed to create default WatchService", ex);
 		}
 		eventHandlerPool = new JMXManagedThreadPool(THREAD_POOL_OBJECT_NAME, "FileWatcherThreadPool", CORES, CORES * 2, 1024, 60000, 100, 90);		
-		hotDirs = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(DIR_CACHE_PROP, DIR_CACHE_DEFAULT_SPEC)).build();
+		hotDirs = CacheStatistics.getJMXStatisticsEnableCache(CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(DIR_CACHE_PROP, DIR_CACHE_DEFAULT_SPEC)), "watchedDirectories");
+		// Cache<Path, WatchKey>
+		templateWatches = CacheStatistics.getJMXStatisticsEnableCache(CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(TWATCH_CACHE_PROP, DIR_CACHE_DEFAULT_SPEC)), "templateWatches");
+		// Cache<Path, Set<File>>
+		templateMappings = CacheStatistics.getJMXStatisticsEnableCache(CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(TMAP_CACHE_PROP, DIR_CACHE_DEFAULT_SPEC)), "templateMappings");
+		
 		scriptManager = StateService.getInstance();
 		Map<WatchEventType, Set<FileChangeEventHandler>> tmpHandlerMap = new EnumMap<WatchEventType, Set<FileChangeEventHandler>>(WatchEventType.class);
 		for(WatchEventType type: WatchEventType.values()) {
@@ -221,25 +233,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		addDefaultHotDirs();
 	}
 	
-	/**
-	 * Registers all the cache MBeans
-	 */
-	private void registerCacheMBeans() {
-		registerCacheMBean(hotDirs, "watchedDirectories");
-	}
 	
-	/**
-	 * Registers a cache MBean
-	 * @param cache The cache instance
-	 * @param name The cache name
-	 */
-	private void registerCacheMBean(final Cache<?, ?> cache, final String name) {
-		try {
-			new CacheStatistics(cache, name).register();
-		} catch (Exception ex) {
-			log.error("Failed to register cache [{}] : {}", name, ex.toString());
-		}
-	}
 	
 	
 	/**
@@ -265,11 +259,25 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		}
 	};
 	
-	/** The inside event handler for new files */
-	private FileChangeEventHandler newFileHandler = new AbstractFileChangeEventHandler(WatchEventType.FILE_MOD) {
+	/** The inside event handler for new and updated files */
+	private FileChangeEventHandler newFileHandler = new AbstractFileChangeEventHandler(WatchEventType.FILE_MOD, WatchEventType.FILE_NEW) {
 		@Override
 		public void eventFired(final FileEvent event) {
 			if(!event.exists()) return;
+			if(event.isSymbolicLink() || event.isNewFileEvent()) {
+				if(!event.isSymbolicLink()) {
+					if(!event.isNewFileEvent()) {
+						final Set<String> links = templateMappings.getIfPresent(event.getFileName());
+						if(links!=null && !links.isEmpty()) {
+							for(String linkedFile: links) {
+								//URLHelper.touch(URLHelper.toURL(linkedFile));
+								log.info("\n\t---->  Refreshing Linked File [{}]", linkedFile);
+							}
+						}					
+					}
+					return;
+				}
+			}
 			final String name = event.getFileName();
 			if(!hotFileNames.contains(name)) {
 				synchronized(hotFileNames) {
@@ -279,6 +287,8 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 						return;
 					}
 				}
+			} else {
+				scriptManager.getDeployedScript(event.getFileName());
 			}
 			log.debug("Processing modified File event for [{}]", event.getFileName());
 		}
@@ -351,7 +361,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 					while(keepRunning.get()) {
 						try {
 							watchKey = watcher.take();
-							log.info("Got watch key for [" + watchKey.watchable() + "]");							
+							log.debug("Got watch key for [{}]", watchKey.watchable());							
 					    } catch (InterruptedException ie) {
 					        interrupted();
 					        // check state
@@ -373,6 +383,9 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 								}								
 								Path dir = ((Path)watchKey.watchable()).toAbsolutePath();
 							    Path activatedPath = Paths.get(dir.toString(), event.context().toString());
+							    if(ignoredExtensions.contains(URLHelper.getExtension(activatedPath.toFile(), ""))) {
+							    	continue;
+							    }
 							    enqueueFileEvent(new FileEvent(activatedPath.toFile().getAbsolutePath(), ((WatchEvent<Path>)event).kind()));
 							}
 						}
@@ -562,7 +575,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 					for(FileChangeEventHandler handler: handlers) {
 						handler.eventFired(fe);
 					}
-					log.info("PROCESSED ------------> [{}]", fe.toShortString());
+					log.debug("PROCESSED ------------> [{}]", fe.toShortString());
 				}									
 			}
 		});
@@ -699,17 +712,59 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 */
 	public void addWatchFile(final String watchFile, final FileEvent fileEvent) {
 		if(watchFile==null || watchFile.trim().isEmpty()) throw new IllegalArgumentException("The passed file name was null or empty");
-		final File f = new File(watchFile.trim());
+		final File f = new File(watchFile.trim()).getAbsoluteFile();
 		if(!f.exists()) throw new IllegalArgumentException("The passed file [" + f + "] does not exist");
 		if(f.isDirectory()) throw new IllegalArgumentException("The passed file [" + f + "] is *not* a regular file");
 		if(shouldIgnore(f.toPath())) {
 			log.info("Ignoring file [{}]", watchFile);
 			return;
 		}
-		hotFileNames.add(watchFile);
+		if(hotFileNames.add(watchFile)) {
+			addWatchedTemplate(fileEvent, f);			
+		}
 		scriptManager.getDeployedScript(fileEvent.getFileName());
 		if(fileEvent!=null) sendNotification(fileEvent.toNotification(notificationIdFactory.incrementAndGet()));
 		log.info("Added watched file [{}]", watchFile);
+	}
+	
+	
+	
+	/**
+	 * Checks to see if a watched file is actually a symbolic link to a template.
+	 * If it is, a watch is placed on the source file and the template mappings are updated.
+	 * @param fileEvent The file event that triggered the added watched file
+	 * @param file The file that triggered the event
+	 */
+	protected void addWatchedTemplate(final FileEvent fileEvent, final File file) {
+		if(fileEvent.isSymbolicLink()) {
+			final Path linkedTo = file.toPath();
+			final Path linkedFrom;
+			final Path linkedFromDir;
+			final String linkedFromDirName;
+			final String linkedFromName;
+			try {
+				linkedFrom = Files.readSymbolicLink(linkedTo);
+				linkedFromDir = linkedFrom.getParent();
+				linkedFromDirName = linkedFromDir.toFile().getAbsolutePath();
+				linkedFromName = linkedFrom.toFile().getAbsolutePath();
+				templateWatches.get(linkedFromDirName, new Callable<WatchKey>() {
+					@Override
+					public WatchKey call() throws Exception {						
+						return linkedFromDir.register(watcher, ENTRY_DELETE, ENTRY_MODIFY);
+					}
+				});				
+				templateMappings.get(linkedFromName, new Callable<Set<String>>() {
+					@Override
+					public Set<String> call() throws Exception {
+						return new NonBlockingHashSet<String>();
+					}
+				}).add(file.getAbsolutePath());
+				log.info("Added template symbolic link mapping\n\tfrom [{}]\n\tto [{}]", file.getAbsolutePath(), linkedFromName);
+			} catch(Exception x) {
+				log.error("Failed to get symbolic link source for [{}]", file, x);
+				return;
+			}			
+		}
 	}
 	
 	/**
@@ -884,6 +939,52 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			if(lines[0]!=null && !lines[0].isEmpty() && lines[0].replace(" ", "").toLowerCase().contains(IGNORE_PATTERN)) return true;
 		}
 		return false;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getWatchedTemplateDirs()
+	 */
+	@Override
+	public Set<String> getWatchedTemplateDirs() {		
+		return Collections.unmodifiableSet(templateWatches.asMap().keySet());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getWatchedTemplateDirCount()
+	 */
+	@Override
+	public long getWatchedTemplateDirCount() {
+		return templateWatches.size();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getWatchedTemplates()
+	 */
+	@Override
+	public Set<String> getWatchedTemplates() {
+		return Collections.unmodifiableSet(templateMappings.asMap().keySet());
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getWatchedTemplateCount()
+	 */
+	@Override
+	public long getWatchedTemplateCount() {
+		return templateMappings.size();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#getTemplateLinks(java.lang.String)
+	 */
+	@Override
+	public Set<String> getTemplateLinks(final String templateName) {
+		final Set<String> templates = templateMappings.getIfPresent(templateName);
+		return Collections.unmodifiableSet(templates != null ? templates : new HashSet<String>(0));
 	}
 
 

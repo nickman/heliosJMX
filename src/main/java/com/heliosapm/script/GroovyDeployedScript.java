@@ -24,12 +24,17 @@
  */
 package com.heliosapm.script;
 
+import groovy.lang.Binding;
+import groovy.lang.MetaMethod;
+import groovy.lang.MetaProperty;
 import groovy.lang.Script;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * <p>Title: GroovyDeployedScript</p>
@@ -40,6 +45,10 @@ import java.util.Set;
  */
 
 public class GroovyDeployedScript extends AbstractDeployedScript<Script> {
+	/** The script meta methods */
+	protected final Map<String, MetaMethod> metaMethods = new ConcurrentHashMap<String, MetaMethod>();
+	/** The script meta properties */
+	protected final Map<String, MetaProperty> metaProperties = new ConcurrentHashMap<String, MetaProperty>();
 
 	/**
 	 * Creates a new GroovyDeployedScript
@@ -48,25 +57,59 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> {
 	 */
 	public GroovyDeployedScript(File sourceFile, final Script gscript) {
 		super(sourceFile);
-		executable = new WeakReference<Script>(gscript);
+		executable = gscript;
+		initExcutable();
+		locateConfigFiles(sourceFile, rootDir, pathSegments);
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#initExcutable()
+	 */
+	public void initExcutable() {
+		if(executable!=null) {
+			for(MetaMethod mm: executable.getMetaClass().getMethods()) {
+				metaMethods.put(mm.getName(), mm);
+			}
+			for(MetaProperty mp: executable.getMetaClass().getProperties()) {
+				metaProperties.put(mp.getName(), mp);
+			}
+			executable.setBinding(new Binding(config));
+			setStatus(DeploymentStatus.READY);
+		}		
+		super.initExcutable();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getDeploymentClassName()
+	 */
+	@Override
+	public String getDeploymentClassName() {
+		if(executable==null) return null;
+		return executable.getClass().getSuperclass().getName();
+	}
+	
 
 	/**
 	 * {@inheritDoc}
 	 * @see com.heliosapm.script.DeployedScript#getInvocables()
 	 */
 	@Override
-	public Set<String> getInvocables() {
-		return new HashSet<String>(0);
+	public Set<String> getInvocables() {		
+		final Set<String> invNames = new HashSet<String>(metaProperties.size() + metaMethods.size());
+		invNames.addAll(metaProperties.keySet());
+		invNames.addAll(metaMethods.keySet());
+		return invNames;
 	}
 
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#execute()
+	 * @see com.heliosapm.script.AbstractDeployedScript#doExecute()
 	 */
 	@Override
-	public Object execute() {
-		return getExecutable().run();
+	public Object doExecute() throws Exception {
+		return executable.run();
 	}
 
 	/**

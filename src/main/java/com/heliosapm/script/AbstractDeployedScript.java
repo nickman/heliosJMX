@@ -25,25 +25,45 @@
 package com.heliosapm.script;
 
 import java.io.File;
-import java.lang.ref.WeakReference;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.Stack;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
+import javax.management.AttributeChangeNotification;
+import javax.management.MBeanNotificationInfo;
+import javax.management.Notification;
+import javax.management.NotificationBroadcasterSupport;
 import javax.management.ObjectName;
 
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.heliosapm.filewatcher.ScriptFileWatcher;
+import com.heliosapm.jmx.expr.CodeBuilder;
+import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
+import com.heliosapm.jmx.util.helpers.StringHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 
 /**
@@ -55,11 +75,21 @@ import com.heliosapm.jmx.util.helpers.URLHelper;
  * @param <T> The type of the underlying executable script
  */
 
-public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
+public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterSupport implements DeployedScript<T> {
+	/** Instance logger */
+	protected final Logger log;
 	/** The underlying executable component */
-	protected WeakReference<T> executable = null;
+	protected T executable = null;
 	/** The originating source file */
-	protected final File sourceFile;	
+	protected final File sourceFile;
+	/** The linked source file */
+	protected final File linkedFile;	
+	
+	/** The checksum of the source */
+	protected long checksum = -1L;
+	/** The last modified timestamp of the source */
+	protected long lastModified = -1L;
+	
 	/** The source file extension */
 	protected final String extension;
 	/** The root watched directory */
@@ -72,12 +102,20 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	/** The schedule time in seconds */
 	protected int schedule  = ConfigurationHelper.getIntSystemThenEnvProperty(DEFAULT_SCHEDULE_PROP, DEFAULT_SCHEDULE);
 	
+	/** The executable's execution timeout in ms. Defaults to 0 which is no timeout */
+	protected long timeout = 0;
+	
+	/** The deployment's last set status message */
+	protected final AtomicReference<String> lastStatusMessage = new AtomicReference<String>("Initialized");
+	
 	/** The status of this deployment */
 	protected final AtomicReference<DeploymentStatus> status = new AtomicReference<DeploymentStatus>(DeploymentStatus.INIT);
 	/** The last mod time  */
 	protected final AtomicLong lastModTime = new AtomicLong(System.currentTimeMillis());
 	/** The effective timestamp of the current status  */
 	protected final AtomicLong statusTime = new AtomicLong(System.currentTimeMillis());
+	/** The last execution elapsed time */
+	protected final AtomicLong lastExecElapsed = new AtomicLong(-1L);
 	
 	/** The last execute time  */
 	protected final AtomicLong lastExecTime = new AtomicLong(-1L);
@@ -87,28 +125,79 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	protected final AtomicLong execCount = new AtomicLong(0L);
 	/** The error count since the last reset  */
 	protected final AtomicLong errorCount = new AtomicLong(0L);
-	
+	/** Notification sequence number provider */
+	protected static final AtomicLong sequence = new AtomicLong(0L);
 	/** The deployment's JMX ObjectName */
 	protected final ObjectName objectName;
+	
+	
+	/** The descriptors of the JMX notifications emitted by this service */
+	private static final MBeanNotificationInfo[] notificationInfos = new MBeanNotificationInfo[] {
+		JMXHelper.META_CHANGED_NOTIF,
+		new MBeanNotificationInfo(new String[]{NOTIF_STATUS_CHANGE}, AttributeChangeNotification.class.getName(), "JMX notification broadcast when the status of a deployment changes"),
+		new MBeanNotificationInfo(new String[]{AttributeChangeNotification.ATTRIBUTE_CHANGE}, Notification.class.getName(), "JMX notification broadcast when the configuration of a deployment changes"),
+		new MBeanNotificationInfo(new String[]{NOTIF_RECOMPILE}, Notification.class.getName(), "JMX notification broadcast when a deployment is recompiled")
+	};
+	
+	
+	/** The deployment's insta notifications */
+	protected final Set<MBeanNotificationInfo> instanceNotificationInfos = new HashSet<MBeanNotificationInfo>();
 
+	/** The default deployment domain */
+	public static final String DEFAULT_DEPLOYMENT_DOMAIN = "com.heliosapm.deployments";
+	
 	
 	/**
 	 * Creates a new AbstractDeployedScript
 	 * @param sourceFile The originating source file
 	 */
 	public AbstractDeployedScript(File sourceFile) {
-//		this.executable = new WeakReference<T>(executable);
+		super(SharedNotificationExecutor.getInstance(), notificationInfos);
 		this.sourceFile = sourceFile;
+		final Path link = this.sourceFile.toPath();
+		Path tmpPath = null;
+		if(Files.isSymbolicLink(link)) {
+			try {
+				tmpPath = Files.readSymbolicLink(link);
+			} catch (Exception ex) {
+				tmpPath = null;
+			}			
+		}
+		linkedFile = tmpPath==null ? null : tmpPath.toFile().getAbsoluteFile();
 		String tmp = URLHelper.getFileExtension(sourceFile);
 		if(tmp==null || tmp.trim().isEmpty()) throw new RuntimeException("The source file [" + sourceFile + "] has no extension");
 		extension = tmp.toLowerCase();
 		rootDir = ScriptFileWatcher.getInstance().getRootDir(sourceFile.getParentFile().getAbsolutePath());
 		pathSegments = calcPathSegments();
-		objectName = JMXHelper.objectName(new StringBuilder("com.heliosapm.deployments:")	// TODO: deployments vs. templates vs. config  vs. fixtures
-			.append("path=").append(join("/", pathSegments)).append(",")
-			.append("extension=").append(extension).append(",")
-			.append("name=").append(sourceFile.getName())			
-		);
+		log = LoggerFactory.getLogger(StringHelper.fastConcatAndDelim("/", pathSegments) + "/" + sourceFile.getName().replace('.', '_'));
+		objectName = buildObjectName();
+		checksum = URLHelper.adler32(URLHelper.toURL(sourceFile));
+		lastModified = URLHelper.getLastModified(URLHelper.toURL(sourceFile));
+		
+	}
+	
+	/**
+	 * Builds the standard JMX ObjectName for this deployment
+	 * @return an ObjectName
+	 */
+	protected ObjectName buildObjectName() {
+		return JMXHelper.objectName(new StringBuilder(getDomain()).append(":")
+				.append("path=").append(join("/", pathSegments)).append(",")
+				.append("extension=").append(extension).append(",")
+				.append("name=").append(sourceFile.getName())			
+				);
+	}
+	
+	
+	
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#getDomain()
+	 */
+	@Override
+	public String getDomain() {
+		return DEFAULT_DEPLOYMENT_DOMAIN;
 	}
 	
 	/**
@@ -125,6 +214,34 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 		Collections.addAll(segments, rootFile.toPath().relativize(sourceFile.getParentFile().toPath()).toString().replace("\\", "/").split("/"));
 		return segments.toArray(new String[segments.size()]);
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#execute()
+	 */
+	@Override
+	public Object execute() {
+		final long now = System.currentTimeMillis();
+		try {			
+			final Object ret = doExecute();
+			execCount.incrementAndGet();
+			lastExecTime.set(now);
+			lastExecElapsed.set(System.currentTimeMillis() - now);			
+			return ret;
+		} catch (Exception ex) {
+			final long er = errorCount.incrementAndGet();
+			lastErrorTime.set(System.currentTimeMillis());			
+			log.error("Failed to execute. Error Count: {}", er, ex);
+			throw new RuntimeException("Failed to execute deployed script [" + this.getFileName() + "]", ex);
+		}						
+	}
+	
+	/**
+	 * To be implemented by concrete deployment scripts
+	 * @return the return value of the execution
+	 * @throws Exception thrown on any error in the execution
+	 */
+	protected abstract Object doExecute() throws Exception;
 	
 	/**
 	 * Joins an array of strings to a delim separated string
@@ -144,19 +261,73 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	protected DeploymentStatus setStatus(final DeploymentStatus status) {
 		final DeploymentStatus priorStatus = this.status.getAndSet(status);
 		if(priorStatus!=status) {
+			final long now = System.currentTimeMillis();
 			statusTime.set(System.currentTimeMillis());
+			lastStatusMessage.set(String.format("[%s]: Status set to %s", new Date(now), status));
 		}
 		return priorStatus;
 	}
 	
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#setExecutable(java.lang.Object)
+	 * @see com.heliosapm.script.DeployedScript#setExecutable(java.lang.Object, long, long)
 	 */
 	@Override
-	public void setExecutable(final T executable) {
-		if(executable==null) throw new IllegalArgumentException("The passed executable was null");
-		this.executable = new WeakReference<T>(executable);
+	public void setExecutable(final T executable, final long checksum, final long timestamp) {
+		if(executable==null) throw new IllegalArgumentException("The passed executable was null");		
+		if(this.checksum != checksum || this.lastModified != timestamp) {
+			this.executable = executable;
+			this.checksum = checksum;
+			this.lastModified = timestamp;
+			final long now = System.currentTimeMillis();
+			lastModTime.set(now);
+			initExcutable();
+			final String message = String.format("[%s]: Recompiled Deployment [%s]", new Date(now), sourceFile.getAbsolutePath());
+			lastStatusMessage.set(message);
+			sendNotification(new Notification(NOTIF_RECOMPILE, objectName, sequence.incrementAndGet(), now, message));
+		}
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#initExcutable()
+	 */
+	public void initExcutable() {
+	
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getDeploymentClassName()
+	 */
+	@Override
+	public String getDeploymentClassName() {
+		if(executable==null) return null;
+		return executable.getClass().getName();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#setFailedExecutable(java.lang.String, long, long)
+	 */
+	public void setFailedExecutable(final String errorMessage, long checksum, long timestamp) {
+		// for now, if the exe is not null, we set it null to mark it broken.
+		// other options that could be supported are:
+			// keep, but mark as out-of-sync
+		final long now = System.currentTimeMillis();
+		lastModTime.set(now);
+		final DeploymentStatus prior = status.getAndSet(DeploymentStatus.BROKEN);
+		this.executable = null;
+		this.checksum = checksum;
+		this.lastModified = timestamp;		
+		
+		final String message = String.format("[%s]: Deployment Recompilation Failed for [%s], Error:", new Date(now), sourceFile.getAbsolutePath(), errorMessage);
+		lastStatusMessage.set(message);
+
+		if(prior!=DeploymentStatus.BROKEN) {
+			sendStatusChangeNotification(prior, DeploymentStatus.BROKEN, timestamp);
+		}
+		
 	}
 	
 	/**
@@ -186,6 +357,15 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 		return sourceFile.getAbsolutePath();
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getLinkedFileName()
+	 */
+	@Override
+	public String getLinkedFileName() {		
+		return linkedFile==null ? null : linkedFile.getAbsolutePath();
+	}
+	
 	/**
 	 * {@inheritDoc}
 	 * @see com.heliosapm.script.DeployedScript#getExtension()
@@ -221,12 +401,7 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	@Override
 	public T getExecutable() {
 		if(executable==null) throw new RuntimeException("Executable has not been initialized");
-		T t = executable.get();
-		if(t==null) {
-			try { undeploy(); } catch (Exception x) {/* No Op */}
-			throw new RuntimeException("Executable has been gc'ed");
-		}
-		return t;
+		return executable;
 	}
 
 	/**
@@ -246,6 +421,16 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	public void addConfiguration(final Map<String, Object> config) {
 		if(config==null) throw new IllegalArgumentException("The passed config map was null");
 		config.putAll(config);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#callInvocable(java.lang.String)
+	 */
+	@Override
+	public String callInvocable(final String name) {
+		if(name==null || name.trim().isEmpty()) throw new IllegalArgumentException("The passed name was null");
+		return null;
 	}
 	
 	/**
@@ -339,6 +524,43 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	public long getLastErrorTime() {
 		return lastErrorTime.get();
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getLastExecElapsed()
+	 */
+	@Override
+	public long getLastExecElapsed() {
+		return lastExecElapsed.get();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getStatusMessage()
+	 */
+	@Override
+	public String getStatusMessage() {
+		return lastStatusMessage.get();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getExecutionTimeout()
+	 */
+	@Override
+	public long getExecutionTimeout() {
+		return timeout;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#setExecutionTimeout(long)
+	 */
+	@Override
+	public void setExecutionTimeout(final long timeout) {
+		this.timeout = timeout;
+	}
+	
 
 	/**
 	 * {@inheritDoc}
@@ -441,7 +663,7 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 	 */
 	@Override
 	public void undeploy() {
-		executable.enqueue();
+		executable = null;
 		config.clear();
 	}
 	
@@ -523,4 +745,194 @@ public abstract class AbstractDeployedScript<T> implements DeployedScript<T> {
 		setSchedulePeriod(period);		
 	}
 
+	
+//	new MBeanNotificationInfo(new String[]{NOTIF_STATUS_CHANGE}, AttributeChangeNotification.class.getName(), "JMX notification broadcast when the status of a deployment changes"),
+//	new MBeanNotificationInfo(new String[]{NOTIF_CONFIG_CHANGE}, Notification.class.getName(), "JMX notification broadcast when the configuration of a deployment changes"),
+//	new MBeanNotificationInfo(new String[]{NOTIF_RECOMPILE}, Notification.class.getName(), "JMX notification broadcast when a deployment is recompiled")
+	
+	/**
+	 * Sends a status change notification
+	 * @param prior The prior status
+	 * @param current The current status
+	 * @param timestamp The timestamp
+	 */
+	protected void sendStatusChangeNotification(final DeploymentStatus prior, final DeploymentStatus current, final long timestamp) {
+		final String msg = String.format("[%s] Status change for [%s]: from[%s] to [%s]", new Date(timestamp), objectName, prior, current);
+		// last event msg
+		sendNotification(new AttributeChangeNotification(objectName, sequence.incrementAndGet(), timestamp, msg, "Status", DeploymentStatus.class.getName(), prior.name(), current.name()));
+	}
+	
+	/**
+	 * Sends a configuration change notification when the configuration of the deployment changes
+	 * @param jsonConfig The new configuration represented in JSON which is included as the user data in the sent notification
+	 * @param timestamp The timestamp
+	 */
+	protected void sendConfigurationChangeNotification(final String jsonConfig, final long timestamp) {
+		final String msg = String.format("[%s] Configuration change", new Date(timestamp));
+		// last event msg		
+		final Notification notif = new Notification(NOTIF_CONFIG_CHANGE, objectName, sequence.incrementAndGet(), timestamp, msg);
+		notif.setUserData(jsonConfig);
+		sendNotification(notif);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#locateConfiguration()
+	 */
+	@Override
+	public Set<ObjectName> locateConfiguration() {
+		final Set<ObjectName> configs = new LinkedHashSet<ObjectName>();
+		// com.heliosapm.configuration:root=/tmp/hotdir,d1=X,d2=Y,d3=Z,name=Z,extension=config,subextension=js
+		final String deplName = getPlainDeploymentName(sourceFile.getName());
+		CodeBuilder b = new CodeBuilder("com.heliosapm.configuration:root=", rootDir, ",extension=config,subextension=*");
+		b.push();
+		b.append("name=root");
+		Collections.addAll(configs, JMXHelper.query(b.render()));
+		b.pop();
+		b.append("name=%s", deplName);
+		Collections.addAll(configs, JMXHelper.query(b.render()));
+		b.pop();
+		for(int i = 1; i < pathSegments.length; i++) {
+			b.append(",d%s=%s");
+			Collections.addAll(configs, JMXHelper.query(b.render()));
+		}
+		return configs;
+	}
+	
+//	/**
+//	 * Sends a recompilation change notification when the deployment is recompiled
+//	 * @param timestamp The timestamp
+//	 */
+//	protected void sendRecompilationChangeNotification(final long timestamp) {
+//		final String msg = String.format("[%s] Recompilation change", new Date(timestamp));
+//		// last event msg
+//		sendNotification(new Notification(NOTIF_RECOMPILE, objectName, sequence.incrementAndGet(), timestamp, msg));
+//	}
+	
+	/**
+	 * <p>Title: ConfigFinder</p>
+	 * <p>Description: Configuration file finder for a deployment</p> 
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.script.AbstractDeployedScript.ConfigFinder</code></p>
+	 */
+	protected class ConfigFinder extends SimpleFileVisitor<Path> {
+		Stack<String> directories = new Stack<String>();
+		
+		ConfigFinder() {
+			Collections.addAll(directories, pathSegments);
+		}
+		
+		@Override
+		public FileVisitResult preVisitDirectory(final Path dir, final BasicFileAttributes attrs) throws IOException {
+			//dir.
+			return super.preVisitDirectory(dir, attrs);
+		}
+		
+		
+	}
+	
+	protected static class ConfigFileFilter implements FilenameFilter {
+		static final String ext = "config";
+		String plainName = null;
+		
+		ConfigFileFilter(final String plainName) {
+			this.plainName = plainName;
+		}
+		
+		@Override
+		public boolean accept(final File dir, final String name) {
+			if(ext.equals(URLHelper.getExtension(new File(dir, name)))) {
+				return (plainName!=null && plainName.equals(getPlainDeploymentName(name))); 
+			}			
+			return false;
+		}
+	}
+	
+	protected static LinkedHashSet<File> locateConfigFiles(final File sourceFile, final String rootDir, final String[] pathSegments) {
+		final LinkedHashSet<File> configs = new LinkedHashSet<File>();
+		/*
+		 * root config:  root.config, root.*.config
+		 * for each dir:  foo.config, foo.*.config, dir.config, dir.*.config
+		 * 
+		 */
+		final String deplName = getPlainDeploymentName(sourceFile.getName());
+		final ConfigFileFilter cff = new ConfigFileFilter("root");
+		final File root = new File(rootDir);
+		for(File f: root.listFiles(cff)) {
+			configs.add(f);
+		}
+		cff.plainName = deplName;
+		File subDir = root;
+		for(int i = 1; i < pathSegments.length; i++) {
+			subDir = new File(subDir, pathSegments[i]);
+			cff.plainName = pathSegments[i];
+			for(File f: subDir.listFiles(cff)) {
+				configs.add(f);
+			}
+			cff.plainName = deplName;
+			for(File f: subDir.listFiles(cff)) {
+				configs.add(f);
+			}			
+		}
+		System.out.println(String.format("Config Files for deployment [%s] --> %s", sourceFile, configs.toString()));
+		return configs;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#isConfigFor(java.lang.String)
+	 */
+	@Override
+	public boolean isConfigFor(String deployment) {
+		return false;
+	}
+
+	/**
+	 * Extracts the plain file name (i.e. without any extensions)
+	 * @param fileName The file name to get the plain file name from
+	 * @return the plain file name
+	 */
+	protected static String getPlainDeploymentName(final String fileName) {
+		if(fileName==null || fileName.trim().isEmpty()) throw new IllegalArgumentException("The passed file name was null or empty");
+		final int dotIndex = fileName.indexOf(".");		
+		String f = fileName;
+		if(dotIndex!=-1) {
+			f = f.substring(0, dotIndex);
+		}
+		final int sepIndex = fileName.lastIndexOf(File.separatorChar);
+		if(sepIndex!=-1) {
+			f = f.substring(sepIndex+1);
+		}		
+		return f;		
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getChecksum()
+	 */
+	@Override
+	public long getChecksum() {
+		return checksum;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getLastModified()
+	 */
+	@Override
+	public long getLastModified() {
+		return lastModified;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getLastModifiedDate()
+	 */
+	@Override
+	public Date getLastModifiedDate() {
+		return new Date(lastModified);
+	}
+	
+	
 }

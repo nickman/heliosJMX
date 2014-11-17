@@ -27,6 +27,20 @@ public class CodeBuilder {
 	}
 	
 	/**
+	 * Creates a new CodeBuilder
+	 * @param initial The initial values to append to this CodeBuilder
+	 */
+	public CodeBuilder(Object...initial) {
+		if(initial!=null) {
+			for(Object o: initial) {
+				if(o==null) continue;
+				buff.append(o.toString());
+			}
+		}
+	}
+	
+	
+	/**
 	 * Appends a stringy, optionally formatted with the passed tokens
 	 * @param stringy The stringy to append
 	 * @param tokens The format tokens

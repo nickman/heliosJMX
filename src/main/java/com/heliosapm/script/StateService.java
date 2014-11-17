@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.management.MBeanNotificationInfo;
 import javax.management.NotificationBroadcasterSupport;
@@ -68,6 +69,8 @@ import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
+import com.heliosapm.script.compilers.CompilerException;
+import com.heliosapm.script.compilers.ConfigurationCompiler;
 import com.heliosapm.script.compilers.DeploymentCompiler;
 import com.heliosapm.script.compilers.GroovyCompiler;
 import com.heliosapm.script.compilers.JSR223Compiler;
@@ -80,7 +83,7 @@ import com.heliosapm.script.compilers.JSR223Compiler;
  * <p><code>com.heliosapm.jmx.util.helpers.StateService</code></p>
  */
 
-public class StateService extends NotificationBroadcasterSupport implements RemovalListener<Object, Object> { 
+public class StateService extends NotificationBroadcasterSupport implements StateServiceMXBean, RemovalListener<Object, Object> { 
 	/** The singleton instance */
 	private static volatile StateService instance = null;
 	/** The singleton instance ctor lock */
@@ -129,15 +132,15 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 	/** The script engine manager */
 	private final ScriptEngineManager sem;
 	/** The simple state cache  */
-	private final Cache<Object, Object> simpleStateCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build(); 
+	private final Cache<Object, Object> simpleStateCache = CacheStatistics.getJMXStatisticsEnableCache(CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)), "state"); 
 	/** The cache for long deltas */
-	private final Cache<Object, long[]> longDeltaCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_LONG_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build();
+	private final Cache<Object, long[]> longDeltaCache = CacheStatistics.getJMXStatisticsEnableCache(CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_LONG_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)), "longDeltas");
 	/** The cache for double deltas */
-	private final Cache<Object, double[]> doubleDeltaCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_DOUBLE_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build();
+	private final Cache<Object, double[]> doubleDeltaCache = CacheStatistics.getJMXStatisticsEnableCache(CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_DOUBLE_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)), "doubleDeltas");
 	/** The compiled script cache keyed by the script extension */
-	private final Cache<String, Cache<String, CompiledScript>> scriptCache = CacheBuilder.newBuilder().concurrencyLevel(CORES).initialCapacity(16).recordStats().build();
+	private final Cache<String, Cache<String, CompiledScript>> scriptCache = CacheStatistics.getJMXStatisticsEnableCache(CacheBuilder.newBuilder().concurrencyLevel(CORES).initialCapacity(16).recordStats(), "script");
 	/** The scoped script bindings cache  */
-	private final Cache<Object, Bindings> bindingsCache = CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_BINDING_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)).build();
+	private final Cache<Object, Bindings> bindingsCache = CacheStatistics.getJMXStatisticsEnableCache(CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_BINDING_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)), "bindings");
 	
 	//===========================================================================================
 	//		Deployment Management
@@ -148,6 +151,9 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 	private final Map<String, DeploymentCompiler<?>> deploymentCompilers = new NonBlockingHashMap<String, DeploymentCompiler<?>>(16);
 	/** The catch-all deployment compiler */
 	private final DeploymentCompiler<CompiledScript> catchAllCompiler;
+	/** The configuration deployment compiler */
+	private final DeploymentCompiler<Map<String, Object>> configurationCompiler;
+	
 	//===========================================================================================
 	
 	/** Instance logger */
@@ -157,16 +163,24 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 //	/** The script compiler */
 //	private final Compilable compiler;
 	/** The script engines keyed by script extension */
-	private final Map<String, ScriptEngine> engines = new NonBlockingHashMap<String, ScriptEngine>(16); 
-	/** The script compilers keyed by script extension */
-	private final Map<String, Compilable> compilers = new NonBlockingHashMap<String, Compilable>(16);
+	private final Map<String, ScriptEngineFactory> engines = new NonBlockingHashMap<String, ScriptEngineFactory>(16); 
 	
 	
 	
 	
 	
-	/** The engine level bindings (shared amongst all scripts) */
+	/** The global ({@link ScriptEngineFactory}) level bindings (shared amongst all scripts) */
 	private final Bindings engineBindings;
+	
+	private static final AtomicBoolean initing = new AtomicBoolean(false); 
+	
+	/** Reserved extensions for built in deployment types */
+	public static final Set<String> reservedExtensions = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
+			"config", 		// Configuration deployments
+			"pool", 		// Pooled resource
+			"factory",		// object factory
+			"datasource"	// JDBC data source
+	)));
 	
 	/**
 	 * Acquires the StateService singleton instance
@@ -176,6 +190,9 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 		if(instance==null) {
 			synchronized(lock) {
 				if(instance==null) {
+					if(!initing.compareAndSet(false, true)) {
+						throw new RuntimeException("Reentrant call to StateService.getInstance(). Programmer Error.");
+					}
 					instance = new StateService();
 				}
 			}
@@ -414,24 +431,23 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 	public ScriptEngine getEngineForExtension(final String extension) {
 		if(extension==null || extension.trim().isEmpty()) throw new IllegalArgumentException("The passed extension was null");
 		final String key = extension.trim().toLowerCase();
-		ScriptEngine se = engines.get(key);
-		if(se==null) {
+		ScriptEngineFactory sef = engines.get(key);
+		if(sef==null) {
 			synchronized(engines) {
-				se = engines.get(key);
-				if(se==null) {
+				sef = engines.get(key);
+				if(sef==null) {
 					try {
-						se = sem.getEngineByExtension(key); 
+						ScriptEngine se = sem.getEngineByExtension(key);
+						sef = se.getFactory();
+						se.setBindings(engineBindings, ScriptContext.GLOBAL_SCOPE);
 					} catch (Exception ex) {
 						throw new RuntimeException("No script engine found for extension [" + key + "]");
 					}
-					if(!(se instanceof Compilable)) {
-						throw new RuntimeException("Script engine does not support Compilable\n" + renderEngine(se));
-					}
-					installScriptEngine(se);
+					installScriptEngineFactory(sef);
 				}
 			}
 		}
-		return se;
+		return sef.getScriptEngine();
 	}
 	
 	/**
@@ -439,27 +455,29 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 	 * @param sourceFile The source file to the the deployed script for
 	 * @return the deployed script instance
 	 */
-	public DeployedScript<?> getDeployedScript(final String sourceFile) {
+	public <T> DeployedScript<T> getDeployedScript(final String sourceFile) {
 		if(sourceFile==null || sourceFile.trim().isEmpty()) throw new IllegalArgumentException("The passed source file was null or empty");
 		final File f = new File(sourceFile.trim()).getAbsoluteFile();
 		if(!f.exists()) throw new IllegalArgumentException("The passed file [" + f + "] does not exist");
-		if(!f.isFile()) throw new IllegalArgumentException("The passed file [" + f + "] is *not* a regular file");		
+		if(!f.isFile()) throw new IllegalArgumentException("The passed file [" + f + "] is *not* a regular file");
+		final AtomicBoolean newDs = new AtomicBoolean(false);
 		// TODO:  Check for linked files !
 		// TODO:  Events
 		// TODO:  Schedule
 		// TODO:  Pre-Check Extension Support
 		// TODO:  File Deletion --> Undeploy
 		try {
-			return deploymentCache.get(f.getAbsolutePath(), new Callable<DeployedScript<?>>(){
+			DeployedScript<T> deployedScript = (DeployedScript<T>) deploymentCache.get(f.getAbsolutePath(), new Callable<DeployedScript<T>>(){
 				@Override
-				public DeployedScript<?> call() throws Exception {
+				public DeployedScript<T> call() throws Exception {
 					try {
-						DeploymentCompiler<?> compiler = deploymentCompilers.get(URLHelper.getFileExtension(f));
+						DeploymentCompiler<T> compiler = (DeploymentCompiler<T>) deploymentCompilers.get(URLHelper.getFileExtension(f));
 						if(compiler==null) {
-							compiler = catchAllCompiler;
+							compiler = (DeploymentCompiler<T>) catchAllCompiler;
 						}
-						DeployedScript<?> ds = compiler.deploy(sourceFile);					
+						DeployedScript<T> ds = compiler.deploy(sourceFile);					
 						JMXHelper.registerMBean(ds.getObjectName(), ds);
+						newDs.set(true);
 						return ds;
 					} catch (Exception ex) {
 						log.error("Failed to deploy [{}]", sourceFile, ex);
@@ -467,6 +485,30 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 					}
 				}
 			});
+			if(!newDs.get()) {
+				final long ad32 = URLHelper.adler32(f);
+				final long lastMod = URLHelper.getLastModified(f);
+				if(ad32 != deployedScript.getChecksum() || lastMod < deployedScript.getLastModified()) {
+					synchronized(deployedScript) {
+						if(ad32 != deployedScript.getChecksum() || lastMod < deployedScript.getLastModified()) {
+							try {
+								DeploymentCompiler<T> compiler = (DeploymentCompiler<T>) deploymentCompilers.get(URLHelper.getFileExtension(f));
+								if(compiler==null) {
+									compiler = (DeploymentCompiler<T>) catchAllCompiler;
+								}
+								T exe = compiler.compile(URLHelper.toURL(sourceFile));					
+								deployedScript.setExecutable(exe, ad32, lastMod);
+							} catch (CompilerException cex) {
+								deployedScript.setFailedExecutable(cex.getDiagnostic(), ad32, lastMod);
+							} catch (Exception ex) {
+								log.error("Failed to deploy [{}]", sourceFile, ex);
+								throw ex;
+							}							
+						}
+					}
+				}
+			}
+			return deployedScript;
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to get deployment script for file [" + sourceFile + "]", ex);
 		}
@@ -480,35 +522,38 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 	public Compilable getCompilerForExtension(final String extension) {
 		if(extension==null || extension.trim().isEmpty()) throw new IllegalArgumentException("The passed extension was null");
 		final String key = extension.trim().toLowerCase();
-		Compilable compiler = compilers.get(key);
-		if(compiler==null) {
-			synchronized(compilers) {
-				compiler = compilers.get(key);
-				if(compiler==null) {
-					final ScriptEngine se = getEngineForExtension(key);
-					if(!(se instanceof Compilable)) {
-						throw new RuntimeException("Script engine does not support Compilable\n" + renderEngine(se));
-					}
-					compiler = (Compilable)se;
-					for(String ext: se.getFactory().getExtensions()) {
-						String extKey = ext.trim().toLowerCase();
-						if(!compilers.containsKey(extKey)) {
-							compilers.put(extKey, compiler);							
-						}
-					}					
-				}
-			}
+		ScriptEngineFactory sef = engines.get(key);
+		ScriptEngine se = sef.getScriptEngine();
+		if(!(se instanceof Compilable)) {
+			throw new RuntimeException("Script engine does not support Compilable\n" + renderEngineFactory(sef));
 		}
-		return compiler;		
+		return (Compilable)se;
 	}
 	
+	/**
+	 * Returns an array of the installed engine extensions
+	 * @return an array of the installed engine extensions
+	 */
+	public String[] getInstalledExtensions() {
+		return engines.keySet().toArray(new String[0]);
+	}
+	
+	/**
+	 * Determines if the passed extension is supported by an installed engine
+	 * @param extension The extension to test
+	 * @return true if the passed extension is supported by an installed engine, false otherwise
+	 */
+	public boolean isExtensionInstalled(final String extension) {
+		if(extension==null || extension.trim().isEmpty()) return false;
+		return engines.containsKey(extension);
+	}
 	
 	/**
 	 * Finds a JS script engine that works with <a href="http://mathjs.org/">math.js</a>
 	 * due to a <a href="https://github.com/mozilla/rhino/issues/127">JDK Rhino issue</a>
 	 * @return A JS script engine that works or null if one could not be found
 	 */
-	private ScriptEngine findEngine() {
+	private ScriptEngineFactory findEngine() {
 		final String javaHome = URLHelper.toURL(new File(System.getProperty("java.home"))).toString().toLowerCase();		
 		ScriptEngine se = null;		
 		Set<ScriptEngineFactory> nativeFirstScriptEngines = new LinkedHashSet<ScriptEngineFactory>();
@@ -535,7 +580,7 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 				se = sef.getScriptEngine();
 				se.eval("var obj = {};");      
 		        se.eval("obj.boolean = 2;");    // error if engine has bug
-		        return se;
+		        return sef;
 			} catch (Exception ex) {
 				se = null;
 				log.warn("Discarding engine [{}] v. [{}]", sef.getEngineName(), sef.getEngineVersion());
@@ -544,18 +589,29 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 		throw new RuntimeException("No compatible script engine found. Try Nashorn, Rhino or see https://github.com/mozilla/rhino/issues/127");		
 	}
 	
-	private void installScriptEngine(final ScriptEngine se) {
+	private void installScriptEngineFactory(final ScriptEngineFactory sef) {
 		final Set<String> addedExtensions = new HashSet<String>();
-		se.setBindings(engineBindings, ScriptContext.ENGINE_SCOPE);
-		for(String ext: se.getFactory().getExtensions()) {
+		for(String ext: sef.getExtensions()) {
 			String extKey = ext.trim().toLowerCase();
+			if(reservedExtensions.contains(extKey)) {
+				// TODO: allow alias definitions in the unlikely case this occurs
+				log.warn("The ScriptEngineFactory extension [{}] for [{}] is a reserved extension", extKey, sef.getClass().getName());
+				continue;
+			}
 			if(!engines.containsKey(extKey)) {
-				engines.put(extKey, se);
-				addedExtensions.add(extKey);
+				synchronized(engines) {
+					if(!engines.containsKey(extKey)) {
+						engines.put(extKey, sef);
+						addedExtensions.add(extKey);
+						ConfigurationCompiler.addSubExtension(extKey);
+					}
+				}
 			}
 		}
-		log.info("Installed ScriptEngine\n{}", renderEngine(se, addedExtensions));		
+		log.info("Installed ScriptEngine\n{}", renderEngineFactory(sef, addedExtensions));		
 	}
+	
+	
 	
 	/**
 	 * Creates a new StateService
@@ -566,13 +622,13 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 		engineBindings = new SimpleBindings();
 		engineBindings.put("stateService", this);		
 		// need to get a specific JS engine
-		installScriptEngine(findEngine());
+		installScriptEngineFactory(findEngine());
 		for(ScriptEngineFactory foundSef: sem.getEngineFactories()) {
 			if(foundSef.getExtensions().contains("js")) continue;			
 			try {				
 				for(String ext: foundSef.getExtensions()) {
 					if(!engines.containsKey(ext.trim().toLowerCase())) {
-						installScriptEngine(foundSef.getScriptEngine());
+						installScriptEngineFactory(foundSef);
 						break;
 					}
 				}
@@ -581,36 +637,14 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 				log.warn("Failed to install SEF [{}]. Skipping.", foundSef.getClass().getName());				
 			}
 		}
-		registerCacheMBeans();
 		installDeploymentCompiler(new GroovyCompiler());
 		loadJavaScriptHelpers();
 		catchAllCompiler = new JSR223Compiler(this);
+		configurationCompiler = new ConfigurationCompiler();
+		deploymentCompilers.put("config", configurationCompiler);
+		JMXHelper.registerMBean(this, OBJECT_NAME);
 	}
 	
-	/**
-	 * Registers all the cache MBeans
-	 */
-	private void registerCacheMBeans() {
-		registerCacheMBean(deploymentCache, "deployments");
-		registerCacheMBean(bindingsCache, "bindings");
-		registerCacheMBean(doubleDeltaCache, "doubleDeltas");
-		registerCacheMBean(longDeltaCache, "longDeltas");
-		registerCacheMBean(scriptCache, "scripts");
-		registerCacheMBean(simpleStateCache, "state");
-	}
-	
-	/**
-	 * Registers a cache MBean
-	 * @param cache The cache instance
-	 * @param name The cache name
-	 */
-	private void registerCacheMBean(final Cache<?, ?> cache, final String name) {
-		try {
-			new CacheStatistics(cache, name).register();
-		} catch (Exception ex) {
-			log.error("Failed to register cache [{}] : {}", name, ex.toString());
-		}
-	}
 	
 	/**
 	 * Checks for sysprop/env defined extra classpath for the script engines and installs it if found
@@ -704,23 +738,22 @@ public class StateService extends NotificationBroadcasterSupport implements Remo
 	
 	/**
 	 * Renders an informative string about the passed script engine
-	 * @param se The ScriptEngine to inform on
+	 * @param sef The ScriptEngineFactory to inform on
 	 * @return the ScriptEngine description
 	 */
-	public static String renderEngine(final ScriptEngine se) {
-		return renderEngine(se, null);
+	public static String renderEngineFactory(final ScriptEngineFactory sef) {
+		return renderEngineFactory(sef, null);
 	}
 	
 	
 	/**
 	 * Renders an informative string about the passed script engine
-	 * @param se The ScriptEngine to inform on
+	 * @param sef The ScriptEngineFactory to inform on
 	 * @param actualExtensions The actual installed extensions
 	 * @return the ScriptEngine description
 	 */
-	public static String renderEngine(final ScriptEngine se, final Set<String> actualExtensions) {
-		if(se==null) throw new IllegalArgumentException("The passed script engine was null");
-		final ScriptEngineFactory sef = se.getFactory();
+	public static String renderEngineFactory(final ScriptEngineFactory sef, final Set<String> actualExtensions) {
+		if(sef==null) throw new IllegalArgumentException("The passed script engine factory was null");
 		StringBuilder b = new StringBuilder("ScriptEngine [");
 		b.append("\n\tEngine:").append(sef.getEngineName()).append(" v.").append(sef.getEngineVersion());
 		b.append("\n\tLanguage:").append(sef.getLanguageName()).append(" v.").append(sef.getLanguageVersion());

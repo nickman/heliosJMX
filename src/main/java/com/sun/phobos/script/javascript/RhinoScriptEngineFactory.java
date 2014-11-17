@@ -24,8 +24,11 @@
 
 package com.sun.phobos.script.javascript;
 import javax.script.*;
+
 import java.util.*;
+
 import org.mozilla.javascript.*;
+
 import com.sun.phobos.script.util.*;
 
 /**
@@ -98,6 +101,14 @@ public class RhinoScriptEngineFactory extends ScriptEngineFactoryBase {
                         }
                     });
                 }
+            } else {            	
+				ContextFactory.initGlobal(new ContextFactory() {
+                        protected Context makeContext() {
+                            Context cx = super.makeContext();
+                            cx.setOptimizationLevel(9);
+                            return cx;
+                        }
+                    });
             }
             if (listener != null) {
                 ContextFactory.getGlobal().addListener(listener);

@@ -24,7 +24,6 @@
  */
 package com.heliosapm.filewatcher;
 
-import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.util.Map;
 import java.util.Set;
@@ -54,12 +53,14 @@ public interface ScriptFileWatcherMXBean {
 	
 	/** The conf property name for the startup watched dirs */
 	public static final String INITIAL_DIRS_PROP = "com.heliosapm.filewatcher.initialdirs";
-	
-	
 	/** The conf property name for the cache spec for the watched directories */
 	public static final String DIR_CACHE_PROP = "com.heliosapm.filewatcher.dircachespec";
+	/** The conf property name for the cache spec for the template watches */
+	public static final String TWATCH_CACHE_PROP = "com.heliosapm.filewatcher.twatchcachespec";
+	/** The conf property name for the cache spec for the template mappings */
+	public static final String TMAP_CACHE_PROP = "com.heliosapm.filewatcher.tmapcachespec";
 	
-	/** The default cache spec */
+	/** The default directory cache spec */
 	public static final String DIR_CACHE_DEFAULT_SPEC = 
 		"concurrencyLevel=" + CORES + "," + 
 		"initialCapacity=256," + 
@@ -217,6 +218,39 @@ public interface ScriptFileWatcherMXBean {
 	 * @return a map of root watched directories 
 	 */
 	public Map<String, String> getRootDirs();
+	
+	
+	/**
+	 * Returns a set of the names of directories watched for symbolic link changes
+	 * @return a set of the names of directories watched for symbolic link changes
+	 */
+	public Set<String> getWatchedTemplateDirs();
+	
+	/**
+	 * Returns the number of directories watched for symbolic link changes
+	 * @return the number of directories watched for symbolic link changes
+	 */
+	public long getWatchedTemplateDirCount();
+	
+	/**
+	 * Returns a set of the names of watched symbolic links
+	 * @return a set of the names of watched symbolic links
+	 */
+	public Set<String> getWatchedTemplates();
+	
+	/**
+	 * Returns the number of watched symbolic links
+	 * @return the number of watched symbolic links
+	 */
+	public long getWatchedTemplateCount();
+	
+	/**
+	 * Returns the names of symbolic link target deployed files for the passed source 
+	 * @param templateName The symbolic link source, or template file name
+	 * @return the name of the files linked to the template
+	 */
+	public Set<String> getTemplateLinks(String templateName);
+	
 	
 	
 }

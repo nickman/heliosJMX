@@ -24,6 +24,7 @@
  */
 package com.heliosapm.script;
 
+import java.util.Date;
 import java.util.Map;
 import java.util.Set;
 
@@ -40,10 +41,65 @@ import javax.management.ObjectName;
 public interface DeployedScriptMXBean {
 	
 	/**
+	 * Returns the last modified timestamp of the script's underlying source file
+	 * @return the last modified timestamp of the script's underlying source file
+	 */
+	public long getLastModified();
+	
+	/**
+	 * Returns the last modified date of the script's underlying source file
+	 * @return the last modified date of the script's underlying source file
+	 */
+	public Date getLastModifiedDate();
+	
+	/**
+	 * Returns the checksum of the source
+	 * @return the checksum
+	 */
+	public long getChecksum();
+	
+	/**
+	 * Returns the deployment class name
+	 * @return the deployment class name
+	 */
+	public String getDeploymentClassName();
+	
+	/**
+	 * Returns the last set status message
+	 * @return the last set status message
+	 */
+	public String getStatusMessage();	
+	
+	/**
+	 * Returns the execution timeout for this script in ms.
+	 * @return the execution timeout in ms.
+	 */
+	public long getExecutionTimeout();
+	
+	/**
+	 * Sets the execution timeout for this script
+	 * @param timeout the timeout in ms.
+	 */
+	public void setExecutionTimeout(long timeout);
+	
+	/**
+	 * Returns the deployment domain for this deployment
+	 * @return the deployment domain for this deployment
+	 */
+	public String getDomain();	
+	
+	/**
 	 * Returns the absolute file name of the source deployment
 	 * @return the absolute file name of the source deployment
 	 */
 	public String getFileName();
+	
+	/**
+	 * Returns the absolute file name of the source deployment linked file source
+	 * @return the absolute file name of the source deployment linked file source,
+	 * or null if the source file is not linked
+	 */
+	public String getLinkedFileName();	
 	
 	/**
 	 * Returns the root watched directory for this file
@@ -117,6 +173,12 @@ public interface DeployedScriptMXBean {
 	 * @return the timestamp of the last modification
 	 */
 	public long getLastModTime();
+	
+	/**
+	 * Returns the elapsed time of the most recent execution in ms.
+	 * @return the elapsed time of the most recent execution in ms.
+	 */
+	public long getLastExecElapsed();
 	
 	/**
 	 * Returns the timestamp of the last execution
@@ -206,5 +268,13 @@ public interface DeployedScriptMXBean {
 	 */
 	public boolean isScheduleExecutable();
 	
+	/**
+	 * Determines if this configuration is applicable for the passed deployment 
+	 * @param deployment The absolute name of the deployment source file to test for 
+	 * @return true if this configuration is applicable for the passed deployment, false otherwise
+	 */
+	public boolean isConfigFor(String deployment);
+	
+	public Set<ObjectName> locateConfiguration();
 
 }

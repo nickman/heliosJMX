@@ -34,6 +34,7 @@ import javax.management.ObjectName;
 import org.json.JSONObject;
 
 import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 import com.heliosapm.jmx.notif.SharedNotificationExecutor;
@@ -46,11 +47,13 @@ import com.heliosapm.jmx.util.helpers.JMXHelper;
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.jmx.cache.CacheStatistics</code></p>
+ * @param <K> the key type for the underlying cache
+ * @param <V> the value type for the underlying cache
  */
 
-public class CacheStatistics extends NotificationBroadcasterSupport implements CacheStatisticsMBean, RemovalListener<Object, Object> {
+public class CacheStatistics<K,V> extends NotificationBroadcasterSupport implements CacheStatisticsMBean, RemovalListener<Object, Object> {
 	/** The wrapped cache instance */
-	protected final Cache<?, ?> cache;	
+	protected final Cache<K, V> cache;	
 	/** The cache name */
 	protected final String cacheName;
 	/** The cache stats JMX object name */
@@ -63,18 +66,46 @@ public class CacheStatistics extends NotificationBroadcasterSupport implements C
 		new MBeanNotificationInfo(new String[] {"cache.removal"}, Notification.class.getName(), "Notification emitted when a cache entry is removed")
 	};
 
+	/**
+	 * Creates a new CacheStatistics and the underlying cache from the passed {@link CacheBuilder}.
+	 * This call causes this CacheStatistics to register itself as the cache's removal listener
+	 * and removal events are broadcast as JMX notifications.
+	 * @param builder The guava cache builder
+	 * @param cacheName The assigned name for this cache
+	 * @return The build cache instance
+	 */
+	public static <K, V> Cache<K, V> getJMXStatisticsEnableCache(final CacheBuilder<?, ?> builder, final String cacheName) {
+		@SuppressWarnings({ "unchecked", "rawtypes" })
+		CacheStatistics<K, V> cs = new CacheStatistics(builder, cacheName);
+		cs.register();
+		return cs.cache;
+	}
 
 	/**
 	 * Creates a new CacheStatistics
 	 * @param cache The guava cache instance to wrap
 	 * @param cacheName The assigned name for this cache
 	 */
-	public CacheStatistics(final Cache<?, ?> cache, final String cacheName) {
+	public CacheStatistics(final Cache<K, V> cache, final String cacheName) {
 		super(SharedNotificationExecutor.getInstance(), notificationInfos);
 		this.cache = cache;
 		this.cacheName = cacheName;
 		objectName = JMXHelper.objectName(JMXHelper.objectName("com.heliosapm.cache:name=" + cacheName));
-		
+	}
+	
+	/**
+	 * Creates a new CacheStatistics and the underlying cache from the passed {@link CacheBuilder}.
+	 * This call causes this CacheStatistics to register itself as the cache's removal listener
+	 * and removal events are broadcast as JMX notifications.
+	 * @param builder The guava cache builder
+	 * @param cacheName The assigned name for this cache
+	 */
+	public CacheStatistics(final CacheBuilder<K, V> builder, final String cacheName) {
+		super(SharedNotificationExecutor.getInstance(), notificationInfos);
+		builder.removalListener(this);
+		this.cache = builder.build();
+		this.cacheName = cacheName;
+		objectName = JMXHelper.objectName(JMXHelper.objectName("com.heliosapm.cache:name=" + cacheName));		
 	}
 
 	/**

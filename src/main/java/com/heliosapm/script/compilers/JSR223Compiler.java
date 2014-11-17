@@ -32,12 +32,13 @@ import javax.script.ScriptException;
 
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.DeployedScript;
-import com.heliosapm.script.JavaxScriptDeployedScript;
+import com.heliosapm.script.GroovyDeployedScript;
+import com.heliosapm.script.JSR223DeployedScript;
 import com.heliosapm.script.StateService;
 
 /**
  * <p>Title: JSR223Compiler</p>
- * <p>Description: </p> 
+ * <p>Description: A compiler for JSR223 scripted deployments</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.script.compilers.JSR223Compiler</code></p>
@@ -82,8 +83,18 @@ public class JSR223Compiler implements DeploymentCompiler<CompiledScript> {
 	 */
 	@Override
 	public DeployedScript<CompiledScript> deploy(final String sourceFile) throws CompilerException {
-		final CompiledScript executable = compile(URLHelper.toURL(new File(sourceFile)));
-		return new JavaxScriptDeployedScript(new File(sourceFile), executable);
+		final CompiledScript executable;
+		try {
+			executable = compile(URLHelper.toURL(new File(sourceFile)));
+			return new JSR223DeployedScript(new File(sourceFile), executable);
+		} catch (CompilerException er) {
+			final JSR223DeployedScript gds = new JSR223DeployedScript(new File(sourceFile), null);
+			final URL sourceURL = URLHelper.toURL(sourceFile);
+			final long ad32 = URLHelper.adler32(sourceURL);
+			final long ts = URLHelper.getLastModified(sourceURL);
+			gds.setFailedExecutable(er.getDiagnostic(), ad32, ts);
+			return gds;
+		}				
 	}
 	
 	

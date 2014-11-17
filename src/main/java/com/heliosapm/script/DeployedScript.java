@@ -43,36 +43,44 @@ public interface DeployedScript<T> extends DeployedScriptMXBean {
 	/** The config name for the default schedule if a deployment does not provide one */
 	public static final String DEFAULT_SCHEDULE_PROP = "com.heliosapm.deployment.defaultschedule";
 	/** The internal config key for the schedule */
-	public static final String SCHEDULE_KEY = "schedule";	
+	public static final String SCHEDULE_KEY = "schedule";
+	/** The internal config key for the timeout */
+	public static final String TIMEOUT_KEY = "timeout";	
+	
+	/** The jmx notification type root */
+	public static final String NOTIF_ROOT = "heliosapm.deployment";	
+
+	/** The jmx notification type for a status change in the deployment */
+	public static final String NOTIF_STATUS_CHANGE = NOTIF_ROOT + ".statechange";	
+	/** The jmx notification type for a config change in the deployment */
+	public static final String NOTIF_CONFIG_CHANGE = NOTIF_ROOT + ".configchange";	
+	/** The jmx notification type for a config change in the deployment */
+	public static final String NOTIF_RECOMPILE = NOTIF_ROOT + ".recompile";	
 	
 	/** The default schedule if not configured */
 	public static final int DEFAULT_SCHEDULE = 15;
 	
 	
-	
-	/**
-	 * Returns the absolute file name of the source deployment
-	 * @return the absolute file name of the source deployment
-	 */
-	public String getFileName();
-	
-	/**
-	 * Returns the root watched directory for this file
-	 * @return the root watched directory for this file
-	 */
-	public String getRoot();
-	
-	/**
-	 * Returns the path segments of this file's root watched directory down to this file's directory
-	 * @return the path segments 
-	 */
-	public String[] getPathSegments();
-	
 	/**
 	 * Updates the executable
 	 * @param executable The executable
+	 * @param checksum The checksum of the source file
+	 * @param lastModified The last modified timestamp of the deployment
 	 */
-	public void setExecutable(final T executable);
+	public void setExecutable(final T executable, long checksum, long lastModified);
+	
+	/**
+	 * Performs any initialization required on a new executable
+	 */
+	public void initExcutable();
+	
+	/**
+	 * Marks the deployment as broken
+	 * @param errorMessage The compilation error message
+	 * @param checksum The [broken] source checksum
+	 * @param lastModified The [broken] source last modification timestamp
+	 */
+	public void setFailedExecutable(final String errorMessage, long checksum, long lastModified);
 	
 	
 	/**
@@ -137,10 +145,20 @@ public interface DeployedScript<T> extends DeployedScriptMXBean {
 	public Object invoke(String name, Object...args);
 	
 	/**
+	 * Makes an invocable call with no arguments and the result (if not null) is string converted
+	 * @param name The name of the invocable
+	 * @return the return value
+	 */
+	public String callInvocable(String name);
+	
+	/**
 	 * Sets the deployment's scheduled execution period
 	 * @param period An integral number
 	 */
 	public void setSchedulePeriod(Object period);
+	
+
+
 	
 	
 }

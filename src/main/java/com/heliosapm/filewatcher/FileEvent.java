@@ -25,9 +25,12 @@
 package com.heliosapm.filewatcher;
 
 import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
+import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.WatchEvent.Kind;
 import java.util.Date;
 import java.util.concurrent.Delayed;
@@ -39,7 +42,7 @@ import com.heliosapm.jmx.util.helpers.SystemClock;
 
 /**
  * <p>Title: FileEvent</p>
- * <p>Description: </p> 
+ * <p>Description: Defines a file watcher event</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.filewatcher.FileEvent</code></p>
@@ -50,6 +53,8 @@ public class FileEvent implements Delayed {
 	protected final String fileName;
 	/** The file change type */
 	protected final Kind<Path> eventType;
+	/** Indicates if the underlying file is a symbolic link */
+	protected final boolean symbolicLink;
 	/** The original event noticed time */
 	protected final long eventTimestamp;
 	/** The updateable timestamp  */
@@ -71,6 +76,15 @@ public class FileEvent implements Delayed {
 		eventTimestamp = SystemClock.time();
 		timestamp = eventTimestamp;
 		watchEventType = WatchEventType.assign(fileName, eventType);
+		boolean tmp = false;
+		try {
+			if(!eventType.equals(ENTRY_DELETE)) {		
+				tmp = Files.isSymbolicLink(Paths.get(fileName));
+			}			
+		} catch (Exception ex) {
+			tmp = false;
+		}
+		symbolicLink = tmp;
 	}
 	
 	/**
@@ -244,6 +258,21 @@ public class FileEvent implements Delayed {
 		return eventType.equals(ENTRY_DELETE);
 	}
 	
+	/**
+	 * Indicates if the underlying file is a symbolic link
+	 * @return true if the underlying file is a symbolic link, false otherwise
+	 */
+	public boolean isSymbolicLink() {
+		return symbolicLink;
+	}
+	
+	/**
+	 * Indicates if the event was for a new file
+	 * @return true if the event was for a new file, false otherwise
+	 */
+	public boolean isNewFileEvent() {
+		return eventType.equals(ENTRY_CREATE);
+	}
 	
 	/**
 	 * Creates a JMX notification from this file event

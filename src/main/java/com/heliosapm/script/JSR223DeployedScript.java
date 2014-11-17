@@ -31,25 +31,55 @@ import java.util.Set;
 import javax.script.CompiledScript;
 import javax.script.Invocable;
 import javax.script.ScriptContext;
+import javax.script.SimpleBindings;
+
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.ContextFactory;
 
 /**
- * <p>Title: JavaxScriptDeployedScript</p>
- * <p>Description: </p> 
+ * <p>Title: JSR223DeployedScript</p>
+ * <p>Description: A deployment for JSR233 scripted deployments</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.JavaxScriptDeployedScript</code></p>
+ * <p><code>com.heliosapm.script.JSR223DeployedScript</code></p>
  */
 
-public class JavaxScriptDeployedScript extends AbstractDeployedScript<CompiledScript> {
+public class JSR223DeployedScript extends AbstractDeployedScript<CompiledScript> {
 
+	
+	static {
+		ContextFactory.initGlobal(new ContextFactory() {
+            protected Context makeContext() {
+                Context cx = super.makeContext();
+                cx.setOptimizationLevel(9);
+                return cx;
+            }
+        });		
+	}
+	
 	/**
-	 * Creates a new JavaxScriptDeployedScript
+	 * Creates a new JSR223DeployedScript
 	 * @param sourceFile The source file
 	 * @param cs The compiled script
 	 */
-	public JavaxScriptDeployedScript(final File sourceFile, final CompiledScript cs) {
+	public JSR223DeployedScript(final File sourceFile, final CompiledScript cs) {
 		super(sourceFile);
-		executable = new WeakReference<CompiledScript>(cs);
+		executable = cs;
+		initExcutable();		
+		locateConfigFiles(sourceFile, rootDir, pathSegments);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.AbstractDeployedScript#initExcutable()
+	 */
+	@Override
+	public void initExcutable() {
+		if(executable!=null) {
+			executable.getEngine().setBindings(new SimpleBindings(config), ScriptContext.ENGINE_SCOPE);
+			setStatus(DeploymentStatus.READY);
+		}
+		super.initExcutable();
 	}
 
 	/**
@@ -63,15 +93,11 @@ public class JavaxScriptDeployedScript extends AbstractDeployedScript<CompiledSc
 
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#execute()
+	 * @see com.heliosapm.script.AbstractDeployedScript#doExecute()
 	 */
 	@Override
-	public Object execute() {
-		try {
-			return getExecutable().eval();
-		} catch (Exception ex) {
-			throw new RuntimeException("Failed to execute deployed script [" + this.getFileName() + "]", ex);
-		}
+	public Object doExecute() throws Exception {
+		return getExecutable().eval();
 	}
 
 	/**

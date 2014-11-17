@@ -37,6 +37,7 @@
 		<logback.version>1.1.2</logback.version>
 		<ning.version>1.8.14</ning.version>
 		<json.version>20140107</json.version>
+		<hawtio-version>1.5-SNAPSHOT</hawtio-version>
 		<!-- Plugin Versions -->
 		<jar-plugin.version>2.3</jar-plugin.version>
 		<source-plugin.version>2.2</source-plugin.version>
@@ -80,6 +81,28 @@
 			<artifactId>junit</artifactId>
 			<version>${junit.version}</version>
 		</dependency>
+		
+		<!-- hawt.io console -->
+		
+		<dependency>
+		  <groupId>io.hawt</groupId>
+		  <artifactId>hawtio-embedded</artifactId>
+		  <version>${hawtio-version}</version>
+		</dependency>
+		<!-- 
+		<dependency>
+		  <groupId>io.hawt</groupId>
+		  <artifactId>hawtio-web</artifactId>
+		  <version>${hawtio-version}</version>
+		  <type>war</type>
+		</dependency>
+ 		
+		<dependency>
+		  <groupId>io.hawt</groupId>
+		  <artifactId>hawtio-app</artifactId>
+		  <version>${hawtio-version}</version>
+		</dependency>
+ 		-->
 		
 		<!-- Provided -->
 			<dependency>

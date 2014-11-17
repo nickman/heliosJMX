@@ -41,12 +41,14 @@ import javax.management.AttributeList;
 import javax.management.DynamicMBean;
 import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanInfo;
+import javax.management.MBeanNotificationInfo;
 import javax.management.MBeanServer;
 import javax.management.MBeanServerConnection;
 import javax.management.MBeanServerFactory;
 import javax.management.MBeanServerInvocationHandler;
 import javax.management.MalformedObjectNameException;
 import javax.management.NotificationFilter;
+import javax.management.Notification;
 import javax.management.NotificationListener;
 import javax.management.ObjectName;
 import javax.management.QueryExp;
@@ -59,6 +61,7 @@ import javax.management.remote.JMXServiceURL;
 
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
+
 
 /**
  * <p>Title: JMXHelper</p>
@@ -74,6 +77,12 @@ public class JMXHelper {
 	public static final String JMX_DOMAIN_DEFAULT = System.getProperty(JMX_DOMAIN_PROPERTY, ManagementFactory.getPlatformMBeanServer().getDefaultDomain());
 	/** Regex WildCard Support Pattern for ObjectName key values */
 	public static final Pattern OBJECT_NAME_KP_WILDCARD = Pattern.compile("[:|,](\\S+?)~=\\[(\\S+?)\\]");
+	
+	/** The MBeanInfo changed notification type */
+	public static final String MBEAN_INFO_CHANGED = "jmx.mbean.info.changed";
+	
+	/** A reusable MBeanInfo changed notification */
+	public static final MBeanNotificationInfo META_CHANGED_NOTIF = new MBeanNotificationInfo(new String[] {MBEAN_INFO_CHANGED}, Notification.class.getName(), "Broadcast when an MBean's meta-data changes");
 	
 	/** An object name filter that maps to all registered MBeans */
 	public static final ObjectName ALL_MBEANS_FILTER = objectName("*:*");
