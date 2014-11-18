@@ -45,14 +45,21 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.DelayQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.management.MBeanNotificationInfo;
@@ -101,9 +108,14 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		new MBeanNotificationInfo(new String[] {NOTIF_UNKNOWN_DELETE}, Notification.class.getName(), "A deletion of unknown type event")
 	};
 	
+	/** Non script extensions */
+	private static final Set<String> NON_SCRIPT_EXTENSIONS = Collections.unmodifiableSet(new LinkedHashSet<String>(Arrays.asList("dir", "config", "fixture", "service")));
+	
 	
 	/** Instance logger */
 	protected final Logger log = LoggerFactory.getLogger(getClass());
+	/** Flag indicating if service has started */
+	protected final AtomicBoolean started = new AtomicBoolean(false);
 	/** The file event handler thread pool */
 	protected final JMXManagedThreadPool eventHandlerPool; 
 	/** The watch key cache */
@@ -143,6 +155,9 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	/** Map of root watched directory keyed by the watched directory */
 	protected final Map<File, File> rootDirs = new NonBlockingHashMap<File, File>();
 	
+	/** Singleton ctor reentrancy check */
+	private static final AtomicBoolean initing = new AtomicBoolean(false); 
+	
 	/**
 	 * Acquires the ScriptFileWatcher singleton instance
 	 * @return the ScriptFileWatcher singleton instance
@@ -151,7 +166,12 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		if(instance==null) {
 			synchronized(lock) {
 				if(instance==null) {
+					if(!initing.compareAndSet(false, true)) {
+						throw new RuntimeException("ScriptFileWatcher call to StateService.getInstance(). Programmer Error.");
+					}					
 					instance = new ScriptFileWatcher();
+					instance.scanHotDirsAtStart();
+					instance.started.set(true);
 				}
 			}
 		}
@@ -160,6 +180,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	
 	public static void main(String[] args) {
 		String initialHotDir = "./src/test/resources/testdir/hotdir"; 
+		initialHotDir = Paths.get(initialHotDir).normalize().toFile().getAbsolutePath();
 				//System.getProperty("java.io.tmpdir") + File.separator + "hotdir";
 		System.setProperty(INITIAL_DIRS_PROP, initialHotDir);
 		System.err.println("Initial HotDir:" + initialHotDir);
@@ -173,7 +194,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		}		
 		
 		ScriptFileWatcher sfw = getInstance();
-		sfw.addWatchDirectory(initialHotDir);  //System.getProperty("java.io.tmpdir") + File.separator + "hotdir"
+		//sfw.addWatchDirectory(initialHotDir);  //System.getProperty("java.io.tmpdir") + File.separator + "hotdir"
 		final JMXConnectorServer svr = server;
 		new Thread("ExitWatcher") {
 			public void run() {
@@ -230,11 +251,19 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		registerEventHandler(newFileHandler);
 		registerEventHandler(deletedFileHandler);
 		registerEventHandler(deletedDirectoryHandler);
-		startFileEventListener();
 		addDefaultHotDirs();
+		startFileEventListener();
+		
 	}
 	
-	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.filewatcher.ScriptFileWatcherMXBean#isStarted()
+	 */
+	@Override
+	public boolean isStarted() {
+		return started.get();
+	}
 	
 	
 	/**
@@ -347,8 +376,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	public void startFileEventListener() {
 		startProcessingThread();
 		try {
-			watcher = FileSystems.getDefault().newWatchService();
-			scanHotDirsAtStart();
+			watcher = FileSystems.getDefault().newWatchService();			
 //			updateWatchers();
 			watchKeyThread = new Thread("ScriptFileWatcherWatchKeyThread"){
 				WatchKey watchKey = null;
@@ -468,15 +496,17 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 * Enqueues a file event, removing any older instances that this instance will replace.
 	 * The delay of the enqueued event will be set according to the event type.
 	 * @param fe The file event to enqueue
+	 * @return the deferred completion is the event is bypasses the queue and is processed async, null otherwise
 	 */
-	protected void enqueueFileEvent(final FileEvent fe) {
+	protected Future<?> enqueueFileEvent(final FileEvent fe) {
 		if(fe.getEventType().equals(ENTRY_CREATE)) {
-			enqueueFileEvent(1000, fe);
+			return enqueueFileEvent(1000, fe);
 		} else if(fe.getEventType().equals(ENTRY_MODIFY)) {
-			enqueueFileEvent(800, fe);
+			return enqueueFileEvent(800, fe);
 		} else if(fe.getEventType().equals(ENTRY_DELETE)) {
-			enqueueFileEvent(100, fe);
+			return enqueueFileEvent(100, fe);
 		}
+		return null;
 	}
 	
 	
@@ -484,31 +514,133 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 * Enqueues a file event, removing any older instances that this instance will replace
 	 * @param delay The delay to add to the passed file event to give the queue a chance to conflate obsolete events already queued
 	 * @param fe The file event to enqueue
+	 * @return the deferred completion is the event is bypasses the queue and is processed async, null otherwise
 	 */
-	protected void enqueueFileEvent(final long delay, final FileEvent fe) {
+	protected Future<?> enqueueFileEvent(final long delay, final FileEvent fe) {
 		int removes = 0;
 		while(processingQueue.remove(fe)) {removes++;}
 		fe.addDelay(delay);
 		if(delay<1) {
-			processEventAsync(fe);
+			Future<?> future = processEventAsync(fe);
 			log.debug("Async Executed File Event for [{}] and dropped [{}] older versions", fe.toShortString(), removes );
+			return future;
 		} else {		
 			processingQueue.add(fe);
 			log.debug("Queued File Event for [{}] and dropped [{}] older versions", fe.toShortString(), removes );
 		}
+		return null;
+	}
+	
+	
+	
+	private static boolean isScript(final String extension) {
+		if(extension==null || extension.trim().isEmpty()) return false;
+		return !NON_SCRIPT_EXTENSIONS.contains(extension.trim().toLowerCase());
 	}
 	
 	/**
 	 * Scans the hot dirs looking for files to deploy at startup. 
 	 * Since there's no file change events, we need to go and look for them.
+	 * Scan order is:<ol>
+	 *  <li>Directories only</li>
+	 * 	<li>config</li>
+	 *  <li>fixture</li>
+	 *  <li>service</li>
+	 *  <li>script</li>
+	 * </ol>
 	 */
 	protected void scanHotDirsAtStart() {
-		for(String hotDirPathName: hotDirNames) {
-			treeScan(new File(hotDirPathName), true, true);
+		final Thread startThread = Thread.currentThread();
+		final String threadName = startThread.getName();
+		final Set<String> deploymentTypes = new LinkedHashSet<String>(NON_SCRIPT_EXTENSIONS);		
+		deploymentTypes.add("script");
+		final Map<String, AtomicInteger> typeCounts = new LinkedHashMap<String, AtomicInteger>(deploymentTypes.size());
+		for(String deploymentType: deploymentTypes) {
+			typeCounts.put(deploymentType, new AtomicInteger(0));
 		}
-	}	
+				//new String[] {"config", "fixture", "service", "*"};
+		try {
+			startThread.setName(threadName + "[Startup]");
+//			final Set<Future<?>> futures = new LinkedHashSet<Future<?>>(128);
+			final Set<String> failedDeployments = new LinkedHashSet<String>(128);
+			final long timeout = TimeUnit.MILLISECONDS.convert(ConfigurationHelper.getLongSystemThenEnvProperty(STARTUP_TIMEOUT_PROP, DEFAULT_STARTUP_TIMEOUT), TimeUnit.SECONDS);
+			final long startTime = System.currentTimeMillis();
+			final long endTime = startTime + timeout;
+			int totalDeployments = 0;
+			final Set<String> copyOfHotDirNames = new HashSet<String>(hotDirNames);
+			for(final String deploymentType: deploymentTypes) {
+				for(String hotDirPathName: copyOfHotDirNames) {
+					log.info("Deploying [{}]s in [{}]", deploymentType, hotDirPathName);					
+					try {
+						Set<Future<?>> fs = treeScan(new File(hotDirPathName), true, true, deploymentType);
+						if(!fs.isEmpty()) {
+							log.info("Starting wait on [{}] [{}] task completions", fs.size(), deploymentType);
+							final int completed = waitForCompletion(fs, failedDeployments, endTime);
+							totalDeployments += completed;
+							typeCounts.get(deploymentType).addAndGet(completed);
+						}
+					} catch (TimeoutException te) {
+						log.error("Startup timed out after [{}] ms.", timeout, new Throwable());
+						//System.exit(-1);  // to severe ? // can we recover ?						
+					}
+				}				
+			}
+			
+			final long elapsed = System.currentTimeMillis() - startTime;
+			StringBuilder b = new StringBuilder("\n\t========================================================");
+			b.append("\n\tStartup Complete in ").append(elapsed).append(" ms.");
+			b.append("\n\tSuccessful Deployments: ").append(totalDeployments);
+			for(final Map.Entry<String, AtomicInteger> entry: typeCounts.entrySet()) {
+				b.append("\n\t\t").append(entry.getKey()).append(" : ").append(entry.getValue().get());
+			}
+			b.append("\n\tFailed Deployments: ").append(failedDeployments.size());
+			for(String fail: failedDeployments) {
+				b.append("\n\t\t").append(fail);
+			}
+			b.append("\n\t========================================================\n");
+			log.info(b.toString());
+		} finally {
+			startThread.setName(threadName);
+		}
+	}
 	
+	/**
+	 * Waits for the completion of the futures in the passed set
+	 * @param futures The set of futures to wait on
+	 * @param failedDeployments A set to add failure error messages to
+	 * @param endTime The hard end time after which the tasks are considered failed
+	 * @return the number of completed tasks
+	 * @throws TimeoutException thrown if the tasks are not complete by the end time
+	 */
+	protected int waitForCompletion(final Set<Future<?>> futures, final Set<String> failedDeployments, final long endTime) throws TimeoutException {
+		if(futures.isEmpty()) return 0;
+		int totalDeployments = 0;
+		for(final Iterator<Future<?>> tasks = futures.iterator(); tasks.hasNext();) {
+			final Future<?> f = tasks.next();
+			while(true) {
+				try {
+					f.get(1000, TimeUnit.MILLISECONDS);
+					totalDeployments++;
+					break;
+				} catch (InterruptedException e) {
+					if(Thread.interrupted()) Thread.interrupted();						
+				} catch (ExecutionException e) {
+					failedDeployments.add(e.getMessage());
+					break;
+				} catch (TimeoutException e) {
+					long now = System.currentTimeMillis();
+					if(now > endTime) {
+						log.error("Startup timed out waiting on task completion");
+						throw e;
+//						System.exit(-1);  // to severe ? // can we recover ?
+					}
+				}
+			}
+		}
+		return totalDeployments;
+	}
 	
+
 	/**
 	 * Performs a recursive tree scan
 	 * @param dir The directory to scan
@@ -516,18 +648,41 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	 * @param noDelay true to enqueue with no delay, false otherwise
 	 */
 	protected void treeScan(final File dir, final boolean activateFiles, final boolean noDelay) {
-		if(dir==null || !dir.exists() || !dir.isDirectory()) return;		
+		treeScan(dir, activateFiles, noDelay, null);
+	}
+	
+	
+	/**
+	 * Performs a recursive tree scan
+	 * @param dir The directory to scan
+	 * @param activateFiles true to activate found scripts
+	 * @param noDelay true to enqueue with no delay, false otherwise
+	 * @param extension The extension name to restrict the scan to. Ignored if null
+	 * @return A set of the deferred completion results if submitted with <b>noDelay</b>, null otherwise
+	 */
+	protected Set<Future<?>> treeScan(final File dir, final boolean activateFiles, final boolean noDelay, final String extension) {		
+		if(dir==null || !dir.exists() || !dir.isDirectory()) return null;		
+		final Set<Future<?>> futures = noDelay ? new HashSet<Future<?>>(128) : null;
 		for(final File dirFile: dir.listFiles()) {
 			if(dirFile.isDirectory()) {
-				if(noDelay) enqueueFileEvent(0, new FileEvent(dirFile.getAbsolutePath(), ENTRY_CREATE));
+				if(noDelay) {
+					if((extension==null || "dir".equals(extension))) {
+						futures.add(enqueueFileEvent(0, new FileEvent(dirFile.getAbsolutePath(), ENTRY_CREATE)));
+					}
+					futures.addAll(treeScan(dirFile, activateFiles, noDelay, extension));
+				}
 				else enqueueFileEvent(new FileEvent(dirFile.getAbsolutePath(), ENTRY_CREATE));
-			} else {
-				if(activateFiles) {
-					if(noDelay) enqueueFileEvent(0, new FileEvent(dirFile.getAbsolutePath(), ENTRY_MODIFY));
+			} else if((extension==null || !"dir".equals(extension))) {
+				final String ext = URLHelper.getExtension(dirFile);
+				if(activateFiles && (extension==null || extension.equals(ext) ||  ("script".equals(extension) && isScript(ext)))) {
+					if(noDelay) {
+						futures.add(enqueueFileEvent(0, new FileEvent(dirFile.getAbsolutePath(), ENTRY_MODIFY)));
+					}
 					else enqueueFileEvent(new FileEvent(dirFile.getAbsolutePath(), ENTRY_MODIFY));
 				}
 			}
 		}
+		return futures;
 	}
 	
 	/**
@@ -562,7 +717,10 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	protected Future<?> processEventAsync(final FileEvent fe) {		
 		return eventHandlerPool.submit(new Runnable(){
 			public void run() {
-				log.debug("Processing File Event [{}]", fe.toShortString());
+				log.info("Processing File Event [{}]", fe.toShortString());
+				if(new File(fe.fileName).isFile()) {
+					log.info("Processing File");
+				}
 				// if delete, then set file event file type according to isWatched
 				if(fe.isDelete()) {
 					if(!isWatched(fe.getFileName())) return;
@@ -576,7 +734,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 					for(FileChangeEventHandler handler: handlers) {
 						handler.eventFired(fe);
 					}
-					log.debug("PROCESSED ------------> [{}]", fe.toShortString());
+					log.info("PROCESSED ------------> [{}]", fe.toShortString());
 				}									
 			}
 		});
@@ -631,7 +789,9 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 				if(rootDirName!=null) {
 					rootDirs.put(f, new File(rootDirName));
 				}
-				treeScan(f, true, fileEvent==null ? false : !fileEvent.wasDelayed());
+				if(started.get()) {
+					treeScan(f, true, fileEvent==null ? false : !fileEvent.wasDelayed());
+				}
 			} catch (Exception ex) {
 				hotDirNames.remove(f.getAbsolutePath());
 				log.error("Failed to activate directory [{}] for watch services", watchDir, ex);

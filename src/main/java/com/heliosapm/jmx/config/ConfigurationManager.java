@@ -26,9 +26,7 @@ package com.heliosapm.jmx.config;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,7 +44,6 @@ import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.heliosapm.jmx.expr.CodeBuilder;
 import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.script.ConfigurationDeployedScript;
@@ -58,6 +55,24 @@ import com.heliosapm.script.DeployedScript;
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.jmx.config.ConfigurationManager</code></p>
+ * <h3>Configuration Cascade and Hierarchy</h3>
+ * <p><b>Watch and load hierarchy</b></p><ol>
+ * <li>scripts watch config of the same shortName</li>
+ * <li>non {pwd} configs watch {pwd} scripts in the same directory</li>
+ * <li>{pwd} configs watch {parent-pwd} config</li>
+ * <li>{pwd} configs in pathSegment[1] also watch root config.</li>
+ * </ol>
+ * <p><b>Event (update, new, delete) Cascading</b></p><ol>
+ * <li>When a config event occurs, the CM locates all linked scripts and triggers a config load</li>
+ * <li>To find potentially listening scripts, the navigation is:<ul>
+ * 		<li>If config is a {pwd}, then all non {pwd} configs in the same dir</li>
+ * 		
+ * 
+ * </il></li>
+ * <li></li>
+ * <li></li>
+ * <li></li>
+ * </ol>
  */
 
 public class ConfigurationManager extends NotificationBroadcasterSupport implements ConfigurationManagerMBean, NotificationListener, NotificationFilter  {
@@ -130,6 +145,8 @@ public class ConfigurationManager extends NotificationBroadcasterSupport impleme
 			return false;
 		}
 	}
+	
+	
 	
 	/**
 	 * <p>Deleted config MBean event handler</p>

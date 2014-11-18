@@ -172,6 +172,7 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 	/** The global ({@link ScriptEngineFactory}) level bindings (shared amongst all scripts) */
 	private final Bindings engineBindings;
 	
+	/** Singleton ctor reentrancy check */
 	private static final AtomicBoolean initing = new AtomicBoolean(false); 
 	
 	/** Reserved extensions for built in deployment types */

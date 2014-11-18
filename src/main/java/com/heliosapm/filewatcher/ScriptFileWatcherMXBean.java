@@ -90,6 +90,19 @@ public interface ScriptFileWatcherMXBean {
 	/** The JMX notification type for deletions of unknown type */
 	public static final String NOTIF_UNKNOWN_DELETE = NOTIF_ROOT + ".unknown.delete";
 	
+	/** The conf property name for the startup timeout in seconds */
+	public static final String STARTUP_TIMEOUT_PROP = "com.heliosapm.startup.timeout";
+	
+	/** The default startup timeout in seconds */
+	public static final long DEFAULT_STARTUP_TIMEOUT = 60;
+	
+
+	/**
+	 * Indicates if the service is started
+	 * @return true if the service is started
+	 */
+	public boolean isStarted();
+	
 	/**
 	 * Returns the registered ignored prefixes
 	 * @return the registered ignored prefixes

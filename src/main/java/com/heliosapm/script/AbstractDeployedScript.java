@@ -187,8 +187,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	@Override
 	public Set<ObjectName> getListenOnTargets() {
 		try {
-			final String onformat = String.format("%s:root=%s,%sextension=config,subextension=*,name=%%s", DeployedScript.CONFIG_DOMAIN, rootDir.replace(':', ';'), configDirs());
-			return new HashSet<ObjectName>(Arrays.asList(
+			final String onformat = String.format("%s:root=%s,%sextension=config,subextension=*,name=%%s", 
+					DeployedScript.CONFIG_DOMAIN, rootDir.replace(':', ';'), configDirs());
+			return new LinkedHashSet<ObjectName>(Arrays.asList(
 					//com.heliosapm.configuration:
 						//root=C;\hprojects\heliosJMX\.\src\test\resources\testdir\hotdir,
 						//d1=X,
@@ -197,8 +198,8 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 						// extension=config,
 						//subextension=properties
 					
-					JMXHelper.objectName(String.format(onformat, pathSegments[pathSegments.length-1])),
-					JMXHelper.objectName(String.format(onformat, shortName))
+					JMXHelper.objectName(String.format(onformat, shortName)),
+					JMXHelper.objectName(String.format(onformat, pathSegments[pathSegments.length-1]))					
 			));
 		} catch (Exception ex) {
 			log.error("Failed to get listen on targets", ex);
@@ -258,8 +259,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 				added++;
 			}
 		}
-		if(added>0) {
-			// META_CHANGED_NOTIF = new MBeanNotificationInfo(new String[] {MBEAN_INFO_CHANGED}, Notification.class.getName(), "Broadcast when an MBean's meta-data changes");
+		if(added>0) {		
 			final Notification notif = new Notification(JMXHelper.MBEAN_INFO_CHANGED, objectName, sequence.incrementAndGet(), System.currentTimeMillis(), "Updated MBeanInfo");
 			notif.setUserData(JMXHelper.getMBeanInfo(objectName));
 			sendNotification(notif);
