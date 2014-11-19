@@ -39,6 +39,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -147,8 +148,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	/** The deployment's insta notifications */
 	protected final Set<MBeanNotificationInfo> instanceNotificationInfos = new HashSet<MBeanNotificationInfo>(Arrays.asList(notificationInfos));
 
-	/** The default deployment domain */
-	public static final String DEFAULT_DEPLOYMENT_DOMAIN = "com.heliosapm.deployments";
 	
 	
 	/**
@@ -273,7 +272,27 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 */
 	@Override
 	public String getDomain() {
-		return DEFAULT_DEPLOYMENT_DOMAIN;
+		return DEPLOYMENT_DOMAIN;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getPathSegments(int)
+	 */
+	@Override
+	public String[] getPathSegments(final int trim) {
+		if(trim==0) return pathSegments.clone();
+		final int pLength = pathSegments.length;
+		final int absTrim = Math.abs(trim);
+		
+		if(absTrim > pLength) throw new IllegalArgumentException("The requested trim [" + trim + "] is larger than the path segment [" + pathSegments.length + "]");
+		if(absTrim == pLength) return new String[0]; 
+		LinkedList<String> psegs = new LinkedList<String>(Arrays.asList(pathSegments));
+		for(int i = 0; i < absTrim; i++) {
+			if(trim<0) psegs.removeFirst();
+			else psegs.removeLast();
+		}
+		return psegs.toArray(new String[pLength-absTrim]);
 	}
 	
 	/**

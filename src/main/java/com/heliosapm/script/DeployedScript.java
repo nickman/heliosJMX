@@ -70,6 +70,10 @@ public interface DeployedScript<T> extends DeployedScriptMXBean {
 	public static final String FIXTURE_DOMAIN = "com.heliosapm.fixture";
 	/** The JMX domain for services */
 	public static final String SERVICE_DOMAIN = "com.heliosapm.service";
+	/** The JMX domain for deployments */
+	public static final String DEPLOYMENT_DOMAIN = "com.heliosapm.deployment";
+	/** The JMX domain for hot directories */
+	public static final String HOTDIR_DOMAIN = "com.heliosapm.hotdir";
 	
 	
 	

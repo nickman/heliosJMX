@@ -287,6 +287,18 @@ public interface DeployedScriptMXBean {
 	 */
 	public boolean isConfigFor(String deployment);
 	
+	/**
+	 * Finds the ObjectNames of the MBeans that represent the direct configuration dependencies for this deployment
+	 * @return a set of ObjectNames
+	 */
 	public Set<ObjectName> locateConfiguration();
+	
+	/**
+	 * Returns the path segments for this depoyment with the specified number of segments
+	 * removed from the left (if negative) or the right (if positive) or un-modified ( if zero )
+	 * @param trim The segment trim modifier
+	 * @return The path segments, trimmed as defined
+	 */
+	public String[] getPathSegments(int trim);
 
 }

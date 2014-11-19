@@ -24,9 +24,13 @@
  */
 package com.heliosapm.jmx.config;
 
+import java.io.File;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -48,6 +52,7 @@ import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.script.ConfigurationDeployedScript;
 import com.heliosapm.script.DeployedScript;
+import com.heliosapm.script.DeploymentType;
 
 /**
  * <p>Title: ConfigurationManager</p>
@@ -157,9 +162,10 @@ public class ConfigurationManager extends NotificationBroadcasterSupport impleme
 	public void handleNotification(final Notification n, final Object handback) {
 		final MBeanServerNotification msn = (MBeanServerNotification)n;
 		configs.remove(msn.getMBeanName());
-		configChangeListeners.remove(msn.getMBeanName());
 	}
 
+	
+	
 	
 	/**
 	 * {@inheritDoc}
@@ -193,10 +199,12 @@ public class ConfigurationManager extends NotificationBroadcasterSupport impleme
 					final Map<String, Object> changedConfig = (Map<String, Object>)n.getUserData(); 
 					configs.put(on, changedConfig);
 					configUpdateCount.incrementAndGet();
+					notifyDependents(objectName, config);
 				} catch (Exception ex) {
 					log.error("Failed to handle config change notification [{}]", n.toString(), ex);
 				}				
-			}			
+			}
+
 		};
 		final NotificationFilter changeFilter = new NotificationFilter() {
 			/**  */
@@ -206,6 +214,7 @@ public class ConfigurationManager extends NotificationBroadcasterSupport impleme
 			public boolean isNotificationEnabled(final Notification n) {
 				try {
 					final ObjectName on = (ObjectName)n.getSource();
+					if(!DeploymentType.isDeploymentType(DeploymentType.CONFIG, on)) return false;
 					return (on.equals(target) && DeployedScript.NOTIF_CONFIG_MOD.equals(n.getType())); 
 				} catch (Exception ex) {
 					log.error("Failed to filter config change notification [{}]", n.toString(), ex);
@@ -216,6 +225,88 @@ public class ConfigurationManager extends NotificationBroadcasterSupport impleme
 		JMXHelper.addNotificationListener(objectName, changeListener, changeFilter, null);
 		configChangeListeners.put(objectName, changeListener);
 	}
+	
+	
+/*
+ * <p><b>Watch and load hierarchy</b></p><ol>
+ * <li>scripts watch config of the same shortName</li>
+ * <li>non {pwd} configs watch {pwd} scripts in the same directory</li>
+ * <li>{pwd} configs watch {parent-pwd} config</li>
+ * <li>{pwd} configs in pathSegment[1] also watch root config.</li>
+ * </ol>
+
+NON PWD:
+com.heliosapm.configuration:
+	root=/home/nwhitehead/hprojects/heliosJMX/src/test/resources/testdir/hotdir,
+	d1=X,
+	d2=Y,
+	name=jmx,
+	extension=config,
+	subextension=properties
+
+PWD:
+com.heliosapm.configuration:
+	root=/home/nwhitehead/hprojects/heliosJMX/src/test/resources/testdir/hotdir,
+	d1=X,
+	d2=Y,
+	d3=Z,
+	name=Z,
+	extension=config,
+	subextension=js
+
+ */
+	
+	protected void notifyDependents(final ObjectName objectName, final Map<String, Object> config) {
+		String[] dirTree = getDirTree(objectName, false);
+		final Hashtable<String, String> keyVals = objectName.getKeyPropertyList();
+		final String shortName = objectName.getKeyProperty("name");
+		final boolean isPwd = dirTree[dirTree.length-1].equals(shortName);
+		// if is pwd, flash all non-pwd scripts in same dir
+		//    otherwise, flash all scripts in same dir
+		if(isPwd) {
+			final File configDir = new File(JMXHelper.getAttribute(objectName, "FileName").toString()).getParentFile();
+			for(File sib: configDir.listFiles(filter))
+		}
+		
+	}		
+	
+	protected String[] getDirTree(final ObjectName objectName, final boolean includeRoot) {
+		final Set<String> tree = new LinkedHashSet<String>();
+		final Hashtable<String, String> keyvals = objectName.getKeyPropertyList();
+		if(includeRoot) {
+			if(keyvals.contains("root")) {
+				tree.add(keyvals.get("root"));
+			}
+		}
+		for(int i = 1; i < 128; i++) {
+			String key = "d" + i;
+			if(keyvals.containsValue(key)) {
+				tree.add(keyvals.get(key));
+			} else {
+				break;
+			}
+		}
+		return tree.toArray(new String[tree.size()]);
+	}
+	
+	/**
+	 * Finds the highest "d" diectory key and in an ObjectName
+	 * @param objectName The object name to extract the key from
+	 * @return the highest d, or -1 if none were found
+	 */
+	protected int getHighestDir(final ObjectName objectName) {
+		final Hashtable<String, String> keyvals = objectName.getKeyPropertyList();
+		int x = -1;
+		for(int i = 1; i < 128; i++) {
+			if(keyvals.containsValue("d" + i)) {
+				x = 1;
+			} else {
+				break;
+			}
+		}
+		return x;
+	}
+	
 
 	/**
 	 * {@inheritDoc}
