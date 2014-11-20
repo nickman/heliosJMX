@@ -256,6 +256,11 @@ com.heliosapm.configuration:
 
  */
 	
+	/**
+	 * Notifies dependents of a change in a config they depend on
+	 * @param objectName The JMX ObjectName of the updated config
+	 * @param config The config of the changed item
+	 */
 	protected void notifyDependents(final ObjectName objectName, final Map<String, Object> config) {
 		String[] dirTree = getDirTree(objectName, false);
 		final Hashtable<String, String> keyVals = objectName.getKeyPropertyList();
@@ -264,8 +269,7 @@ com.heliosapm.configuration:
 		// if is pwd, flash all non-pwd scripts in same dir
 		//    otherwise, flash all scripts in same dir
 		if(isPwd) {
-			final File configDir = new File(JMXHelper.getAttribute(objectName, "FileName").toString()).getParentFile();
-			for(File sib: configDir.listFiles(filter))
+			
 		}
 		
 	}		

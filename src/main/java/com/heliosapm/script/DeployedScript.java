@@ -25,7 +25,6 @@
 package com.heliosapm.script;
 
 import java.util.Map;
-import java.util.Set;
 
 import javax.management.ObjectName;
 
@@ -131,6 +130,13 @@ public interface DeployedScript<T> extends DeployedScriptMXBean {
 	 * @return the config value or null if not found
 	 */
 	public <E> E getConfig(String key, Class<E> type);
+	
+	/**
+	 * Triggers a config reload when a config item this deployment depends on changes
+	 * @param dependency The JMX ObjectName of the config item this deployment depends on
+	 * @param changedConfig The new config
+	 */
+	public void triggerConfigChange(final ObjectName dependency, final Map<String, Object> changedConfig);
 	
 	/**
 	 * Returns the config item with the passed key

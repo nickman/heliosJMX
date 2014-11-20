@@ -62,6 +62,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.heliosapm.filewatcher.ScriptFileWatcher;
+import com.heliosapm.jmx.config.ConfigurationManager;
 import com.heliosapm.jmx.expr.CodeBuilder;
 import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
@@ -218,17 +219,33 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return b.toString();
 	}
 	
+//	/**
+//	 * Builds the standard JMX ObjectName for this deployment
+//	 * @return an ObjectName
+//	 */
+//	protected ObjectName buildObjectName() {
+//		return JMXHelper.objectName(new StringBuilder(getDomain()).append(":")
+//				.append("path=").append(join("/", pathSegments)).append(",")
+//				.append("extension=").append(extension).append(",")
+//				.append("name=").append(shortName)			
+//				);
+//	}
+	
 	/**
 	 * Builds the standard JMX ObjectName for this deployment
 	 * @return an ObjectName
 	 */
 	protected ObjectName buildObjectName() {
-		return JMXHelper.objectName(new StringBuilder(getDomain()).append(":")
-				.append("path=").append(join("/", pathSegments)).append(",")
-				.append("extension=").append(extension).append(",")
-				.append("name=").append(sourceFile.getName())			
-				);
+		final StringBuilder b = new StringBuilder(getDomain()).append(":")
+				.append("root=").append(rootDir.replace(':', ';')).append(",");
+		for(int i = 1; i < pathSegments.length; i++) {
+			b.append("d").append(i).append("=").append(pathSegments[i]).append(",");
+		}		
+		b.append("name=").append(shortName).append(",")
+			.append("extension=").append(extension);
+		return JMXHelper.objectName(b);
 	}
+	
 	
 	/**
 	 * {@inheritDoc}
@@ -581,6 +598,17 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
 		return (E)config.get(key);
 	}
+	
+	/**
+	 * Triggers a config reload when a config item this deployment depends on changes
+	 * @param dependency The JMX ObjectName of the config item this deployment depends on
+	 * @param changedConfig The new config
+	 */
+	public void triggerConfigChange(final ObjectName dependency, final Map<String, Object> changedConfig) {
+		config.putAll(changedConfig);
+		ConfigurationManager.getInstance().addConfiguration(objectName, config);
+	}
+	
 	
 	/**
 	 * {@inheritDoc}

@@ -25,14 +25,21 @@
 package com.heliosapm.script;
 
 import java.io.File;
-import java.io.FilenameFilter;
+import java.io.FileFilter;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.management.ObjectName;
 
+import org.cliffc.high_scale_lib.NonBlockingHashSet;
+
+import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 
 /**
@@ -53,14 +60,21 @@ public enum DeploymentType {
 	/** Represents a service deployment */	
 	SERVICE(DeployedScript.SERVICE_DOMAIN ,"service"),
 	/** Represents an executable script configuration deployment */
-	SCRIPT(DeployedScript.DEPLOYMENT_DOMAIN, "script");
+	SCRIPT(DeployedScript.DEPLOYMENT_DOMAIN, "script");  // THIS GUY ALWAYS LAST
 	
+	/** A cache of created deployment type file filters */
+	private static final Map<String, FileFilter> filters = new ConcurrentHashMap<String, FileFilter>();
+	/** The supported script extensions */
+	private static final Set<String> SCRIPT_EXTENSIONS = new NonBlockingHashSet<String>();	
 	/** The non script extensions */
 	public static final Set<String> NON_SCRIPT_EXTENSIONS;
 	/** The non script jmx domains */
 	public static final Set<String> NON_SCRIPT_DOMAINS;
 	
 	static {
+		SCRIPT_EXTENSIONS.add("js");
+		SCRIPT_EXTENSIONS.add("java");
+		SCRIPT_EXTENSIONS.add("groovy");
 		DeploymentType[] values = DeploymentType.values();
 		Set<String> tmp = new HashSet<String>(values.length-1);
 		Set<String> tmp2 = new HashSet<String>(values.length-1);
@@ -84,6 +98,15 @@ public enum DeploymentType {
 	public final String key;
 	
 	/**
+	 * Used by StateService to add supported script extensions
+	 * @param ext the script extension to add
+	 */
+	static void addScriptExtension(final String ext) {
+		if(ext==null || ext.trim().isEmpty()) throw new IllegalArgumentException("The passed script extension was null or empty");
+		SCRIPT_EXTENSIONS.add(ext.trim().toLowerCase());
+	}
+	
+	/**
 	 * Determines if the passed ObjectName represents the passed deployment type
 	 * @param deploymentType  The deployment type to determine the match against
 	 * @param objectName The ObjectName to test
@@ -92,10 +115,11 @@ public enum DeploymentType {
 	public static boolean isDeploymentType(final DeploymentType deploymentType, final ObjectName objectName) {
 		if(objectName==null) throw new IllegalArgumentException("The passed ObjectName was null");
 		if(deploymentType==null) throw new IllegalArgumentException("The passed DeploymentType was null");
+		if(deploymentType==DIRECTORY) return false;
 		final String ext = objectName.getKeyProperty("extension");
 		if(ext==null) return false;
 		final String domain = objectName.getDomain();
-		if(deploymentType==SCRIPT) return NON_SCRIPT_EXTENSIONS.contains(ext) && SCRIPT.jmxDomain.equals(domain);
+		if(deploymentType==SCRIPT) return SCRIPT_EXTENSIONS.contains(ext) && SCRIPT.jmxDomain.equals(domain);
 		return deploymentType.key.equals(ext) && deploymentType.jmxDomain.equals(domain); 
 	}
 	
@@ -110,7 +134,8 @@ public enum DeploymentType {
 		if(deploymentType==null) throw new IllegalArgumentException("The passed DeploymentType was null");
 		final String ext = URLHelper.getExtension(fileName, null);
 		if(ext==null) return false;
-		if(deploymentType==SCRIPT) return NON_SCRIPT_EXTENSIONS.contains(ext);
+		if(deploymentType==DIRECTORY) return new File(fileName).isDirectory();
+		if(deploymentType==SCRIPT) return SCRIPT_EXTENSIONS.contains(ext);
 		return deploymentType.key.equals(ext); 
 	}
 	
@@ -125,32 +150,68 @@ public enum DeploymentType {
 		if(deploymentType==null) throw new IllegalArgumentException("The passed DeploymentType was null");
 		final String ext = URLHelper.getExtension(file, null);
 		if(ext==null) return false;
-		if(deploymentType==SCRIPT) return NON_SCRIPT_EXTENSIONS.contains(ext);
-		return deploymentType.key.equals(ext); 
+		if(deploymentType==SCRIPT) return SCRIPT_EXTENSIONS.contains(ext);
+		if(deploymentType==DIRECTORY) return file.isDirectory();
+		if(deploymentType.key.equals(ext)) return true;
+		return false;
+//		// at this point, we would assume it's a script, but scripts are bit more complicated
+//		if(deploymentType==SCRIPT && NON_SCRIPT_EXTENSIONS.contains(ext)) return false;
+//		
+//		final ObjectName don = JMXHelper.objectName(String.format("%s:path=*%s,extension=%s,name=%s", 
+//				SCRIPT.jmxDomain, file.getParentFile().getName(), URLHelper.getExtension(file), URLHelper.getPlainFileName(file)));
+//		final ObjectName[] matches = JMXHelper.query(don);
+//		if(matches.length==0) return false;
+//		final String absName = file.getAbsolutePath();
+//		for(final ObjectName on: matches) {
+//			 if(absName.equals(JMXHelper.getAttribute(on, "FileName"))) return true;
+//		}		
+//		return false;
 	}
-	
-	private static class DeploymentTypeStackedFilter implements FilenameFilter {
-		final EnumSet<DeploymentType> deploymentTypes;
-		
-		
-		@Override
-		public boolean accept(final File dir, final String name) {
-
-			return false;
-		}
-		
-	}
-	
 	
 	
 	/**
-	 * <p>Title: DeploymentTypeFilter</p>
-	 * <p>Description: Defines filters and identifiers for {@link DeploymentType}</p> 
-	 * <p>Company: Helios Development Group LLC</p>
-	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
-	 * <p><code>com.heliosapm.script.DeploymentType.DeploymentTypeFilter</code></p>
+	 * Returns a file name filter for the passed deployment type
+	 * @param deploymentTypes the deployment types to get a filter for
+	 * @return a filename filter
 	 */
-	public static interface DeploymentTypeFilter {
+	public static FileFilter getFilterFor(DeploymentType...deploymentTypes) {
+		Set<DeploymentType> sorter = new TreeSet<DeploymentType>(Arrays.asList(deploymentTypes));
+		final String key = sorter.toString();
+		FileFilter ff = filters.get(key);
+		if(ff==null) {
+			synchronized(filters) {
+				ff = filters.get(key);
+				if(ff==null) {
+					ff = new DeploymentTypeStackedFilter(deploymentTypes);
+				}
+			}
+		}		
+		return ff;
+	}
+	
+	private static class DeploymentTypeStackedFilter implements FileFilter {
+		/** The deployment types to filter for */
+		final EnumSet<DeploymentType> deploymentTypes;
+		/**
+		 * Creates a new DeploymentTypeStackedFilter
+		 * @param deploymentTypes The deployment types to filter for
+		 */
+		public DeploymentTypeStackedFilter(DeploymentType...deploymentTypes) {
+			EnumSet<DeploymentType> tmp = EnumSet.noneOf(DeploymentType.class);
+			if(deploymentTypes!=null) {
+				tmp.addAll(Arrays.asList(deploymentTypes));
+			}
+			this.deploymentTypes = (EnumSet<DeploymentType>) Collections.unmodifiableSet(tmp);
+		}
+		
+		@Override
+		public boolean accept(final File file) {
+			if(file==null) return false;
+			for(final DeploymentType dt: deploymentTypes) {
+				if(isDeploymentType(dt, file)) return true;
+			}
+			return false;
+		}		
 	}
 	
 }

@@ -219,7 +219,8 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 		if(deploymentCompiler==null) throw new IllegalArgumentException("DeploymentCompiler was null");
 		final String[] extensions = deploymentCompiler.getSupportedExtensions();		
 		for(String extension: extensions) {			
-			deploymentCompilers.put(extension, deploymentCompiler);			
+			deploymentCompilers.put(extension, deploymentCompiler);		
+			DeploymentType.addScriptExtension(extension);
 		}
 		log.info("Installed DeploymentCompiler [{}] for extensions {}", deploymentCompiler.getClass().getSimpleName(), Arrays.toString(extensions));
 	}
