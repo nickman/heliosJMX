@@ -63,6 +63,7 @@ import org.slf4j.LoggerFactory;
 
 import com.heliosapm.filewatcher.ScriptFileWatcher;
 import com.heliosapm.jmx.config.ConfigurationManager;
+import com.heliosapm.jmx.execution.ExecutionSchedule;
 import com.heliosapm.jmx.expr.CodeBuilder;
 import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
@@ -106,7 +107,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	protected final Map<String, Object> config = new ConcurrentHashMap<String, Object>();
 	
 	/** The schedule time in seconds */
-	protected int schedule  = ConfigurationHelper.getIntSystemThenEnvProperty(DEFAULT_SCHEDULE_PROP, DEFAULT_SCHEDULE);
+	protected ExecutionSchedule schedule = ConfigurationHelper.getIntSystemThenEnvProperty(DEFAULT_SCHEDULE_PROP, DEFAULT_SCHEDULE);
 	
 	/** The executable's execution timeout in ms. Defaults to 0 which is no timeout */
 	protected long timeout = 0;
@@ -332,14 +333,14 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 * @see com.heliosapm.script.DeployedScript#execute()
 	 */
 	@Override
-	public Object execute() {
+	public T execute() {
 		final long now = System.currentTimeMillis();
 		try {			
 			final Object ret = doExecute();
 			execCount.incrementAndGet();
 			lastExecTime.set(now);
 			lastExecElapsed.set(System.currentTimeMillis() - now);			
-			return ret;
+			return (T) ret;
 		} catch (Exception ex) {
 			final long er = errorCount.incrementAndGet();
 			lastErrorTime.set(System.currentTimeMillis());			
@@ -347,6 +348,24 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 			throw new RuntimeException("Failed to execute deployed script [" + this.getFileName() + "]", ex);
 		}						
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see java.util.concurrent.Callable#call()
+	 */
+	@Override
+	public T call() throws Exception {	
+		return execute();
+	}
+	
+//	/**
+//	 * {@inheritDoc}
+//	 * @see java.lang.Runnable#run()
+//	 */
+//	@Override
+//	public void run() {
+//		execute();
+//	}
 	
 	/**
 	 * To be implemented by concrete deployment scripts

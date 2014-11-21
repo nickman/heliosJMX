@@ -236,18 +236,17 @@ public interface DeployedScriptMXBean {
 	public String toJSON();
 	
 	/**
-	 * Returns the deployment's scheduled execution period, or more accurately,
-	 * the number of seconds delay between the end of one execution and the next.
-	 * If the returned value is less than one, it will not be scheduled.
-	 * @return the scheduling period in seconds.
+	 * Returns the deployment's scheduled execution definition, 
+	 * as specified in {@link com.heliosapm.jmx.execution.ExecutionSchedule}
+	 * @return the scheduled execution definition,
 	 */
-	public int getSchedulePeriod();
+	public String getSchedule();
 	
 	/**
 	 * Sets the deployment's scheduled execution period
-	 * @param period An integral number
+	 * @param scheduleExpression A schedule expression as specified in {@link com.heliosapm.jmx.execution.ExecutionSchedule}
 	 */
-	public void setSchedulePeriodInt(int period);
+	public void setSchedule(String scheduleExpression);
 	
 	/**
 	 * Writes this new source the originating source file.

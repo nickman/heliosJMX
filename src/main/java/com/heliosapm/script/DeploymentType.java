@@ -29,7 +29,10 @@ import java.io.FileFilter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Hashtable;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -64,8 +67,14 @@ public enum DeploymentType {
 	
 	/** A cache of created deployment type file filters */
 	private static final Map<String, FileFilter> filters = new ConcurrentHashMap<String, FileFilter>();
+	/** A cache of created deployment type ObjectName queries */
+	private static final Map<String, Set<ObjectName>> queries = new ConcurrentHashMap<String, Set<ObjectName>>();
+	
 	/** The supported script extensions */
-	private static final Set<String> SCRIPT_EXTENSIONS = new NonBlockingHashSet<String>();	
+	private static final Set<String> SCRIPT_EXTENSIONS = new NonBlockingHashSet<String>();
+	/** The supported non-script sub-extensions */
+	private static final Set<String> NON_SCRIPT_SUBEXTENSIONS = new NonBlockingHashSet<String>();	
+	
 	/** The non script extensions */
 	public static final Set<String> NON_SCRIPT_EXTENSIONS;
 	/** The non script jmx domains */
@@ -75,6 +84,9 @@ public enum DeploymentType {
 		SCRIPT_EXTENSIONS.add("js");
 		SCRIPT_EXTENSIONS.add("java");
 		SCRIPT_EXTENSIONS.add("groovy");
+		NON_SCRIPT_SUBEXTENSIONS.addAll(SCRIPT_EXTENSIONS);
+		NON_SCRIPT_SUBEXTENSIONS.add("json");
+		NON_SCRIPT_SUBEXTENSIONS.add("properties");
 		DeploymentType[] values = DeploymentType.values();
 		Set<String> tmp = new HashSet<String>(values.length-1);
 		Set<String> tmp2 = new HashSet<String>(values.length-1);
@@ -104,6 +116,7 @@ public enum DeploymentType {
 	static void addScriptExtension(final String ext) {
 		if(ext==null || ext.trim().isEmpty()) throw new IllegalArgumentException("The passed script extension was null or empty");
 		SCRIPT_EXTENSIONS.add(ext.trim().toLowerCase());
+		NON_SCRIPT_SUBEXTENSIONS.add(ext.trim().toLowerCase());
 	}
 	
 	/**
@@ -167,16 +180,67 @@ public enum DeploymentType {
 //		}		
 //		return false;
 	}
+
+	public static Set<ObjectName> getObjectNameQuery(final int navigate, final ObjectName base, final DeploymentType...deploymentTypes) {
+		if(base==null) throw new IllegalArgumentException("The passed ObjectName base was null");
+		if(deploymentTypes.length==0) return Collections.EMPTY_SET;
+		final String key = getKeyFor(deploymentTypes) + navigate;
+		Set<ObjectName> onqueries = queries.get(key);
+		if(onqueries==null) {
+			synchronized(queries) {
+				onqueries = queries.get(key);
+				if(onqueries==null) {
+					onqueries = new LinkedHashSet<ObjectName>(deploymentTypes.length);
+					final int highdir = getHighestDir(base);
+					if(navigate>highdir) {
+						throw new RuntimeException("Illegal value for navigate [" + navigate + "] on base ObjectName [" + base + "]. The highest directory number is [" + highdir + "]");
+					}					
+					
+					final HashMap<String, String> keyPairs = new HashMap<String, String>(base.getKeyPropertyList());
+					// adjust the base keypairs for navigation
+					if(navigate > 0) {
+						for(int i = highdir; i > 0; i--) {
+							keyPairs.remove("d" + i);
+						}						
+					}
+					ObjectName template = JMXHelper.objectName("*", keyPairs);
+					
+					
+					
+					
+				}
+			}
+		}
+		return Collections.unmodifiableSet(onqueries);
+		
+	}
 	
+	/**
+	 * Finds the highest "d" diectory key and in an ObjectName
+	 * @param objectName The object name to extract the key from
+	 * @return the highest d, or -1 if none were found
+	 */
+	protected static int getHighestDir(final ObjectName objectName) {
+		final Hashtable<String, String> keyvals = objectName.getKeyPropertyList();
+		int x = -1;
+		for(int i = 1; i < 128; i++) {
+			if(keyvals.containsValue("d" + i)) {
+				x = 1;
+			} else {
+				break;
+			}
+		}
+		return x;
+	}
+
 	
 	/**
 	 * Returns a file name filter for the passed deployment type
 	 * @param deploymentTypes the deployment types to get a filter for
 	 * @return a filename filter
 	 */
-	public static FileFilter getFilterFor(DeploymentType...deploymentTypes) {
-		Set<DeploymentType> sorter = new TreeSet<DeploymentType>(Arrays.asList(deploymentTypes));
-		final String key = sorter.toString();
+	public static FileFilter getFilterFor(final DeploymentType...deploymentTypes) {		
+		final String key = getKeyFor(deploymentTypes);
 		FileFilter ff = filters.get(key);
 		if(ff==null) {
 			synchronized(filters) {
@@ -188,6 +252,17 @@ public enum DeploymentType {
 		}		
 		return ff;
 	}
+	
+	/**
+	 * Generates a unique key for the passed deployment types
+	 * @param deploymentTypes The deployment types to create a key for
+	 * @return the key
+	 */
+	private static String getKeyFor(DeploymentType...deploymentTypes) {
+		Set<DeploymentType> sorter = new TreeSet<DeploymentType>(Arrays.asList(deploymentTypes));
+		return sorter.toString();
+	}
+	
 	
 	private static class DeploymentTypeStackedFilter implements FileFilter {
 		/** The deployment types to filter for */

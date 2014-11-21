@@ -25,8 +25,11 @@
 package com.heliosapm.script;
 
 import java.util.Map;
+import java.util.concurrent.Callable;
 
 import javax.management.ObjectName;
+
+import com.heliosapm.jmx.execution.ExecutionSchedule;
 
 /**
  * <p>Title: DeployedScript</p>
@@ -37,7 +40,7 @@ import javax.management.ObjectName;
  * @param <T> The type of the underlying executable script
  */
 
-public interface DeployedScript<T> extends DeployedScriptMXBean {
+public interface DeployedScript<T> extends DeployedScriptMXBean, Callable<T> {
 	
 	/** The config name for the default schedule if a deployment does not provide one */
 	public static final String DEFAULT_SCHEDULE_PROP = "com.heliosapm.deployment.defaultschedule";
@@ -173,11 +176,12 @@ public interface DeployedScript<T> extends DeployedScriptMXBean {
 	 */
 	public String callInvocable(String name);
 	
+	
 	/**
-	 * Sets the deployment's scheduled execution period
-	 * @param period An integral number
+	 * Returns the execution schedule for this deployment
+	 * @return the execution schedule for this deployment
 	 */
-	public void setSchedulePeriod(Object period);
+	public ExecutionSchedule getExecutionSchedule();
 	
 
 

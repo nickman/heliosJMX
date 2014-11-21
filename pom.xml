@@ -15,6 +15,7 @@
 		<chronicle.version>1.2-SNAPSHOT</chronicle.version>
 		<json.version>20090211</json.version>
 		<guava.version>17.0</guava.version>
+		<quartz.version>2.1.5</quartz.version>
 		<junit.version>4.8.2</junit.version>
 		<trove.version>3.0.3</trove.version>
 		<snmp4j.version>1.9.1f</snmp4j.version>
@@ -96,6 +97,15 @@
 		  <version>1.4.19</version>
 		  <type>war</type>
 		</dependency>
+		
+		<!-- Quartz scheduler -->
+
+		<dependency>
+		  <groupId>org.quartz-scheduler</groupId>
+		  <artifactId>quartz</artifactId>
+		  <version>${quartz.version}</version>
+		</dependency>
+		
 		
 		<!-- 
 		<dependency>
