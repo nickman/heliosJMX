@@ -625,6 +625,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 				} catch (InterruptedException e) {
 					if(Thread.interrupted()) Thread.interrupted();						
 				} catch (ExecutionException e) {
+					e.printStackTrace(System.err);
 					failedDeployments.add(e.getMessage());
 					break;
 				} catch (TimeoutException e) {

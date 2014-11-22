@@ -24,8 +24,6 @@
  */
 package com.heliosapm.jmx.execution;
 
-import java.util.concurrent.Callable;
-import java.util.concurrent.ScheduledFuture;
 import java.util.regex.Pattern;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
@@ -45,6 +43,9 @@ public class ExecutionSchedule {
 	final int period;
 	/** The cron expression if the  type is cron */
 	final String cron;
+	
+	/** The default execution schedule of NONE */
+	public static final ExecutionSchedule NO_EXEC_SCHEDULE = new ExecutionSchedule("", true);
 	
 	/** A cache of execution schedule instances keyed by the expression */
 	private static final NonBlockingHashMap<String, ExecutionSchedule> instances = new NonBlockingHashMap<String, ExecutionSchedule>();
@@ -81,6 +82,15 @@ public class ExecutionSchedule {
 			}
 		}
 		return es;
+	}
+	
+	/**
+	 * Invokes {@link #getInstance(String, boolean)} with a true default to None 
+	 * @param scheduleExpression The schedule expression
+	 * @return the execution schedule
+	 */
+	public static ExecutionSchedule getInstance(final String scheduleExpression) {
+		return getInstance(scheduleExpression, true);
 	}
 
 	/**
@@ -144,6 +154,71 @@ public class ExecutionSchedule {
 				return "None";
 		}
 	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see java.lang.Object#hashCode()
+	 */
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((cron == null) ? 0 : cron.hashCode());
+		result = prime * result + period;
+		result = prime * result
+				+ ((scheduleType == null) ? 0 : scheduleType.hashCode());
+		return result;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see java.lang.Object#equals(java.lang.Object)
+	 */
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		ExecutionSchedule other = (ExecutionSchedule) obj;
+		if (cron == null) {
+			if (other.cron != null)
+				return false;
+		} else if (!cron.equals(other.cron))
+			return false;
+		if (period != other.period)
+			return false;
+		if (scheduleType != other.scheduleType)
+			return false;
+		return true;
+	}
+
+	/**
+	 * Returns the schedule type for this schedule
+	 * @return the schedule type for this schedule
+	 */
+	public final ScheduleType getScheduleType() {
+		return scheduleType;
+	}
+
+	/**
+	 * Returns the execution period in seconds
+	 * @return the execution period in seconds if this is a fixed rate or fixed delay schedule, -1 otherwise
+	 */
+	public final int getPeriod() {
+		return period;
+	}
+
+	/**
+	 * Returns the cron schedule expression
+	 * @return the cron schedule expression if this is a cron schedule, null otherwise
+	 */
+	public final String getCron() {
+		return cron;
+	}
+	
 	
 
 }

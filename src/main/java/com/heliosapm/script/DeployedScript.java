@@ -183,6 +183,12 @@ public interface DeployedScript<T> extends DeployedScriptMXBean, Callable<T> {
 	 */
 	public ExecutionSchedule getExecutionSchedule();
 	
+	/**
+	 * Activates the passed execution schedule for this depoyment
+	 * @param newSchedule the new execution schedule for this depoyment
+	 */
+	public void setExecutionSchedule(final ExecutionSchedule newSchedule);
+	
 
 
 	

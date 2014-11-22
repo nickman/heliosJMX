@@ -1,3 +1,5 @@
 // groovy.errors.tolerance=0 
-return  new File('/tmp').listFiles().length 
+tmpl = new File('/tmp').listFiles().length 
 //return new File('/tmp').listFiles().length *2
+println "Temp Length: $tmpl"
+return tmpl;

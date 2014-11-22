@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
@@ -64,9 +65,10 @@ import org.slf4j.LoggerFactory;
 import com.heliosapm.filewatcher.ScriptFileWatcher;
 import com.heliosapm.jmx.config.ConfigurationManager;
 import com.heliosapm.jmx.execution.ExecutionSchedule;
+import com.heliosapm.jmx.execution.ScheduleType;
+import com.heliosapm.jmx.execution.ScheduledExecutionService;
 import com.heliosapm.jmx.expr.CodeBuilder;
 import com.heliosapm.jmx.notif.SharedNotificationExecutor;
-import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.StringHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
@@ -106,9 +108,13 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	/** The configuration for this deployment */
 	protected final Map<String, Object> config = new ConcurrentHashMap<String, Object>();
 	
-	/** The schedule time in seconds */
-	protected ExecutionSchedule schedule = ConfigurationHelper.getIntSystemThenEnvProperty(DEFAULT_SCHEDULE_PROP, DEFAULT_SCHEDULE);
-	
+	/** The execution schedule */
+	protected final AtomicReference<ExecutionSchedule> schedule = new AtomicReference<ExecutionSchedule>(ExecutionSchedule.NO_EXEC_SCHEDULE);
+	/** The backup execution schedule, saved when execution was paused */
+	protected final AtomicReference<ExecutionSchedule> pausedSchedule = new AtomicReference<ExecutionSchedule>(ExecutionSchedule.NO_EXEC_SCHEDULE);
+
+	/** The schedule handle */
+	protected final AtomicReference<ScheduledFuture<?>> scheduleHandle = new AtomicReference<ScheduledFuture<?>>(null); 
 	/** The executable's execution timeout in ms. Defaults to 0 which is no timeout */
 	protected long timeout = 0;
 	
@@ -461,23 +467,69 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		
 	}
 	
+	
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#setSchedulePeriod(java.lang.Object)
+	 * @see com.heliosapm.script.DeployedScriptMXBean#setExecutionSchedule(java.lang.String)
 	 */
 	@Override
-	public void setSchedulePeriod(Object period) {
-		if(period==null) throw new IllegalArgumentException("The passed period was null");
-		if(period instanceof Number) {
-			schedule = ((Number)period).intValue();
-		} else {
-			try {
-				schedule = new Double(period.toString().trim()).intValue();
-			} catch (Exception ex) {
-				throw new IllegalArgumentException("Could not determine period from object [" + period + "]");
-			}
-		}
+	public void setExecutionSchedule(final String scheduleExpression) {
+		if(scheduleExpression==null) throw new IllegalArgumentException("The passed Schedule Expression was null");
+		final ExecutionSchedule newSchedule = ExecutionSchedule.getInstance(scheduleExpression, false);
+		setExecutionSchedule(newSchedule);
 	}
+	
+	/**
+	 * Activates the passed execution schedule for this depoyment
+	 * @param newSchedule the new execution schedule for this depoyment
+	 */
+	public void setExecutionSchedule(final ExecutionSchedule newSchedule) {
+		if(newSchedule==null) throw new IllegalArgumentException("The passed ExecutionSchedule was null");
+		if(newSchedule.getScheduleType()!= ScheduleType.NONE) {
+			pausedSchedule.set(newSchedule);
+		}
+		final ExecutionSchedule priorSchedule = schedule.getAndSet(newSchedule);
+		if(!newSchedule.equals(priorSchedule)) {
+			final ScheduledFuture<?> priorFuture = scheduleHandle.get();
+			if(priorFuture!=null) {
+				priorFuture.cancel(true);				
+			}
+			scheduleHandle.set(ScheduledExecutionService.getInstance().scheduleDeploymentExecution(this));
+		}	
+	}
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#pauseScheduledExecutions()
+	 */
+	@Override
+	public void pauseScheduledExecutions() {
+		setExecutionSchedule(ExecutionSchedule.NO_EXEC_SCHEDULE);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#resumeScheduledExecutions()
+	 */
+	@Override
+	public String resumeScheduledExecutions() {
+		final ExecutionSchedule es = pausedSchedule.get();
+		if(es==null) {
+			return ExecutionSchedule.NO_EXEC_SCHEDULE.toString();
+		}
+		setExecutionSchedule(es);
+		return getSchedule();
+	}
+	
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#getExecutionSchedule()
+	 */
+	@Override
+	public ExecutionSchedule getExecutionSchedule() {
+		return schedule.get();
+	}
+	
 
 	/**
 	 * {@inheritDoc}
@@ -794,12 +846,13 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getSchedulePeriod()
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getSchedule()
 	 */
 	@Override
-	public int getSchedulePeriod() {
-		return schedule;
+	public String getSchedule() {
+		return schedule.get().toString();
 	}
+
 	
 	/** Pattern to replace the skip entry in a source header */
 	public static final Pattern SKIP_REPLACER = Pattern.compile("skip=(.*?),|$|\\s");
@@ -895,16 +948,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	public String getStatusName() {		
 		return getStatus().name();
 	}
-	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#setSchedulePeriodInt(int)
-	 */
-	@Override
-	public void setSchedulePeriodInt(final int period) {
-		setSchedulePeriod(period);		
-	}
-
 	
 	/**
 	 * Sends a status change notification

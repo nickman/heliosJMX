@@ -30,6 +30,7 @@ import java.util.Date;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -107,15 +108,15 @@ public class ScheduledExecutionService implements UncaughtExceptionHandler, Reje
 		scheduler = new JMXManagedScheduler(SCHEDULER_OBJECT_NAME, "SchedulerThreadPool", CORES, true);
 	}
 	
-	private class DeployedRunnable<T> implements Runnable, Callable<T> {
+	private class DeployedRunnable<T> implements Runnable, Callable<Future<T>> {
 		/** the DeployedScript to run */
-		final DeployedScript ds;
+		final DeployedScript<T> ds;
 
 		/**
 		 * Creates a new DeployedRunnable
 		 * @param ds the DeployedScript to run
 		 */
-		public DeployedRunnable(DeployedScript ds) {
+		public DeployedRunnable(DeployedScript<T> ds) {
 			this.ds = ds;
 		}
 		
@@ -127,14 +128,14 @@ public class ScheduledExecutionService implements UncaughtExceptionHandler, Reje
 			}
 		}
 
+		@SuppressWarnings("unchecked")
 		@Override
-		public T call() throws Exception {
+		public Future<T> call() throws Exception {
 			try {
-				threadPool.submit(ds);
-				return null;
+				return threadPool.submit(ds);
 			} catch (Exception ex) {
 				log.error("Execution failed on DeployedScript [{}]", ex);
-				return null;
+				throw new Exception("Execution failed on DeployedScript [" + ds + "]", ex);
 			}
 		}
 		
@@ -186,8 +187,13 @@ public class ScheduledExecutionService implements UncaughtExceptionHandler, Reje
 		}
 	}
 	
-	// final DeployedScriptRunnable exeTask = new DeployedScriptRunnable(task);
+
 	
+	/**
+	 * Schedules a deployment for execution
+	 * @param deployment The deployment to schedule
+	 * @return the schedule handle
+	 */
 	public <T> ScheduledFuture<T> scheduleDeploymentExecution(final DeployedScript<T> deployment) {
 		if(deployment==null) throw new IllegalArgumentException("The passed deployment was null");
 		ExecutionSchedule es = deployment.getExecutionSchedule();

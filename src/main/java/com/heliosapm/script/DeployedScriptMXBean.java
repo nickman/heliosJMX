@@ -246,7 +246,18 @@ public interface DeployedScriptMXBean {
 	 * Sets the deployment's scheduled execution period
 	 * @param scheduleExpression A schedule expression as specified in {@link com.heliosapm.jmx.execution.ExecutionSchedule}
 	 */
-	public void setSchedule(String scheduleExpression);
+	public void setExecutionSchedule(String scheduleExpression);
+	
+	/**
+	 * Stops scheduled executions, but remembers the schedule so it can be resumed
+	 */
+	public void pauseScheduledExecutions();
+	
+	/**
+	 * Resumes scheduled executions
+	 * @return the schedule expression that was activated
+	 */
+	public String resumeScheduledExecutions();
 	
 	/**
 	 * Writes this new source the originating source file.
