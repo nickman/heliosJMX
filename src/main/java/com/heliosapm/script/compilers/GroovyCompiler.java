@@ -36,6 +36,9 @@ import java.util.regex.Pattern;
 
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilerConfiguration;
+import org.codehaus.groovy.control.customizers.ImportCustomizer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.DeployedScript;
@@ -56,6 +59,16 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	protected final CompilerConfiguration defaultConfig;
 	/** The default groovy shell */
 	protected final GroovyShell groovyShell;
+	/** Instance logger */
+	private final Logger log = LoggerFactory.getLogger(getClass());
+	
+	/** A set of default imports added to all compiler configurations */
+	private final String[] imports = new String[]{
+			"com.heliosapm.jmx.config.*"		// configuration annotations
+	};
+	
+	/** An import customizer added to all compiler configs */
+	protected final ImportCustomizer importCustomizer = new ImportCustomizer();
 	
 	/** End of line splitter */
 	protected static final Pattern EOL_SPLITTER = Pattern.compile("\n");
@@ -67,9 +80,12 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	 * Creates a new GroovyCompiler
 	 * @param defaultConfig The default configuration
 	 */
-	public GroovyCompiler(final CompilerConfiguration defaultConfig) {
+	public GroovyCompiler(final CompilerConfiguration defaultConfig) {		
 		this.defaultConfig = defaultConfig==null ? new CompilerConfiguration(CompilerConfiguration.DEFAULT) : defaultConfig;
 		this.defaultConfig.setTolerance(0);		
+		applyImports(imports);
+		
+		this.defaultConfig.addCompilationCustomizers(importCustomizer);
 		groovyShell = new GroovyShell(this.defaultConfig);
 	}
 	
@@ -87,6 +103,41 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	public GroovyCompiler(final Properties defaultConfig) {
 		this(defaultConfig==null ? new CompilerConfiguration(CompilerConfiguration.DEFAULT) : new CompilerConfiguration(defaultConfig));
 	}	
+	
+	/**
+	 * Applies the configured imports to the compiler configuration
+	 * @param imps  The imports to add
+	 */
+	public void applyImports(String...imps) {		
+		for(String imp: imps) {
+			String _imp = imp.trim().replaceAll("\\s+", " ");
+			if(!_imp.startsWith("import")) {
+				log.warn("Unrecognized import [" + imp + "]");
+				continue;
+			}
+			if(_imp.startsWith("import static ")) {
+				if(_imp.endsWith(".*")) {
+					importCustomizer.addStaticStars(_imp.replace("import static ", "").replace(".*", ""));
+				} else {
+					String cleaned = _imp.replace("import static ", "").replace(".*", "");
+					int index = cleaned.lastIndexOf('.');
+					if(index==-1) {
+						log.warn("Failed to parse non-star static import [" + imp + "]");
+						continue;
+					}
+					importCustomizer.addStaticImport(cleaned.substring(0, index), cleaned.substring(index+1));
+				}
+			} else {
+				if(_imp.endsWith(".*")) {
+					importCustomizer.addStarImports(_imp.replace("import ", "").replace(".*", ""));
+				} else {
+					importCustomizer.addImports(_imp.replace("import ", ""));
+				}
+			}
+		}
+		defaultConfig.addCompilationCustomizers(importCustomizer);
+	}
+	
 	
 	
 

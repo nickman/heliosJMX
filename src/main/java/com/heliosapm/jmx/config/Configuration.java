@@ -27,7 +27,6 @@ package com.heliosapm.jmx.config;
 import java.beans.PropertyEditor;
 import java.beans.PropertyEditorManager;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -47,6 +46,7 @@ import javax.management.NotificationListener;
 import javax.management.ObjectName;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
+import org.cliffc.high_scale_lib.NonBlockingHashSet;
 
 /**
  * <p>Title: Configuration</p>
@@ -60,9 +60,14 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	
 	/** The standard notifications emitted by a Configuration */
 	private static final MBeanNotificationInfo[] NOTIF_INFO = new MBeanNotificationInfo[] {
-		new MBeanNotificationInfo(new String[] {"com.heliosapm.jmx.config.attr.change"}, AttributeChangeNotification.class.getName(), "Notification emitted when a configuration item is inserted, changed or removed"),
-		new MBeanNotificationInfo(new String[] {"com.heliosapm.jmx.config.attr.load"}, Notification.class.getName(), "Notification emitted when a configuration loads an update from a parent")
+		new MBeanNotificationInfo(new String[] {NOTIF_CONFIG_ATTR_CHANGE}, AttributeChangeNotification.class.getName(), "Notification emitted when a configuration item is inserted, changed or removed"),
+		new MBeanNotificationInfo(new String[] {NOTIF_CONFIG_CHANGE}, Notification.class.getName(), "Notification emitted when a configuration loads an update from a parent"),
+		new MBeanNotificationInfo(new String[] {NOTIF_ALL_DEPS_OK}, Notification.class.getName(), "Notification emitted when all declared dependencies are satisfied")
 	}; 
+	
+	
+	
+	
 	/** Notification sequence number provider */
 	private static final AtomicLong sequence = new AtomicLong(0L);
 	/** A map of property editors keyed by the class the editor is for */
@@ -77,6 +82,13 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	protected final Map<String, String> config = new NonBlockingHashMap<String, String>();
 	/** The original key/value pairs loaded into this config (i.e. not loaded from any parents */
 	protected final Map<String, String> internalConfig = new NonBlockingHashMap<String, String>();
+	/** Locally installed property editors for this instance */
+	protected final Map<Class<?>, PropertyEditor> localEditors = new NonBlockingHashMap<Class<?>, PropertyEditor>();
+	
+	/** The keys for dependencies declared by a deployment containing this Configuration */
+	protected final Set<String> pendingDependencies = new NonBlockingHashSet<String>();
+	/** The types of the dependencies keyed by the dependency key */
+	protected final Map<String, Class<?>> dependencies = new NonBlockingHashMap<String, Class<?>>();
 	
 	
 	/**
@@ -152,18 +164,128 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 		return fromText(get(key), type);
 	}
 
-	/**
-	 * @param key
-	 * @param value
-	 * @return
-	 * @see java.util.Map#put(java.lang.Object, java.lang.Object)
-	 */
-	public String put(String key, String value) {
-		return config.put(key, value);
+	private void _put(final String key, final String value) {
+		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
+		if(value==null || value.trim().isEmpty()) return;
+		final String _key = key.trim();
+		final String _value = value.trim();
+		final String oldValue = config.put(_key, _value);
+		if(pendingDependencies.remove(_key)) {
+			if(pendingDependencies.isEmpty()) {
+				delegateBroadcaster.sendNotification(new Notification(NOTIF_ALL_DEPS_OK, objectName, sequence.incrementAndGet(), System.currentTimeMillis(), "All declared dependencies satisfied for [" + objectName + "]"));
+			}
+		}
+		if(!_value.equals(oldValue)) {
+			final long now = System.currentTimeMillis();
+			if(oldValue==null) {
+				delegateBroadcaster.sendNotification(new AttributeChangeNotification(objectName, sequence.incrementAndGet(), now, String.format("#%s Inserted new config\n%s=%s\n", key, key, value), key, String.class.getName(), oldValue, value));
+			} else {
+				delegateBroadcaster.sendNotification(new AttributeChangeNotification(objectName, sequence.incrementAndGet(), now, String.format("#%s Updated config\n%s=%s\n", key, key, value), key, String.class.getName(), oldValue, value));
+			}		
+		}
 	}
 	
-	/** Locally installed property editors for this instance */
-	protected final Map<Class<?>, PropertyEditor> localEditors = new NonBlockingHashMap<Class<?>, PropertyEditor>();
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.jmx.config.ConfigurationMBean#put(java.lang.String, java.lang.String)
+	 */
+	@Override
+	public void put(final String key, final String value) {
+		if(value==null) return;
+		validateInsertedStringDependency(key, value); 
+		_put(key, value);		
+	}
+	
+	/**
+	 * Inserts or updates a typed configuration item.
+	 * If this operation changes the config, will fire listeners and notifications
+	 * @param key The config item key
+	 * @param value The config item value
+	 */
+	public <T> void putTyped(final String key, final T value) {		
+		if(value==null) return;
+		validateInsertedDependency(key, value);
+		_put(key, toText(value));		
+	}
+	
+	/**
+	 * Adds a dependency of the specified type
+	 * @param key The key of the dependency
+	 * @param type The type that the dependency value must be of to satisfy the dependency
+	 */
+	public void addDependency(final String key, final Class<?> type) {
+		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
+		final String _key = key.trim();		
+		dependencies.put(_key, type==null ? Object.class : type);
+	}
+	
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.jmx.config.ConfigurationMBean#isDependencyClosed(java.lang.String)
+	 */
+	@Override
+	public <T> boolean isDependencyClosed(final String key) {
+		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
+		final String _key = key.trim();
+		if(pendingDependencies.contains(_key)) return false;
+		final Class<T> dependencyType = (Class<T>) dependencies.get(_key);
+		if(dependencyType==null) return true;
+		T value = get(_key, dependencyType);
+		return value != null;		
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.jmx.config.ConfigurationMBean#getDependencyKeys()
+	 */
+	@Override
+	public Set<String> getDependencyKeys() {
+		return Collections.unmodifiableSet(dependencies.keySet());
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.jmx.config.ConfigurationMBean#getPendingDependencyKeys()
+	 */
+	@Override
+	public Set<String> getPendingDependencyKeys() {
+		return Collections.unmodifiableSet(pendingDependencies);
+	}
+	
+	/**
+	 * Validates a provided config value when the config key is declared as a dependency
+	 * @param key The config key
+	 * @param value The config value
+	 */
+	protected <T> void validateInsertedDependency(final String key, final Object value) {
+		final Class<T> dtype = (Class<T>) dependencies.get(key);
+		if(dtype==null || !pendingDependencies.contains(key)) return;
+		if(!dtype.isInstance(value)) {
+			throw new RuntimeException("Incorrect value for dependency config item [" + key + "]. Type was [" + value.getClass().getName() + "] but was expecting [" + dtype.getName() + "]");
+		}		
+	}
+	
+	/**
+	 * Validates a provided config value when the config key is declared as a dependency
+	 * @param key The config key
+	 * @param value The config value
+	 */
+	protected <T> void validateInsertedStringDependency(final String key, final String value) {
+		final Class<T> dtype = (Class<T>) dependencies.get(key);
+		if(dtype==null || !pendingDependencies.contains(key)) return;
+		if(dtype.isInstance(value)) return;  // dep type was satisfied by value
+		// try prop editor
+		try {
+			fromText(value, dtype);
+			// works for me			
+		} catch (Exception ex) {
+			throw new RuntimeException("Incorrect value for dependency config item [" + key + "]. Was expecting [" + dtype.getName() + "] but value [" + value + "] could not be converted by property editor", ex);
+		}
+	}
+	
+	
+	
 	
 	/**
 	 * Converts the passed text to an instance of the passed type.

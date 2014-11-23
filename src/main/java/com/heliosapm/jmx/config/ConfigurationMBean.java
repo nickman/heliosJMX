@@ -24,6 +24,8 @@
  */
 package com.heliosapm.jmx.config;
 
+import java.util.Set;
+
 /**
  * <p>Title: ConfigurationMBean</p>
  * <p>Description: JMX MBean interface for {@link Configuration} instances</p> 
@@ -37,7 +39,12 @@ public interface ConfigurationMBean {
 	/** The jmx notification type root */
 	public static final String NOTIF_ROOT = "com.heliosapm.jmx.config";
 	/** The jmx notification type for a config change, dispatched once per config changing load */
-	public static final String NOTIF_CONFIG_CHANGE = NOTIF_ROOT + ".configchange";	
+	public static final String NOTIF_CONFIG_CHANGE = NOTIF_ROOT + ".attr.load";	
+	/** The jmx notification type for a config attribute change */
+	public static final String NOTIF_CONFIG_ATTR_CHANGE = NOTIF_ROOT + ".attr.change";
+	/** The jmx notification type for the all dependencies satisfied event */
+	public static final String NOTIF_ALL_DEPS_OK = NOTIF_ROOT + ".dep.ok";
+	
 	
 	
 	/**
@@ -52,5 +59,33 @@ public interface ConfigurationMBean {
 	 * @return The config value or null if no value was bound for the key
 	 */
 	public String get(final String key);
+	
+	/**
+	 * Inserts or updates a configuration item.
+	 * If this operation changes the config, will fire listeners and notifications
+	 * @param key The config item key
+	 * @param value The config item value
+	 */
+	public void put(String key, String value);	
+	
+	/**
+	 * Determines if the named dependency has been satisfied
+	 * @param key The key of the dependency
+	 * @return true if the named dependency has been satisfied, false otherwise
+	 */
+	public <T> boolean isDependencyClosed(final String key);
+	
+	/**
+	 * Returns the dependency keys
+	 * @return the dependency keys
+	 */
+	public Set<String> getDependencyKeys();
+	
+	/**
+	 * Returns the pending dependency keys
+	 * @return the pending dependency keys
+	 */
+	public Set<String> getPendingDependencyKeys();
+	
 
 }
