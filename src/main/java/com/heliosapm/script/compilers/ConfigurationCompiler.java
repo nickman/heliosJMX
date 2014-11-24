@@ -28,11 +28,8 @@ import java.io.File;
 import java.io.StringReader;
 import java.net.URL;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.regex.Pattern;
 
 import javax.script.Bindings;
@@ -42,6 +39,7 @@ import javax.script.ScriptEngine;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import com.heliosapm.jmx.config.Configuration;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.ConfigurationDeployedScript;
 import com.heliosapm.script.DeployedScript;
@@ -55,40 +53,40 @@ import com.heliosapm.script.StateService;
  * <p><code>com.heliosapm.script.compilers.ConfigurationCompiler</code></p>
  */
 
-public class ConfigurationCompiler implements DeploymentCompiler<Map<String, Object>> {
+public class ConfigurationCompiler implements DeploymentCompiler<Configuration> {
 	/** The extensions */
 	private static final String[] extensions = new String[]{"config"};
 	
-	/** Const scripted configuration reader */
-	public static final ConfigurationReader SCRIPTED_CONF_READER = new ScriptedConfigurationReader();
-	/** Const json configuration reader */
-	public static final ConfigurationReader JSON_CONF_READER = new JSONConfigurationReader();
+//	/** Const scripted configuration reader */
+//	public static final ConfigurationReader SCRIPTED_CONF_READER = new ScriptedConfigurationReader();
+//	/** Const json configuration reader */
+//	public static final ConfigurationReader JSON_CONF_READER = new JSONConfigurationReader();
 	/** Const properties configuration reader */
 	public static final ConfigurationReader PROPS_CONF_READER = new PropertiesConfigurationReader();
 	
-	/** The installed subextensions in the state service */
-	private static final Set<String> subExtensions = new CopyOnWriteArraySet<String>();
+//	/** The installed subextensions in the state service */
+//	private static final Set<String> subExtensions = new CopyOnWriteArraySet<String>();
+//	
+//	/** A map of readers keyed by extension */
+//	private static final Map<String, ConfigurationReader> readers = new LinkedHashMap<String, ConfigurationReader>(16);
+//	
+//	static {
+//		readers.put("properties", PROPS_CONF_READER);
+//		readers.put("json", JSON_CONF_READER);
+//		for(String ext: SCRIPTED_CONF_READER.getSubExtensions()) {
+//			readers.put(ext, SCRIPTED_CONF_READER);
+//		}		
+//	}
 	
-	/** A map of readers keyed by extension */
-	private static final Map<String, ConfigurationReader> readers = new LinkedHashMap<String, ConfigurationReader>(16);
-	
-	static {
-		readers.put("properties", PROPS_CONF_READER);
-		readers.put("json", JSON_CONF_READER);
-		for(String ext: SCRIPTED_CONF_READER.getSubExtensions()) {
-			readers.put(ext, SCRIPTED_CONF_READER);
-		}		
-	}
-	
-	/**
-	 * Adds a sub extension 
-	 * @param subExtension a sub extension 
-	 */
-	public static void addSubExtension(final String subExtension) {
-		if(subExtension==null || subExtension.trim().isEmpty()) throw new IllegalArgumentException("The passed sub extension was null or empty");
-		subExtensions.add(subExtension);
-		readers.put(subExtension, SCRIPTED_CONF_READER);
-	}
+//	/**
+//	 * Adds a sub extension 
+//	 * @param subExtension a sub extension 
+//	 */
+//	public static void addSubExtension(final String subExtension) {
+//		if(subExtension==null || subExtension.trim().isEmpty()) throw new IllegalArgumentException("The passed sub extension was null or empty");
+//		subExtensions.add(subExtension);
+//		readers.put(subExtension, SCRIPTED_CONF_READER);
+//	}
 	
 	/**
 	 * Creates a new ConfigurationCompiler
@@ -105,23 +103,24 @@ public class ConfigurationCompiler implements DeploymentCompiler<Map<String, Obj
 	 * @see com.heliosapm.script.compilers.DeploymentCompiler#compile(java.net.URL)
 	 */
 	@Override
-	public Map<String, Object> compile(final URL source) throws CompilerException {
+	public Configuration compile(final URL source) throws CompilerException {
 		final String sourceCode = URLHelper.getTextFromURL(source);
-		final String[] segments = DOT_SPLITTER.split(URLHelper.getFileName(source));		
-		final String subExtension = segments.length <=2 ? null : segments[segments.length-2].trim().toLowerCase();
-		Map<String, Object> configMap = null;
-		if(subExtension!=null) {
-			ConfigurationReader cr = readers.get(subExtension);
-			if(cr==null) throw new RuntimeException("The config source [" + source + "] has an unsupported subextension [" + subExtension + "]");
-			configMap = cr.readConfig(sourceCode, subExtension);
-			if(configMap==null) throw new RuntimeException("Failed to compile config source [" + source + "]");
-			return configMap;
-		}
-		for(Map.Entry<String, ConfigurationReader> entry: readers.entrySet()) {
-			configMap = entry.getValue().readConfig(sourceCode, subExtension);
-			if(configMap!=null) return configMap;
-		}
-		throw new CompilerException("Failed to compile config file [" + source + "]", "", new Throwable());
+		
+//		final String[] segments = DOT_SPLITTER.split(URLHelper.getFileName(source));		
+//		final String subExtension = segments.length <=2 ? null : segments[segments.length-2].trim().toLowerCase();
+		return  PROPS_CONF_READER.readConfig(sourceCode, null);
+//		if(subExtension!=null) {
+//			ConfigurationReader cr = readers.get(subExtension);
+//			if(cr==null) throw new RuntimeException("The config source [" + source + "] has an unsupported subextension [" + subExtension + "]");
+//			configMap = cr.readConfig(sourceCode, subExtension);
+//			if(configMap==null) throw new RuntimeException("Failed to compile config source [" + source + "]");
+//			return configMap;
+//		}
+//		for(Map.Entry<String, ConfigurationReader> entry: readers.entrySet()) {
+//			configMap = entry.getValue().readConfig(sourceCode, subExtension);
+//			if(configMap!=null) return configMap;
+//		}
+//		throw new CompilerException("Failed to compile config file [" + source + "]", "", new Throwable());
 	}
 	
 
@@ -130,7 +129,7 @@ public class ConfigurationCompiler implements DeploymentCompiler<Map<String, Obj
 	 * @see com.heliosapm.script.compilers.DeploymentCompiler#deploy(java.lang.String)
 	 */
 	@Override
-	public DeployedScript<Map<String, Object>> deploy(final String sourceFile) throws CompilerException {
+	public DeployedScript<Configuration> deploy(final String sourceFile) throws CompilerException {
 		if(sourceFile==null) throw new IllegalArgumentException("The passed source file was null");
 		final Map<String, Object> map = compile(URLHelper.toURL(sourceFile));		
 		return new ConfigurationDeployedScript(new File(sourceFile), map);
@@ -161,7 +160,7 @@ public class ConfigurationCompiler implements DeploymentCompiler<Map<String, Obj
 		 * @param subExtension The sub extension, if one was provided, for readers that support multiple extensions 
 		 * @return The configuration map or null if the configuration could not be read
 		 */
-		public Map<String, Object> readConfig(String source, String subExtension);
+		public Configuration readConfig(String source, String subExtension);
 		/**
 		 * Returns the sub extensions supported by this reader
 		 * @return the sub extensions supported by this reader

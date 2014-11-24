@@ -24,8 +24,6 @@
  */
 package com.heliosapm.jmx.config;
 
-import java.util.Map;
-
 import javax.management.ObjectName;
 
 import com.heliosapm.jmx.util.helpers.JMXHelper;
@@ -48,7 +46,7 @@ public interface ConfigurationManagerMBean {
 	 * @param configMBean The ObjectName of the configuration MBean 
 	 * @return the configuration map
 	 */
-	public Map<String, Object> getConfig(ObjectName configMBean);
+	public Configuration getConfig(ObjectName configMBean);
 	
 	/**
 	 * Returns the number of confuiguration deployments registered

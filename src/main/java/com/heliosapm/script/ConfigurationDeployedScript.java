@@ -26,7 +26,6 @@ package com.heliosapm.script;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -37,8 +36,8 @@ import javax.management.MBeanNotificationInfo;
 import javax.management.Notification;
 import javax.management.ObjectName;
 
+import com.heliosapm.jmx.config.Configuration;
 import com.heliosapm.jmx.config.ConfigurationManager;
-import com.heliosapm.jmx.execution.ExecutionSchedule;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 
@@ -50,7 +49,7 @@ import com.heliosapm.jmx.util.helpers.URLHelper;
  * <p><code>com.heliosapm.script.ConfigurationDeployedScript</code></p>
  */
 
-public class ConfigurationDeployedScript extends AbstractDeployedScript<Map<String, Object>> {
+public class ConfigurationDeployedScript extends AbstractDeployedScript<Configuration> {
 	/** The sub extension of the config script */
 	protected final String subExtension;	
 	/** The path of the configuration file */
@@ -67,11 +66,12 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Map<Stri
 	 * @param sourceFile The configuration source file
 	 * @param configuration The compiled configuration
 	 */
-	public ConfigurationDeployedScript(final File sourceFile, final Map<String, Object> configuration) {
+	public ConfigurationDeployedScript(final File sourceFile, final Configuration configuration) {
 		super(sourceFile);
+		//config = null;
 		subExtension = URLHelper.getSubExtension(sourceFile, null);
 		executable = configuration;
-		config.putAll(configuration);
+//		config.putAll(configuration);
 		configPath = sourceFile.getAbsoluteFile().toPath();
 		//sendConfigChangedNotification(true);		
 	}
@@ -140,10 +140,10 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Map<Stri
 	 * @see com.heliosapm.script.AbstractDeployedScript#setExecutable(java.lang.Object, long, long)
 	 */
 	@Override
-	public void setExecutable(Map<String, Object> executable, long checksum, long timestamp) {
+	public void setExecutable(final Configuration executable, final long checksum, final long timestamp) {
 		super.setExecutable(executable, checksum, timestamp);
-		this.config.clear();
-		this.config.putAll(executable);
+//		this.config.clear();
+//		this.config.putAll(executable);
 		sendConfigChangedNotification(false);
 	}
 	

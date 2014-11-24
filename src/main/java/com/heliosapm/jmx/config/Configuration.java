@@ -58,6 +58,12 @@ import org.cliffc.high_scale_lib.NonBlockingHashSet;
 
 public class Configuration implements NotificationListener, NotificationFilter, NotificationEmitter, ConfigurationMBean {
 	
+	/**  */
+	private static final long serialVersionUID = 7007249394730138439L;
+
+
+
+
 	/** The standard notifications emitted by a Configuration */
 	private static final MBeanNotificationInfo[] NOTIF_INFO = new MBeanNotificationInfo[] {
 		new MBeanNotificationInfo(new String[] {NOTIF_CONFIG_ATTR_CHANGE}, AttributeChangeNotification.class.getName(), "Notification emitted when a configuration item is inserted, changed or removed"),
@@ -164,6 +170,11 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 		return fromText(get(key), type);
 	}
 
+	/**
+	 * Internal triggered put
+	 * @param key The config item key
+	 * @param value The config item value
+	 */
 	private void _put(final String key, final String value) {
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
 		if(value==null || value.trim().isEmpty()) return;

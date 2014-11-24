@@ -24,7 +24,6 @@
  */
 package com.heliosapm.jmx.config;
 
-import java.io.File;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Hashtable;
@@ -97,7 +96,7 @@ public class ConfigurationManager extends NotificationBroadcasterSupport impleme
 	/** Instance logger */
 	protected final Logger log = LoggerFactory.getLogger(getClass());
 	/** A map of configurations keyed by the ObjectName of the configuration deployment */
-	protected final NonBlockingHashMap<ObjectName, Map<String, Object>> configs = new NonBlockingHashMap<ObjectName, Map<String, Object>>(128); 
+	protected final NonBlockingHashMap<ObjectName, Configuration> configs = new NonBlockingHashMap<ObjectName, Configuration>(128); 
 	/** A map of configuration change listeners keyed by the ObjectName of the configuration deployment */
 	protected final NonBlockingHashMap<ObjectName, NotificationListener> configChangeListeners = new NonBlockingHashMap<ObjectName, NotificationListener>(128); 
 	
@@ -172,12 +171,12 @@ public class ConfigurationManager extends NotificationBroadcasterSupport impleme
 	 * @see com.heliosapm.jmx.config.ConfigurationManagerMBean#getConfig(javax.management.ObjectName)
 	 */
 	@Override
-	public Map<String, Object> getConfig(final ObjectName configMBean) {
+	public Configuration getConfig(final ObjectName configMBean) {
 		if(configMBean==null) throw new IllegalArgumentException("The passed configuration ObjectName was null");
-		if(!DeployedScript.CONFIG_DOMAIN.equals(configMBean.getDomain())) return EMPTY_MAP;
-		Map<String, Object> cfg = configs.get(configMBean);
-		if(cfg==null)  return EMPTY_MAP;
-		return new HashMap<String, Object>(cfg);
+		if(!DeployedScript.CONFIG_DOMAIN.equals(configMBean.getDomain())) return null;
+		Configuration cfg = configs.get(configMBean);
+		if(cfg==null)  return null;
+		return cfg; //new HashMap<String, Object>(cfg);
 	}
 
 	/**
@@ -185,7 +184,7 @@ public class ConfigurationManager extends NotificationBroadcasterSupport impleme
 	 * @param objectName The JMX ObjectName of the new configuration deployment
 	 * @param config The configuration to add
 	 */
-	public void addConfiguration(final ObjectName objectName, final Map<String, Object> config) {
+	public void addConfiguration(final ObjectName objectName, final Configuration config) {
 		if(objectName==null) throw new IllegalArgumentException("The passed ObjectName was null");
 		if(config==null) throw new IllegalArgumentException("The passed configuration map was null");
 		if(!DeployedScript.CONFIG_DOMAIN.equals(objectName.getDomain())) throw new RuntimeException("Incorrect domain for configuration [" + objectName.getDomain() + "]");
@@ -197,9 +196,9 @@ public class ConfigurationManager extends NotificationBroadcasterSupport impleme
 				try {
 					final ObjectName on = (ObjectName)n.getSource();
 					final Map<String, Object> changedConfig = (Map<String, Object>)n.getUserData(); 
-					configs.put(on, changedConfig);
-					configUpdateCount.incrementAndGet();
-					notifyDependents(objectName, config);
+//					configs.put(on, changedConfig);
+//					configUpdateCount.incrementAndGet();
+//					notifyDependents(objectName, config);
 				} catch (Exception ex) {
 					log.error("Failed to handle config change notification [{}]", n.toString(), ex);
 				}				
@@ -366,14 +365,14 @@ com.heliosapm.configuration:
 	@Override
 	public String printAllConfig() {
 		final StringBuilder b = new StringBuilder(2048);
-		TreeMap<ObjectName, Map<String, Object>> ordered = new TreeMap<ObjectName, Map<String, Object>>(configs);
-		for(Map.Entry<ObjectName, Map<String, Object>> entry: ordered.entrySet()) {
+		TreeMap<ObjectName, Configuration> ordered = new TreeMap<ObjectName, Configuration>(configs);
+		for(Map.Entry<ObjectName, Configuration> entry: ordered.entrySet()) {
 			final ObjectName on = entry.getKey();
 			b.append("\n").append(on);
-			final TreeMap<String, Object> config = new TreeMap<String, Object>(entry.getValue());
-			for(Map.Entry<String, Object> innerEntry: config.entrySet()) {
-				b.append("\n\t").append(innerEntry.getKey()).append("=").append(innerEntry.getValue().toString());
-			}
+//			final TreeMap<String, Object> config = new TreeMap<String, Object>(entry.getValue());
+//			for(Map.Entry<String, Object> innerEntry: config.entrySet()) {
+//				b.append("\n\t").append(innerEntry.getKey()).append("=").append(innerEntry.getValue().toString());
+//			}
 		}
 		return b.toString();
 	}

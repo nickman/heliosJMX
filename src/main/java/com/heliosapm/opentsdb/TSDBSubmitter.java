@@ -1455,3 +1455,50 @@ metric = json.get(0);
 println metric.getClass().getName();
 println metric.getJSONArray("tsuids").getString(0);
 */
+
+
+
+/*
+========================================================
+SAMPLE TO HTTP POST METRICS
+========================================================
+import org.json.*;
+import com.ning.http.client.*;
+
+r = new Random(System.currentTimeMillis());
+
+body = new JSONArray();
+met = new JSONObject();
+long now = System.currentTimeMillis()/1000;
+met.put("metric", "sys.cpu.nice");
+met.put("timestamp", now);
+met.put("value", Math.abs(r.nextInt(100)));
+met.put("tags", new JSONObject(
+    [
+        "host" : "bamboozle",
+        "dc"    : "central"
+    ]
+));
+body.put(met);
+met = new JSONObject();
+now = System.currentTimeMillis()/1000;
+met.put("metric", "sys.cpu.nice");
+met.put("timestamp", now);
+met.put("value", Math.abs(r.nextInt(100)));
+met.put("tags", new JSONObject(
+    [
+        "host" : "slamdingle",
+        "dc"    : "central"
+    ]
+));
+body.put(met);
+//println body.toString(2);
+
+BASE_URL = "http://localhost:8070/";
+
+httpClient = new AsyncHttpClient(new AsyncHttpClientConfig.Builder().setAllowPoolingConnection(true).setConnectionTimeoutInMs(2000).build());
+httpClient.preparePost(BASE_URL + "api/put").setBody(body.toString()).execute();
+
+
+
+*/
