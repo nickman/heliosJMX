@@ -29,6 +29,7 @@ import java.util.concurrent.Callable;
 
 import javax.management.ObjectName;
 
+import com.heliosapm.jmx.config.Configuration;
 import com.heliosapm.jmx.execution.ExecutionSchedule;
 
 /**
@@ -111,7 +112,7 @@ public interface DeployedScript<T> extends DeployedScriptMXBean, Callable<T> {
 	 * Returns the local configuration for this deployment
 	 * @return the local configuration for this deployment
 	 */
-	public Map<String, Object> getConfiguration();
+	public Configuration getConfiguration();
 	
 	/**
 	 * Adds the passed configuration
@@ -134,12 +135,12 @@ public interface DeployedScript<T> extends DeployedScriptMXBean, Callable<T> {
 	 */
 	public <E> E getConfig(String key, Class<E> type);
 	
-	/**
-	 * Triggers a config reload when a config item this deployment depends on changes
-	 * @param dependency The JMX ObjectName of the config item this deployment depends on
-	 * @param changedConfig The new config
-	 */
-	public void triggerConfigChange(final ObjectName dependency, final Map<String, Object> changedConfig);
+//	/**
+//	 * Triggers a config reload when a config item this deployment depends on changes
+//	 * @param dependency The JMX ObjectName of the config item this deployment depends on
+//	 * @param changedConfig The new config
+//	 */
+//	public void triggerConfigChange(final ObjectName dependency, final Map<String, Object> changedConfig);
 	
 	/**
 	 * Returns the config item with the passed key
@@ -188,6 +189,12 @@ public interface DeployedScript<T> extends DeployedScriptMXBean, Callable<T> {
 	 * @param newSchedule the new execution schedule for this depoyment
 	 */
 	public void setExecutionSchedule(final ExecutionSchedule newSchedule);
+	
+	/**
+	 * Returns the JMX ObjectName of the configuration watched by this object
+	 * @return the JMX ObjectName of the configuration watched by this object
+	 */
+	public ObjectName getWatchedConfiguration();
 	
 
 

@@ -155,6 +155,9 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	/** Map of root watched directory keyed by the watched directory */
 	protected final Map<File, File> rootDirs = new NonBlockingHashMap<File, File>();
 	
+	/** Fill in {pwd} config files created. We'll delete them on shutdown if they are zero soze  */
+	protected final Set<File> createdConfigFiles = new NonBlockingHashSet<File>();
+	
 	/** Singleton ctor reentrancy check */
 	private static final AtomicBoolean initing = new AtomicBoolean(false); 
 	
@@ -172,6 +175,12 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 					instance = new ScriptFileWatcher();
 					instance.scanHotDirsAtStart();
 					instance.started.set(true);
+					Runtime.getRuntime().addShutdownHook(new Thread(){
+						public void run() {
+//							instance.cleanFillInFiles();
+						}
+					});
+					
 				}
 			}
 		}
@@ -204,6 +213,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 						String s = br.readLine();
 						if(s.equalsIgnoreCase("exit")) {
 							if(svr!=null) svr.stop();
+							instance.cleanFillInFiles();
 							System.exit(0);
 						}
 					} catch (Exception ex) {
@@ -213,6 +223,15 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			}
 		}.start();
 		//SystemClock.sleep(10000000);
+	}
+	
+	private void cleanFillInFiles() {
+		for(File f: createdConfigFiles) {
+			if(f.length()==0) {
+				boolean del = f.delete();
+				log.info("Deleted zero size config [" + f + "]. Deleted ?:" + del);
+			}
+		}		
 	}
 	
 
@@ -593,6 +612,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			for(final Map.Entry<String, AtomicInteger> entry: typeCounts.entrySet()) {
 				b.append("\n\t\t").append(entry.getKey()).append(" : ").append(entry.getValue().get());
 			}
+			b.append("\n\tFill In Configs: ").append(createdConfigFiles.size());
 			b.append("\n\tFailed Deployments: ").append(failedDeployments.size());
 			for(String fail: failedDeployments) {
 				b.append("\n\t\t").append(fail);
@@ -666,6 +686,15 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		final Set<Future<?>> futures = noDelay ? new HashSet<Future<?>>(128) : null;
 		for(final File dirFile: dir.listFiles()) {
 			if(dirFile.isDirectory()) {
+				final File dirConfigFile = new File(dirFile, dirFile.getName() + ".config");
+				if(!dirConfigFile.exists()) {
+					try {
+						dirConfigFile.createNewFile();
+						createdConfigFiles.add(dirConfigFile);
+					} catch (Exception ex) {
+						throw new RuntimeException("Failed to create missing mandatory config file [" + dirConfigFile + "]");
+					}
+				}
 				if(noDelay) {
 					if((extension==null || "dir".equals(extension))) {
 						futures.add(enqueueFileEvent(0, new FileEvent(dirFile.getAbsolutePath(), ENTRY_CREATE)));

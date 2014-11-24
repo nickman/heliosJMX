@@ -74,7 +74,7 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> {
 			for(MetaProperty mp: executable.getMetaClass().getProperties()) {
 				metaProperties.put(mp.getName(), mp);
 			}
-			executable.setBinding(new Binding(config));
+			executable.setBinding(new Binding(config.getTypedConfigMap()));
 			setStatus(DeploymentStatus.READY);
 		}		
 		super.initExcutable();

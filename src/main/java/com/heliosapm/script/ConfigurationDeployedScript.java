@@ -28,6 +28,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Hashtable;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -50,8 +51,6 @@ import com.heliosapm.jmx.util.helpers.URLHelper;
  */
 
 public class ConfigurationDeployedScript extends AbstractDeployedScript<Configuration> {
-	/** The sub extension of the config script */
-	protected final String subExtension;	
 	/** The path of the configuration file */
 	protected final Path configPath;
 	
@@ -64,16 +63,12 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 	/**
 	 * Creates a new ConfigurationDeployedScript
 	 * @param sourceFile The configuration source file
-	 * @param configuration The compiled configuration
+	 * @param tmpConfig The temporary compiled configuration
 	 */
-	public ConfigurationDeployedScript(final File sourceFile, final Configuration configuration) {
+	public ConfigurationDeployedScript(final File sourceFile, final Configuration tmpConfig) {
 		super(sourceFile);
-		//config = null;
-		subExtension = URLHelper.getSubExtension(sourceFile, null);
-		executable = configuration;
-//		config.putAll(configuration);
+		executable = new Configuration(tmpConfig, objectName, this);		
 		configPath = sourceFile.getAbsoluteFile().toPath();
-		//sendConfigChangedNotification(true);		
 	}
 	
 	/**
@@ -104,6 +99,15 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 		notif.setUserData(executable);
 		sendNotification(notif);
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.jmx.config.InternalConfigurationListener#onConfigurationItemChange(java.lang.String, java.lang.String)
+	 */
+	@Override
+	public void onConfigurationItemChange(String key, String value) {
+		/* No Op */
+	}		
 	
 	/**
 	 * {@inheritDoc}
@@ -147,27 +151,60 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 		sendConfigChangedNotification(false);
 	}
 	
+	
+	
 	/**
-	 * Builds the standard JMX ObjectName for this deployment
-	 * @return an ObjectName
+	 * <p>Default implementation for executable, non-config deployments</p>
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#getWatchedConfiguration()
 	 */
-	protected ObjectName buildObjectName() {
-		String subExt = URLHelper.getSubExtension(sourceFile, null);
-		final StringBuilder b = new StringBuilder(getDomain()).append(":")
-				.append("root=").append(rootDir.replace(':', ';')).append(",");
-		for(int i = 1; i < pathSegments.length; i++) {
-			b.append("d").append(i).append("=").append(pathSegments[i]).append(",");
-		}		
-		b.append("name=").append(sourceFile.getName().replace("." + extension, "").replace("." + subExt, "")).append(",")
-			.append("extension=").append(extension);
-		
-		if(subExt!=null) {
-			b.append(",subextension=").append(subExt);
-		} else {
-			b.append(",subextension=none");
+	@Override
+	public ObjectName getWatchedConfiguration() {
+		// if this is NOT {pwd}.config, look for {pwd}.config
+		// else look for {parent}/{pwd}.config
+		final String parentDirName = sourceFile.getParentFile().getName();
+		final Hashtable<String, String> keyAttrs = new Hashtable<String, String>(objectName.getKeyPropertyList());
+		final boolean isPwd = shortName.equals(parentDirName);
+		if(!isPwd) {
+			// ====================================
+			// We're in a custom depl config
+			// ====================================			
+			keyAttrs.put("extension", "config");				
+			ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+			if(JMXHelper.isRegistered(watchedObjectName)) {
+				return watchedObjectName;
+			}
+			throw new RuntimeException("Failed to find default watched configuration [" + watchedObjectName + "] for config [" + objectName + "]");
 		}
-		return JMXHelper.objectName(b);
+		// ====================================
+		// We're in a pwd depl config
+		// ====================================
+		int highestDir = DeploymentType.getHighestDir(objectName);
+		String pwd = keyAttrs.remove("d" + highestDir);
+		keyAttrs.put("name", pwd);
+		ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+		if(!JMXHelper.isRegistered(watchedObjectName)) {
+			throw new RuntimeException("Failed to find default watched configuration [" + watchedObjectName + "] for deployment [" + objectName + "]");
+		}
+		return watchedObjectName;
 	}
+	
+	
+//	/**
+//	 * Builds the standard JMX ObjectName for this deployment
+//	 * @return an ObjectName
+//	 */
+//	protected ObjectName buildObjectName() {		
+//		final StringBuilder b = new StringBuilder(getDomain()).append(":")
+//				.append("root=").append(rootDir.replace(':', ';')).append(",");
+//		for(int i = 1; i < pathSegments.length; i++) {
+//			b.append("d").append(i).append("=").append(pathSegments[i]).append(",");
+//		}		
+//		b.append("name=").append(URLHelper.getPlainFileName(sourceFile)).append(",")
+//			.append("extension=").append(extension);
+//		
+//		return JMXHelper.objectName(b);
+//	}
 	
 	/**
 	 * {@inheritDoc}
@@ -287,5 +324,13 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 		return getExecutable().keySet();
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#getConfiguration()
+	 */
+	@Override
+	public Configuration getConfiguration() {
+		return executable;
+	}
 
 }

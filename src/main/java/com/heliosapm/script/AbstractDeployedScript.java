@@ -38,13 +38,13 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Hashtable;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -63,7 +63,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.heliosapm.filewatcher.ScriptFileWatcher;
-import com.heliosapm.jmx.config.ConfigurationManager;
+import com.heliosapm.jmx.config.Configuration;
+import com.heliosapm.jmx.config.InternalConfigurationListener;
 import com.heliosapm.jmx.execution.ExecutionSchedule;
 import com.heliosapm.jmx.execution.ScheduleType;
 import com.heliosapm.jmx.execution.ScheduledExecutionService;
@@ -82,7 +83,7 @@ import com.heliosapm.jmx.util.helpers.URLHelper;
  * @param <T> The type of the underlying executable script
  */
 
-public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterSupport implements DeployedScript<T>, MBeanRegistration {
+public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterSupport implements DeployedScript<T>, MBeanRegistration, InternalConfigurationListener {
 	/** Instance logger */
 	protected final Logger log;
 	/** The underlying executable component */
@@ -106,7 +107,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	/** The path segments */
 	protected final String[] pathSegments;
 	/** The configuration for this deployment */
-	protected final Map<String, Object> config = new ConcurrentHashMap<String, Object>();
+	protected final Configuration config;
 	
 	/** The execution schedule */
 	protected final AtomicReference<ExecutionSchedule> schedule = new AtomicReference<ExecutionSchedule>(ExecutionSchedule.NO_EXEC_SCHEDULE);
@@ -164,7 +165,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 */
 	public AbstractDeployedScript(File sourceFile) {
 		super(SharedNotificationExecutor.getInstance(), notificationInfos);
-		this.sourceFile = sourceFile;
+		this.sourceFile = sourceFile;		
 		shortName = URLHelper.getPlainFileName(sourceFile);
 		final Path link = this.sourceFile.toPath();
 		Path tmpPath = null;
@@ -183,9 +184,24 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		pathSegments = calcPathSegments();
 		log = LoggerFactory.getLogger(StringHelper.fastConcatAndDelim("/", pathSegments) + "/" + sourceFile.getName().replace('.', '_'));
 		objectName = buildObjectName();
+		if(CONFIG_DOMAIN.equals(objectName.getDomain())) {
+			config = null;
+		} else {
+			config = new Configuration(objectName, this);
+			config.registerInternalListener(this);
+		}
 		checksum = URLHelper.adler32(URLHelper.toURL(sourceFile));
 		lastModified = URLHelper.getLastModified(URLHelper.toURL(sourceFile));		
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.jmx.config.InternalConfigurationListener#onConfigurationItemChange(java.lang.String, java.lang.String)
+	 */
+	@Override
+	public void onConfigurationItemChange(String key, String value) {
+		
+	}	
 	
 	/**
 	 * {@inheritDoc}
@@ -601,8 +617,8 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 * @see com.heliosapm.script.DeployedScript#getConfiguration()
 	 */
 	@Override
-	public Map<String, Object> getConfiguration() {
-		return new HashMap<String, Object>(config);
+	public Configuration getConfiguration() {
+		return config;
 	}
 	
 	//==============================================================================================================================
@@ -626,15 +642,15 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	@Override
 	public void addConfiguration(final String key, final Object value) {
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
-		if(value==null) throw new IllegalArgumentException("The passed value was null");
-		config.put(key, value);
-		if(SCHEDULE_KEY.equals(key)) {
-			try {
-				
-			} catch (Exception x) {
-				
-			}
-		}
+		if(value==null) throw new IllegalArgumentException("The passed value was null");		
+		getConfiguration().putTyped(key, value);
+//		if(SCHEDULE_KEY.equals(key)) {
+//			try {
+//				
+//			} catch (Exception x) {
+//				
+//			}
+//		}
 	}
 	
 	/**
@@ -667,18 +683,18 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	@Override
 	public <E> E getConfig(String key, Class<E> type) {
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
-		return (E)config.get(key);
+		return (E)getConfiguration().get(key);
 	}
 	
-	/**
-	 * Triggers a config reload when a config item this deployment depends on changes
-	 * @param dependency The JMX ObjectName of the config item this deployment depends on
-	 * @param changedConfig The new config
-	 */
-	public void triggerConfigChange(final ObjectName dependency, final Map<String, Object> changedConfig) {
-		config.putAll(changedConfig);
-		ConfigurationManager.getInstance().addConfiguration(objectName, config);
-	}
+//	/**
+//	 * Triggers a config reload when a config item this deployment depends on changes
+//	 * @param dependency The JMX ObjectName of the config item this deployment depends on
+//	 * @param changedConfig The new config
+//	 */
+//	public void triggerConfigChange(final ObjectName dependency, final Map<String, Object> changedConfig) {
+//		config.putAll(changedConfig);
+////		ConfigurationManager.getInstance().addConfiguration(objectName, config);
+//	}
 	
 	
 	/**
@@ -688,7 +704,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	@Override
 	public Object getConfig(String key) {
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
-		return config.get(key);		
+		return getConfiguration().get(key);		
 	}
 
 	/**
@@ -837,8 +853,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		json.put("execCount", this.execCount.get());
 		json.put("errorCount", this.errorCount.get());
 		JSONObject cfig = new JSONObject();
-		for(Map.Entry<String, Object> entry: config.entrySet()) {
-			try { cfig.put(entry.getKey(), entry.getValue()); } catch (Exception x) {/* No Op */}
+		for(final String key: getConfiguration().keySet()) {
+			final String value = getConfiguration().get(key);
+			try { cfig.put(key, value); } catch (Exception x) {/* No Op */}
 		}
 		json.put("config", cfig);
 		return json.toString();
@@ -885,7 +902,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	@Override
 	public void undeploy() {
 		executable = null;
-		config.clear();
+		getConfiguration().clear();
 	}
 	
 	/**
@@ -933,9 +950,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 */
 	@Override
 	public Map<String, String> getConfigurationMap() {
-		final Map<String, String> map = new HashMap<String, String>(config.size());
-		for(Map.Entry<String, Object> entry: config.entrySet()) {
-			map.put(entry.getKey(), entry.getValue().toString());
+		final Map<String, String> map = new HashMap<String, String>(getConfiguration().size());
+		for(Map.Entry<String, String> entry: getConfiguration().entrySet()) {
+			map.put(entry.getKey(), entry.getValue());
 		}
 		return map;
 	}
@@ -948,6 +965,33 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	public String getStatusName() {		
 		return getStatus().name();
 	}
+	
+	/**
+	 * <p>Default implementation for executable, non-config deployments</p>
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#getWatchedConfiguration()
+	 */
+	@Override
+	public ObjectName getWatchedConfiguration() {
+		// look for {name}.config
+		// if not found, look for {pwd}.config
+		// if that's not found, it's an error
+		Hashtable<String, String> keyAttrs = new Hashtable<String, String>(objectName.getKeyPropertyList());
+		keyAttrs.put("extension", "config");				
+		ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+		if(JMXHelper.isRegistered(watchedObjectName)) {
+			return watchedObjectName;
+		}
+		// No deployment specific config, so look for {pwd}.config
+		final String parentDirName = sourceFile.getParentFile().getName();
+		keyAttrs.put("name", parentDirName);
+		watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+		if(!JMXHelper.isRegistered(watchedObjectName)) {
+			throw new RuntimeException("Failed to find default watched configuration [" +watchedObjectName + "] for deployment [" + objectName + "]");
+		}
+		return watchedObjectName;
+	}
+
 	
 	/**
 	 * Sends a status change notification

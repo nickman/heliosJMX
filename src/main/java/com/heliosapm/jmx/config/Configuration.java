@@ -30,10 +30,12 @@ import java.lang.reflect.Constructor;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.management.AttributeChangeNotification;
 import javax.management.ListenerNotFoundException;
@@ -82,6 +84,8 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	
 	/** The JMX ObjectName of the owner of this configuration */
 	final ObjectName objectName;
+	/** The internal configuration listener */
+	final AtomicReference<InternalConfigurationListener> internalListener = new AtomicReference<InternalConfigurationListener>(null); 
 	/** The delegate broadcaster */
 	protected final NotificationBroadcasterSupport delegateBroadcaster;
 	/** The actual config store */
@@ -95,6 +99,9 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	protected final Set<String> pendingDependencies = new NonBlockingHashSet<String>();
 	/** The types of the dependencies keyed by the dependency key */
 	protected final Map<String, Class<?>> dependencies = new NonBlockingHashMap<String, Class<?>>();
+	/** Maps known config item types to the config item key */
+	private final NonBlockingHashMap<String, Class<?>> configTypeMap = new NonBlockingHashMap<String, Class<?>>();
+	
 	
 	
 	/**
@@ -106,6 +113,29 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 		this.delegateBroadcaster = delegateBroadcaster;
 		this.objectName = objectName;
 	}
+	
+	/**
+	 * Creates a new temporary holding Configuration.
+	 * Don't use this unless you know what you're doing. 
+	 */
+	public Configuration() {
+		this.delegateBroadcaster = null;
+		this.objectName = null;
+	}
+	
+	/**
+	 * Creates a new Configuration
+	 * @param tempConf A temporary holding container
+	 * @param objectName The JMX ObjectName of the owner of this configuration
+	 * @param delegateBroadcaster The delegate broadcaster
+	 */
+	public Configuration(final Configuration tempConf, final ObjectName objectName, final NotificationBroadcasterSupport delegateBroadcaster) {
+		this(objectName, delegateBroadcaster);
+		config.putAll(tempConf.config);
+		internalConfig.putAll(tempConf.internalConfig);		
+	}
+	
+	
 	
 	/**
 	 * Internal load that fires no listeners or notifications.
@@ -136,6 +166,10 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 			final String value = entry.getValue();
 			final String oldValue = config.put(key, value);
 			if(value.equals(oldValue)) continue;
+			final InternalConfigurationListener intListener = internalListener.get();
+			if(intListener!=null) {
+				intListener.onConfigurationItemChange(key, value);
+			}
 			if(oldValue==null) {
 				toSend.add(new AttributeChangeNotification(objectName, sequence.incrementAndGet(), now, String.format("#%s Inserted new config\n%s=%s\n", key, key, value), key, String.class.getName(), oldValue, value));
 			} else {
@@ -148,6 +182,19 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 				delegateBroadcaster.sendNotification(n);
 			}
 		}
+	}
+	
+	/**
+	 * Clears this config.
+	 */
+	public void clear() {
+		internalListener.set(null);
+		config.clear();
+		dependencies.clear();
+		internalConfig.clear();
+		pendingDependencies.clear();
+		localEditors.clear();
+		configTypeMap.clear();
 	}
 	
 	/**
@@ -207,6 +254,18 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 		_put(key, value);		
 	}
 	
+	
+	/**
+	 * Returns the assumed type of the config item value for the specified config item key
+	 * @param key The config item key
+	 * @return The determined type, or if not specified, simply String.
+	 */
+	public Class<?> getConfigItemType(final String key) {
+		Class<?> clazz = dependencies.get(key);
+		if(clazz==null) clazz = configTypeMap.get(key);
+		return clazz != null ? clazz : String.class;
+	}
+	
 	/**
 	 * Inserts or updates a typed configuration item.
 	 * If this operation changes the config, will fire listeners and notifications
@@ -216,6 +275,9 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	public <T> void putTyped(final String key, final T value) {		
 		if(value==null) return;
 		validateInsertedDependency(key, value);
+		if(!(value instanceof String)) {
+			configTypeMap.put(key, value.getClass());
+		}
 		_put(key, toText(value));		
 	}
 	
@@ -228,6 +290,25 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
 		final String _key = key.trim();		
 		dependencies.put(_key, type==null ? Object.class : type);
+	}
+	
+	/**
+	 * Returns a config map with the values types as closely as possible
+	 * @return a typed config map
+	 */
+	public Map<String, Object> getTypedConfigMap() {
+		Map<String, Object> map = new HashMap<String, Object>(config.size());
+		for(final Map.Entry<String, String> es: config.entrySet()) {
+			final String key = es.getKey();
+			Class<?> type = getConfigItemType(key);
+			if(type==String.class) {
+				map.put(key, es.getValue());
+			} else {
+				Object val = get(key, type);
+				map.put(key, val);
+			}
+		}
+		return map;
 	}
 	
 	
@@ -458,6 +539,15 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	public int size() {
 		return config.size();
 	}
+	
+	/**
+	 * Registers an internal listener
+	 * @param listener the listener to register
+	 */
+	public void registerInternalListener(final InternalConfigurationListener listener) {
+		if(listener==null) throw new IllegalArgumentException("The passed InternalConfigurationListener was null");
+		internalListener.set(listener);
+	}
 
 	/**
 	 * Indicates if the passed value is a config key
@@ -491,6 +581,13 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	 */
 	public Collection<String> values() {
 		return config.values();
+	}
+
+	/**
+	 * @return
+	 */
+	public Set<Map.Entry<String, String>> entrySet() {
+		return new HashSet<Map.Entry<String, String>>(new HashMap<String, String>(config).entrySet());
 	}
 
 

@@ -64,6 +64,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 import com.heliosapm.jmx.cache.CacheStatistics;
+import com.heliosapm.jmx.config.Configuration;
 import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
@@ -152,7 +153,7 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 	/** The catch-all deployment compiler */
 	private final DeploymentCompiler<CompiledScript> catchAllCompiler;
 	/** The configuration deployment compiler */
-	private final DeploymentCompiler<Map<String, Object>> configurationCompiler;
+	private final DeploymentCompiler<Configuration> configurationCompiler;
 	
 	//===========================================================================================
 	
@@ -605,7 +606,7 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 					if(!engines.containsKey(extKey)) {
 						engines.put(extKey, sef);
 						addedExtensions.add(extKey);
-						ConfigurationCompiler.addSubExtension(extKey);
+//						ConfigurationCompiler.addSubExtension(extKey);
 					}
 				}
 			}

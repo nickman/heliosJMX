@@ -56,38 +56,8 @@ import com.heliosapm.script.StateService;
 public class ConfigurationCompiler implements DeploymentCompiler<Configuration> {
 	/** The extensions */
 	private static final String[] extensions = new String[]{"config"};
-	
-//	/** Const scripted configuration reader */
-//	public static final ConfigurationReader SCRIPTED_CONF_READER = new ScriptedConfigurationReader();
-//	/** Const json configuration reader */
-//	public static final ConfigurationReader JSON_CONF_READER = new JSONConfigurationReader();
 	/** Const properties configuration reader */
 	public static final ConfigurationReader PROPS_CONF_READER = new PropertiesConfigurationReader();
-	
-//	/** The installed subextensions in the state service */
-//	private static final Set<String> subExtensions = new CopyOnWriteArraySet<String>();
-//	
-//	/** A map of readers keyed by extension */
-//	private static final Map<String, ConfigurationReader> readers = new LinkedHashMap<String, ConfigurationReader>(16);
-//	
-//	static {
-//		readers.put("properties", PROPS_CONF_READER);
-//		readers.put("json", JSON_CONF_READER);
-//		for(String ext: SCRIPTED_CONF_READER.getSubExtensions()) {
-//			readers.put(ext, SCRIPTED_CONF_READER);
-//		}		
-//	}
-	
-//	/**
-//	 * Adds a sub extension 
-//	 * @param subExtension a sub extension 
-//	 */
-//	public static void addSubExtension(final String subExtension) {
-//		if(subExtension==null || subExtension.trim().isEmpty()) throw new IllegalArgumentException("The passed sub extension was null or empty");
-//		subExtensions.add(subExtension);
-//		readers.put(subExtension, SCRIPTED_CONF_READER);
-//	}
-	
 	/**
 	 * Creates a new ConfigurationCompiler
 	 */
@@ -105,22 +75,7 @@ public class ConfigurationCompiler implements DeploymentCompiler<Configuration> 
 	@Override
 	public Configuration compile(final URL source) throws CompilerException {
 		final String sourceCode = URLHelper.getTextFromURL(source);
-		
-//		final String[] segments = DOT_SPLITTER.split(URLHelper.getFileName(source));		
-//		final String subExtension = segments.length <=2 ? null : segments[segments.length-2].trim().toLowerCase();
-		return  PROPS_CONF_READER.readConfig(sourceCode, null);
-//		if(subExtension!=null) {
-//			ConfigurationReader cr = readers.get(subExtension);
-//			if(cr==null) throw new RuntimeException("The config source [" + source + "] has an unsupported subextension [" + subExtension + "]");
-//			configMap = cr.readConfig(sourceCode, subExtension);
-//			if(configMap==null) throw new RuntimeException("Failed to compile config source [" + source + "]");
-//			return configMap;
-//		}
-//		for(Map.Entry<String, ConfigurationReader> entry: readers.entrySet()) {
-//			configMap = entry.getValue().readConfig(sourceCode, subExtension);
-//			if(configMap!=null) return configMap;
-//		}
-//		throw new CompilerException("Failed to compile config file [" + source + "]", "", new Throwable());
+		return PROPS_CONF_READER.readConfig(sourceCode, null);
 	}
 	
 
@@ -131,8 +86,8 @@ public class ConfigurationCompiler implements DeploymentCompiler<Configuration> 
 	@Override
 	public DeployedScript<Configuration> deploy(final String sourceFile) throws CompilerException {
 		if(sourceFile==null) throw new IllegalArgumentException("The passed source file was null");
-		final Map<String, Object> map = compile(URLHelper.toURL(sourceFile));		
-		return new ConfigurationDeployedScript(new File(sourceFile), map);
+		final Configuration tmpConfig = compile(URLHelper.toURL(sourceFile));		
+		return new ConfigurationDeployedScript(new File(sourceFile), tmpConfig);
 	}
 
 	/**
@@ -158,14 +113,9 @@ public class ConfigurationCompiler implements DeploymentCompiler<Configuration> 
 		 * If the parse or load fails, returns null
 		 * @param source The config source
 		 * @param subExtension The sub extension, if one was provided, for readers that support multiple extensions 
-		 * @return The configuration map or null if the configuration could not be read
+		 * @return The configuration or null if the configuration could not be read
 		 */
 		public Configuration readConfig(String source, String subExtension);
-		/**
-		 * Returns the sub extensions supported by this reader
-		 * @return the sub extensions supported by this reader
-		 */
-		public String[] getSubExtensions();
 	}
 	
 	/**
@@ -176,141 +126,116 @@ public class ConfigurationCompiler implements DeploymentCompiler<Configuration> 
 	 * <p><code>com.heliosapm.script.compilers.ConfigurationCompiler.PropertiesConfigurationReader</code></p>
 	 */
 	public static class PropertiesConfigurationReader implements ConfigurationReader {
-		private static final String[] subexts = new String[] {"properties"};
+		
 
 		/**
 		 * {@inheritDoc}
 		 * @see com.heliosapm.script.compilers.ConfigurationCompiler.ConfigurationReader#readConfig(java.lang.String, java.lang.String)
 		 */
 		@Override
-		public Map<String, Object> readConfig(final String source, final String subExtension) {
+		public Configuration readConfig(final String source, final String subExtension) {
 			try {
 				Properties p = new Properties();
 				p.load(new StringReader(source));
-				Map<String, Object> map = new HashMap<String, Object>(p.size());
+				Map<String, String> map = new HashMap<String, String>(p.size());
 				for(final String key: p.stringPropertyNames()) {
-					map.put(key.trim(), makeNumber(p.getProperty(key)));
+					map.put(key.trim(), p.getProperty(key).trim());
 				}
-				return map;			
+				Configuration cfg = new Configuration();
+				cfg.internalLoad(map);
+				return cfg;
 			} catch (Exception ex) {
 				return null;
 			}
 		}
 
-		/**
-		 * {@inheritDoc}
-		 * @see com.heliosapm.script.compilers.ConfigurationCompiler.ConfigurationReader#getSubExtensions()
-		 */
-		@Override
-		public String[] getSubExtensions() {
-			return subexts.clone();
-		}
-
-		/**
-		 * Tests the passed string to see if it is a number and returns
-		 * either a long or a double. Otherwise returns a string.
-		 * @param value The value to test
-		 * @return a long, a double or a string (never null)
-		 */
-		protected Object makeNumber(final String value) {
-			if(value==null || value.trim().isEmpty()) return "";
-			try {
-				Double d = new Double(value.trim());
-				if(value.indexOf('.')==-1) {
-					return d.longValue();
-				}
-				return d.doubleValue();
-			} catch (Exception ex) {
-				return value.trim();
-			}
-		}
 	}
 	
-	/**
-	 * <p>Title: JSONConfigurationReader</p>
-	 * <p>Description: ConfigurationReader for JSON files</p> 
-	 * <p>Company: Helios Development Group LLC</p>
-	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
-	 * <p><code>com.heliosapm.script.compilers.ConfigurationCompiler.JSONConfigurationReader</code></p>
-	 */
-	public static class JSONConfigurationReader implements ConfigurationReader {
-		private static final String[] subexts = new String[] {"json"};
-
-		/**
-		 * {@inheritDoc}
-		 * @see com.heliosapm.script.compilers.ConfigurationCompiler.ConfigurationReader#readConfig(java.lang.String, java.lang.String)
-		 */
-		@Override
-		public Map<String, Object> readConfig(final String source, final String subExtension) {
-			try {
-				final JSONObject json = new JSONObject(source);		
-				final JSONArray keys = json.names();
-				if(keys==null) throw new Exception("Parsed JSON, but had no values");
-				final int sz = keys.length();
-				Map<String, Object> map = new HashMap<String, Object>(sz);
-				for(int i = 0; i < sz; i++) {
-					final String key = keys.getString(i);
-					map.put(key.trim(), json.get(key));
-				}
-				return map;
-			} catch (Exception ex) {
-				return null;
-			}
-		}
-
-		/**
-		 * {@inheritDoc}
-		 * @see com.heliosapm.script.compilers.ConfigurationCompiler.ConfigurationReader#getSubExtensions()
-		 */
-		@Override
-		public String[] getSubExtensions() {
-			return subexts.clone();
-		}
-	}
-	
-	/**
-	 * <p>Title: ScriptedConfigurationReader</p>
-	 * <p>Description: ConfigurationReader for JSR233 scripted files</p> 
-	 * <p>Company: Helios Development Group LLC</p>
-	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
-	 * <p><code>com.heliosapm.script.compilers.ConfigurationCompiler.ScriptedConfigurationReader</code></p>
-	 */
-	public static class ScriptedConfigurationReader implements ConfigurationReader {
-
-		/**
-		 * {@inheritDoc}
-		 * @see com.heliosapm.script.compilers.ConfigurationCompiler.ConfigurationReader#readConfig(java.lang.String, java.lang.String)
-		 */
-		@Override
-		public Map<String, Object> readConfig(final String source, final String subExtension) {
-			final String[] subs = subExtension==null ? getSubExtensions() : new String[] {subExtension};
-			for(final String extension: subs) {
-				try {
-					ScriptEngine se = StateService.getInstance().getEngineForExtension(extension);
-					se.eval(source);
-					Bindings bindings = se.getBindings(ScriptContext.ENGINE_SCOPE);
-					Map<String, Object> map = new HashMap<String, Object>(bindings.size());
-					for(String key: bindings.keySet()) {
-						map.put(key.trim(), bindings.get(key));
-					}
-					return map;
-				} catch (Exception ex) {
-					continue;
-				}				
-			}
-			return null;
-		}
-
-		/**
-		 * {@inheritDoc}
-		 * @see com.heliosapm.script.compilers.ConfigurationCompiler.ConfigurationReader#getSubExtensions()
-		 */
-		@Override
-		public String[] getSubExtensions() {
-			return subExtensions.toArray(new String[subExtensions.size()]);
-		}
-	}
-	
+//	/**
+//	 * <p>Title: JSONConfigurationReader</p>
+//	 * <p>Description: ConfigurationReader for JSON files</p> 
+//	 * <p>Company: Helios Development Group LLC</p>
+//	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+//	 * <p><code>com.heliosapm.script.compilers.ConfigurationCompiler.JSONConfigurationReader</code></p>
+//	 */
+//	public static class JSONConfigurationReader implements ConfigurationReader {
+//		private static final String[] subexts = new String[] {"json"};
+//
+//		/**
+//		 * {@inheritDoc}
+//		 * @see com.heliosapm.script.compilers.ConfigurationCompiler.ConfigurationReader#readConfig(java.lang.String, java.lang.String)
+//		 */
+//		@Override
+//		public Map<String, Object> readConfig(final String source, final String subExtension) {
+//			try {
+//				final JSONObject json = new JSONObject(source);		
+//				final JSONArray keys = json.names();
+//				if(keys==null) throw new Exception("Parsed JSON, but had no values");
+//				final int sz = keys.length();
+//				Map<String, Object> map = new HashMap<String, Object>(sz);
+//				for(int i = 0; i < sz; i++) {
+//					final String key = keys.getString(i);
+//					map.put(key.trim(), json.get(key));
+//				}
+//				return map;
+//			} catch (Exception ex) {
+//				return null;
+//			}
+//		}
+//
+//		/**
+//		 * {@inheritDoc}
+//		 * @see com.heliosapm.script.compilers.ConfigurationCompiler.ConfigurationReader#getSubExtensions()
+//		 */
+//		@Override
+//		public String[] getSubExtensions() {
+//			return subexts.clone();
+//		}
+//	}
+//	
+//	/**
+//	 * <p>Title: ScriptedConfigurationReader</p>
+//	 * <p>Description: ConfigurationReader for JSR233 scripted files</p> 
+//	 * <p>Company: Helios Development Group LLC</p>
+//	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+//	 * <p><code>com.heliosapm.script.compilers.ConfigurationCompiler.ScriptedConfigurationReader</code></p>
+//	 */
+//	public static class ScriptedConfigurationReader implements ConfigurationReader {
+//
+//		/**
+//		 * {@inheritDoc}
+//		 * @see com.heliosapm.script.compilers.ConfigurationCompiler.ConfigurationReader#readConfig(java.lang.String, java.lang.String)
+//		 */
+//		@Override
+//		public Map<String, Object> readConfig(final String source, final String subExtension) {
+//			final String[] subs = subExtension==null ? getSubExtensions() : new String[] {subExtension};
+//			for(final String extension: subs) {
+//				try {
+//					ScriptEngine se = StateService.getInstance().getEngineForExtension(extension);
+//					se.eval(source);
+//					Bindings bindings = se.getBindings(ScriptContext.ENGINE_SCOPE);
+//					Map<String, Object> map = new HashMap<String, Object>(bindings.size());
+//					for(String key: bindings.keySet()) {
+//						map.put(key.trim(), bindings.get(key));
+//					}
+//					return map;
+//				} catch (Exception ex) {
+//					continue;
+//				}				
+//			}
+//			return null;
+//		}
+//
+//		/**
+//		 * {@inheritDoc}
+//		 * @see com.heliosapm.script.compilers.ConfigurationCompiler.ConfigurationReader#getSubExtensions()
+//		 */
+//		@Override
+//		public String[] getSubExtensions() {
+//			return subExtensions.toArray(new String[subExtensions.size()]);
+//		}
+//	}
+//	
 	
 
 }

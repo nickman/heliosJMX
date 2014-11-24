@@ -76,7 +76,7 @@ public class JSR223DeployedScript extends AbstractDeployedScript<CompiledScript>
 	@Override
 	public void initExcutable() {
 		if(executable!=null) {
-			executable.getEngine().setBindings(new SimpleBindings(config), ScriptContext.ENGINE_SCOPE);
+			executable.getEngine().setBindings(new SimpleBindings(config.getTypedConfigMap()), ScriptContext.ENGINE_SCOPE);
 			setStatus(DeploymentStatus.READY);
 		}
 		super.initExcutable();
