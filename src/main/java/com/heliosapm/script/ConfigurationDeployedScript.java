@@ -278,14 +278,6 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 	
 	
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.AbstractDeployedScript#locateConfiguration()
-	 */
-	@Override
-	public Set<ObjectName> locateConfiguration() {
-		return Collections.emptySet();
-	}
 	
 	/**
 	 * {@inheritDoc}

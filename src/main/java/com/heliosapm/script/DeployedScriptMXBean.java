@@ -297,11 +297,6 @@ public interface DeployedScriptMXBean {
 	 */
 	public boolean isConfigFor(String deployment);
 	
-	/**
-	 * Finds the ObjectNames of the MBeans that represent the direct configuration dependencies for this deployment
-	 * @return a set of ObjectNames
-	 */
-	public Set<ObjectName> locateConfiguration();
 	
 	/**
 	 * Returns the path segments for this depoyment with the specified number of segments

@@ -973,24 +973,84 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 */
 	@Override
 	public ObjectName getWatchedConfiguration() {
-		// look for {name}.config
-		// if not found, look for {pwd}.config
-		// if that's not found, it's an error
-		Hashtable<String, String> keyAttrs = new Hashtable<String, String>(objectName.getKeyPropertyList());
-		keyAttrs.put("extension", "config");				
-		ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
-		if(JMXHelper.isRegistered(watchedObjectName)) {
-			return watchedObjectName;
+		/*
+		 * if extension != config
+		 * 		look for {shortName}.config
+		 * 		if not found
+		 * 			look for {pwd}.config   (error if not found)
+		 * 
+		 * else   (we are a config)
+		 * 		if(shortName != {pwd})
+		 * 			look for {pwd}.config
+		 * 		else  (we are the {pwd}.config
+		 * 			look for {pwd.parent}.config (error if not found)
+		 */
+		
+		final Hashtable<String, String> keyAttrs = new Hashtable<String, String>(objectName.getKeyPropertyList());
+		
+		final String pwd = sourceFile.getParentFile().getName();
+		
+		if(!"config".equals(extension)) {
+			// look for {shortName}.config
+			keyAttrs.put("extension", "config");				
+			ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+			if(JMXHelper.isRegistered(watchedObjectName)) {
+				return watchedObjectName;
+			}
+			// nope. look for {pwd}.config 
+			
+			keyAttrs.put("name", pwd);
+			watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+			if(JMXHelper.isRegistered(watchedObjectName)) {
+				return watchedObjectName;
+			}
+			log.error("Failed to find watched configuration for [" + objectName + "]");
+			throw new RuntimeException("Failed to find watched configuration for [" + objectName + "]");
+		} else {
+			// we're a config
+			if(!shortName.equals(pwd)) {
+				// we're a script config, so look for {pwd}.config
+				keyAttrs.put("name", pwd);
+				ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+				if(JMXHelper.isRegistered(watchedObjectName)) {
+					return watchedObjectName;
+				}
+				log.error("Failed to find expected dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");
+				throw new RuntimeException("Failed to find expected dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");				
+			} else {
+				// we're a {pwd}.connfig, so we need to find {pwd.parent}.config
+				// yank the highest d# attribute so we go up one dir
+				keyAttrs.remove("d" + getHighestDir(objectName));
+				// update the name to the {pwd.parent}				
+				keyAttrs.put("name", sourceFile.getParentFile().getParentFile().getName());
+				ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+				if(JMXHelper.isRegistered(watchedObjectName)) {
+					return watchedObjectName;
+				}
+				log.error("Failed to find expected parent dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");
+				throw new RuntimeException("Failed to find expected parent dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");				
+			}
 		}
-		// No deployment specific config, so look for {pwd}.config
-		final String parentDirName = sourceFile.getParentFile().getName();
-		keyAttrs.put("name", parentDirName);
-		watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
-		if(!JMXHelper.isRegistered(watchedObjectName)) {
-			throw new RuntimeException("Failed to find default watched configuration [" +watchedObjectName + "] for deployment [" + objectName + "]");
-		}
-		return watchedObjectName;
 	}
+	
+	/**
+	 * Finds the highest "d" diectory key and in an ObjectName
+	 * @param objectName The object name to extract the key from
+	 * @return the highest d, or -1 if none were found
+	 */
+	protected int getHighestDir(final ObjectName objectName) {
+		final Hashtable<String, String> keyvals = objectName.getKeyPropertyList();
+		int x = -1;
+		for(int i = 1; i < 128; i++) {
+			if(keyvals.containsValue("d" + i)) {
+				x = 1;
+			} else {
+				break;
+			}
+		}
+		return x;
+	}
+	
 
 	
 	/**
@@ -1018,38 +1078,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		sendNotification(notif);
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#locateConfiguration()
-	 */
-	@Override
-	public Set<ObjectName> locateConfiguration() {
-		try {
-			final Map<String, Object> configMap = new HashMap<String, Object>();
-			final Set<ObjectName> configs = new LinkedHashSet<ObjectName>();
-			// com.heliosapm.configuration:root=/tmp/hotdir,d1=X,d2=Y,d3=Z,name=Z,extension=config,subextension=js
-			final String deplName = shortName;
-			CodeBuilder b = new CodeBuilder("com.heliosapm.configuration:root=", rootDir.replace(':',  ';'), ",extension=config,subextension=*,");
-			b.push();
-			b.append("name=root");
-			Collections.addAll(configs, JMXHelper.query(b.render()));
-			b.pop();
-			b.push();
-			b.append("name=%s", deplName);
-			Collections.addAll(configs, JMXHelper.query(b.render()));
-			b.pop();
-			for(int i = 1; i < pathSegments.length; i++) {
-				b.append("d%s=%s,", i, pathSegments[i]);				
-				Collections.addAll(configs, JMXHelper.query(b.render() + "name=" + pathSegments[i]));
-				Collections.addAll(configs, JMXHelper.query(b.render() + "name=" + deplName));
-				log.info("Config search:\n\tSearching for MBean [{}]", b.render());									
-			}
-			return configs;
-		} catch (Exception ex) {
-			log.error("Failure locating configuration MBeans", ex);
-			throw new RuntimeException("Failure locating configuration MBeans", ex);
-		}
-	}
 	
 //	/**
 //	 * Sends a recompilation change notification when the deployment is recompiled
@@ -1061,28 +1089,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 //		sendNotification(new Notification(NOTIF_RECOMPILE, objectName, sequence.incrementAndGet(), timestamp, msg));
 //	}
 	
-	/**
-	 * <p>Title: ConfigFinder</p>
-	 * <p>Description: Configuration file finder for a deployment</p> 
-	 * <p>Company: Helios Development Group LLC</p>
-	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
-	 * <p><code>com.heliosapm.script.AbstractDeployedScript.ConfigFinder</code></p>
-	 */
-	protected class ConfigFinder extends SimpleFileVisitor<Path> {
-		Stack<String> directories = new Stack<String>();
-		
-		ConfigFinder() {
-			Collections.addAll(directories, pathSegments);
-		}
-		
-		@Override
-		public FileVisitResult preVisitDirectory(final Path dir, final BasicFileAttributes attrs) throws IOException {
-			//dir.
-			return super.preVisitDirectory(dir, attrs);
-		}
-		
-		
-	}
 	
 	protected static class ConfigFileFilter implements FilenameFilter {
 		static final String ext = "config";
