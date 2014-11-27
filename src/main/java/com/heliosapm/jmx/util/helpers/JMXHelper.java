@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,9 +47,10 @@ import javax.management.MBeanServer;
 import javax.management.MBeanServerConnection;
 import javax.management.MBeanServerFactory;
 import javax.management.MBeanServerInvocationHandler;
+import javax.management.MBeanServerNotification;
 import javax.management.MalformedObjectNameException;
-import javax.management.NotificationFilter;
 import javax.management.Notification;
+import javax.management.NotificationFilter;
 import javax.management.NotificationListener;
 import javax.management.ObjectName;
 import javax.management.QueryExp;
@@ -445,6 +447,26 @@ public class JMXHelper {
 			e.printStackTrace(System.err);
 			throw new RuntimeException("Failed to acquire JMXConnection to [" + jmxUrl + "]", e);
 		}
+	}
+	
+	
+	/**
+	 * Finds the highest number appended property key key in an ObjectName.
+	 * @param objectName The object name to extract the key from
+	 * @param prefix The key prefix
+	 * @return the highest numeric, or null if none were found
+	 */
+	public static Integer getHighestKey(final ObjectName objectName, final String prefix) {
+		final Hashtable<String, String> keyvals = objectName.getKeyPropertyList();
+		final Pattern pattern = Pattern.compile(prefix + ".*?(\\d+)$");
+		final TreeSet<Integer> nums = new TreeSet<Integer>();
+		for(final String key : keyvals.keySet()) {
+			Matcher m = pattern.matcher(key);
+			if(m.matches()) {
+				nums.add(Integer.parseInt(m.group(1)));
+			}
+		}
+		return nums.isEmpty() ? null : nums.descendingIterator().next();
 	}
 	
 	
@@ -1469,6 +1491,31 @@ while(m.find()) {
 	 */
 	public static void addNotificationListener(ObjectName name, ObjectName listener, NotificationFilter filter, Object handback) {
 		addNotificationListener(getHeliosMBeanServer(), name, listener, filter, handback);
+	}
+	
+	public static void addMBeanRegisteredListener(final ObjectName listenFor, final boolean unregisterOnFirst) {
+		addMBeanRegisteredListener(getHeliosMBeanServer(), listenFor, unregisterOnFirst);
+	}
+	
+	public static void addMBeanRegisteredListener(final MBeanServerConnection server, final ObjectName listenFor, final boolean unregisterOnFirst) {
+		if(server==null) throw new IllegalArgumentException("Passed MBeanServer was null");
+		if(listenFor==null) throw new IllegalArgumentException("Passed ObjectName was null");
+		final boolean isPattern = listenFor.isPattern();
+		final NotificationListener nl = new NotificationListener() {
+			@Override
+			public void handleNotification(final Notification notification, final Object handback) {
+				MBeanServerNotification msn = (MBeanServerNotification)notification;
+				final ObjectName on = msn.getMBeanName();
+				if(isPattern) {
+					
+				} else {
+					
+				}
+				
+				
+			}
+		};
+		
 	}
 	
 	

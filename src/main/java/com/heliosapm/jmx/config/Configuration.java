@@ -26,6 +26,9 @@ package com.heliosapm.jmx.config;
 
 import java.beans.PropertyEditor;
 import java.beans.PropertyEditorManager;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectStreamException;
 import java.lang.reflect.Constructor;
 import java.util.Collection;
 import java.util.Collections;
@@ -135,7 +138,21 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 		internalConfig.putAll(tempConf.internalConfig);		
 	}
 	
+	/**
+	 * Returns the config and internal config hash maps when serialized
+	 * @return the serializable content for this class
+	 * @throws ObjectStreamException thrown on serialization errors
+	 */
+	@SuppressWarnings("rawtypes")
+	Object writeReplace() throws ObjectStreamException {
+		return new HashMap[] {
+				(HashMap) config, (HashMap) internalConfig
+		};
+	}
 	
+//	private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+//		
+//	}
 	
 	/**
 	 * Internal load that fires no listeners or notifications.

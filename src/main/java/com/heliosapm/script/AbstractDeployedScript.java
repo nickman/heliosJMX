@@ -26,12 +26,8 @@ package com.heliosapm.script;
 
 import java.io.File;
 import java.io.FilenameFilter;
-import java.io.IOException;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,7 +40,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.Stack;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -56,6 +51,7 @@ import javax.management.MBeanRegistration;
 import javax.management.MBeanServer;
 import javax.management.Notification;
 import javax.management.NotificationBroadcasterSupport;
+import javax.management.NotificationListener;
 import javax.management.ObjectName;
 
 import org.json.JSONObject;
@@ -68,7 +64,6 @@ import com.heliosapm.jmx.config.InternalConfigurationListener;
 import com.heliosapm.jmx.execution.ExecutionSchedule;
 import com.heliosapm.jmx.execution.ScheduleType;
 import com.heliosapm.jmx.execution.ScheduledExecutionService;
-import com.heliosapm.jmx.expr.CodeBuilder;
 import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.StringHelper;
@@ -966,6 +961,17 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return getStatus().name();
 	}
 	
+	
+	/**
+	 * Callack when a deployment listens on the {pwd}.config because the {shortName}.config
+	 * did not exist when this deployment started, but the {pwd}.config was just registered,
+	 * so we drop the listener on {pwd}.config and put it on {shortName}.config
+	 * @param lateConfigNotif The {shortName}.config started notification
+	 */
+	protected void onReplaceWatchedConfiguration(final Notification lateConfigNotif) {
+		
+	}
+	
 	/**
 	 * <p>Default implementation for executable, non-config deployments</p>
 	 * {@inheritDoc}
@@ -978,6 +984,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		 * 		look for {shortName}.config
 		 * 		if not found
 		 * 			look for {pwd}.config   (error if not found)
+		 * 			listen for registration of a future {shortName}.config
+		 * 				when notified:
+		 * 					stop listening on {pwd}.config and listen on {shortName}.config  
 		 * 
 		 * else   (we are a config)
 		 * 		if(shortName != {pwd})
@@ -997,7 +1006,13 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 			if(JMXHelper.isRegistered(watchedObjectName)) {
 				return watchedObjectName;
 			}
-			// nope. look for {pwd}.config 
+			// nope. register a listener in case he shows up, then look for {pwd}.config
+			final NotificationListener lateComerListener = new NotificationListener() {
+				@Override
+				public void handleNotification(Notification notification, Object handback) {
+					
+				}
+			};
 			
 			keyAttrs.put("name", pwd);
 			watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
@@ -1020,7 +1035,12 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 			} else {
 				// we're a {pwd}.connfig, so we need to find {pwd.parent}.config
 				// yank the highest d# attribute so we go up one dir
-				keyAttrs.remove("d" + getHighestDir(objectName));
+				Integer high = JMXHelper.getHighestKey(objectName, "d");
+				if(high==null) {
+					// Unlikely
+					throw new RuntimeException("Failed to find highest dir for [" + objectName + "]. No nums ?-");					
+				}
+				keyAttrs.remove("d" + JMXHelper.getHighestKey(objectName, "d"));
 				// update the name to the {pwd.parent}				
 				keyAttrs.put("name", sourceFile.getParentFile().getParentFile().getName());
 				ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
@@ -1033,23 +1053,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		}
 	}
 	
-	/**
-	 * Finds the highest "d" diectory key and in an ObjectName
-	 * @param objectName The object name to extract the key from
-	 * @return the highest d, or -1 if none were found
-	 */
-	protected int getHighestDir(final ObjectName objectName) {
-		final Hashtable<String, String> keyvals = objectName.getKeyPropertyList();
-		int x = -1;
-		for(int i = 1; i < 128; i++) {
-			if(keyvals.containsValue("d" + i)) {
-				x = 1;
-			} else {
-				break;
-			}
-		}
-		return x;
-	}
 	
 
 	
