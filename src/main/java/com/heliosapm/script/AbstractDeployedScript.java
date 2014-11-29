@@ -104,6 +104,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	/** The configuration for this deployment */
 	protected final Configuration config;
 	
+	/** The watched configuration file */
+	protected final AtomicReference<ObjectName> watchedConfig = new AtomicReference<ObjectName>(null);
+	
 	/** The execution schedule */
 	protected final AtomicReference<ExecutionSchedule> schedule = new AtomicReference<ExecutionSchedule>(ExecutionSchedule.NO_EXEC_SCHEDULE);
 	/** The backup execution schedule, saved when execution was paused */
@@ -147,11 +150,43 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		new MBeanNotificationInfo(new String[]{AttributeChangeNotification.ATTRIBUTE_CHANGE}, Notification.class.getName(), "JMX notification broadcast when the configuration of a deployment changes"),
 		new MBeanNotificationInfo(new String[]{NOTIF_RECOMPILE}, Notification.class.getName(), "JMX notification broadcast when a deployment is recompiled")
 	};
+
+	/** Pattern to replace the skip entry in a source header */
+	public static final Pattern SKIP_REPLACER = Pattern.compile("skip=(.*?),|$|\\s");
 	
 	
 	/** The deployment's insta notifications */
 	protected final Set<MBeanNotificationInfo> instanceNotificationInfos = new HashSet<MBeanNotificationInfo>(Arrays.asList(notificationInfos));
+	
+	/*
+	 * Config Update Events:
+	 * =====================
+	 * On Updated Config (direct mod)
+	 * On Updated Config (updated source)
+	 * 		broadcast change with config in payload
+	 * 
+	 * 
+	 * 
+	 */
 
+	/*
+	 * Exe Update Events:
+	 * =====================
+	 * On Updated Config (direct mod)
+	 * On Updated Config (updated source)
+	 * 		internal update event
+	 * On watched config update
+	 * 		load passed config, fire internal updates
+	 * On swapped watch file
+	 * 		unregister old watched watch
+	 * 		register new watch
+	 * 		load new watch
+	 * 		internal update event
+	 * 
+	 * 
+	 * 
+	 * 
+	 */
 	
 	
 	/**
@@ -194,36 +229,41 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 * @see com.heliosapm.jmx.config.InternalConfigurationListener#onConfigurationItemChange(java.lang.String, java.lang.String)
 	 */
 	@Override
-	public void onConfigurationItemChange(String key, String value) {
+	public void onConfigurationItemChange(final String key, final String value) {
 		
 	}	
 	
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getListenOnTargets()
+	 * @see com.heliosapm.script.DeployedScript#getWatchedConfiguration()
 	 */
 	@Override
-	public Set<ObjectName> getListenOnTargets() {
-		try {
-			final String onformat = String.format("%s:root=%s,%sextension=config,subextension=*,name=%%s", 
-					DeployedScript.CONFIG_DOMAIN, rootDir.replace(':', ';'), configDirs());
-			return new LinkedHashSet<ObjectName>(Arrays.asList(
-					//com.heliosapm.configuration:
-						//root=C;\hprojects\heliosJMX\.\src\test\resources\testdir\hotdir,
-						//d1=X,
-						//d2=Y,
-						// name=jmx,
-						// extension=config,
-						//subextension=properties
-					
-					JMXHelper.objectName(String.format(onformat, shortName)),
-					JMXHelper.objectName(String.format(onformat, pathSegments[pathSegments.length-1]))					
-			));
-		} catch (Exception ex) {
-			log.error("Failed to get listen on targets", ex);
-			throw new RuntimeException("Failed to get listen on targets", ex);
-		}
+	public ObjectName getWatchedConfiguration() {
+		return watchedConfig.get();
 	}
+	
+	
+//	public Set<ObjectName> getListenOnTargets() {
+//		try {
+//			final String onformat = String.format("%s:root=%s,%sextension=config,subextension=*,name=%%s", 
+//					DeployedScript.CONFIG_DOMAIN, rootDir.replace(':', ';'), configDirs());
+//			return new LinkedHashSet<ObjectName>(Arrays.asList(
+//					//com.heliosapm.configuration:
+//						//root=C;\hprojects\heliosJMX\.\src\test\resources\testdir\hotdir,
+//						//d1=X,
+//						//d2=Y,
+//						// name=jmx,
+//						// extension=config,
+//						//subextension=properties
+//					
+//					JMXHelper.objectName(String.format(onformat, shortName)),
+//					JMXHelper.objectName(String.format(onformat, pathSegments[pathSegments.length-1]))					
+//			));
+//		} catch (Exception ex) {
+//			log.error("Failed to get listen on targets", ex);
+//			throw new RuntimeException("Failed to get listen on targets", ex);
+//		}
+//	}
 	
 	/**
 	 * Compiles the path segment into a set of ObjectName keypairs
@@ -866,8 +906,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	}
 
 	
-	/** Pattern to replace the skip entry in a source header */
-	public static final Pattern SKIP_REPLACER = Pattern.compile("skip=(.*?),|$|\\s");
 
 	/**
 	 * {@inheritDoc}
@@ -966,19 +1004,23 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 * Callack when a deployment listens on the {pwd}.config because the {shortName}.config
 	 * did not exist when this deployment started, but the {pwd}.config was just registered,
 	 * so we drop the listener on {pwd}.config and put it on {shortName}.config
-	 * @param lateConfigNotif The {shortName}.config started notification
+	 * @param directConfigObjectName The ObjectName of the {shortName}.config started notification
 	 */
-	protected void onReplaceWatchedConfiguration(final Notification lateConfigNotif) {
+	protected void onReplaceWatchedConfiguration(final ObjectName directConfigObjectName) {
 		
 	}
 	
+//	/**
+//	 * <p>Default implementation for executable, non-config deployments</p>
+//	 * {@inheritDoc}
+//	 * @see com.heliosapm.script.DeployedScript#getWatchedConfiguration()
+//	 */
+//	@Override
 	/**
-	 * <p>Default implementation for executable, non-config deployments</p>
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getWatchedConfiguration()
+	 * Finds the ObjectName of the configuration MBean to watch
+	 * @return the ObjectName of the configuration MBean to watch
 	 */
-	@Override
-	public ObjectName getWatchedConfiguration() {
+	protected ObjectName findWatchedConfiguration() {
 		/*
 		 * if extension != config
 		 * 		look for {shortName}.config
@@ -1013,7 +1055,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 					
 				}
 			};
-			
+			JMXHelper.addMBeanRegistrationListener(watchedObjectName, lateComerListener, 1);
 			keyAttrs.put("name", pwd);
 			watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
 			if(JMXHelper.isRegistered(watchedObjectName)) {

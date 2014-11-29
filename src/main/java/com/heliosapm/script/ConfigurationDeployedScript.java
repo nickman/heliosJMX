@@ -206,62 +206,6 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 //		return JMXHelper.objectName(b);
 //	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getListenOnTargets()
-	 */
-	@Override
-	public Set<ObjectName> getListenOnTargets() {
-		try {
-			final boolean inRoot = sourceFile.getAbsolutePath().equals(rootDir);
-			if(inRoot && (shortName.equals("root"))) return Collections.emptySet();
-			final boolean inRootChild = sourceFile.getParentFile().getAbsolutePath().equals(rootDir);
-			// if inRoot, and shortname not "root" listen on root.*.config
-			// if inRootChild, as other plus {parent}.{shortname}.*.config ( and if shortname != pathSegment[1], {parent}.{shortname}.*.config
-			
-			/*
-			 	X/a.js.config  -->  [X/X.*config    and     /a.*.config]  
-										\							
-										 --->  /root.*.config    
-			
-			 * 													  
-			 */
-			
-			
-			
-			if(inRoot) {
-				final String onformat = String.format("%s:root=%s,%sextension=config,subextension=*,name=%%s", 
-						DeployedScript.CONFIG_DOMAIN, rootDir.replace(':', ';'), ",");				
-				return new LinkedHashSet<ObjectName>(Arrays.asList(JMXHelper.objectName(String.format(onformat, "root"))));
-			}
-			
-			
-			final String onformat = String.format("%s:root=%s,%sextension=config,subextension=*,name=%%s", 
-					DeployedScript.CONFIG_DOMAIN, rootDir.replace(':', ';'), configDirs());
-					
-			Set<ObjectName> set =  new LinkedHashSet<ObjectName>(Arrays.asList(
-					//com.heliosapm.configuration:
-						//root=C;\hprojects\heliosJMX\.\src\test\resources\testdir\hotdir,
-						//d1=X,
-						//d2=Y,
-						// name=jmx,
-						// extension=config,
-						//subextension=properties
-					
-					JMXHelper.objectName(String.format(onformat, shortName)),
-					JMXHelper.objectName(String.format(onformat, pathSegments[pathSegments.length-1]))					
-			));
-			if(inRootChild) {
-				final String ronformat = String.format("%s:root=%s,%sextension=config,subextension=*,name=%%s", 
-						DeployedScript.CONFIG_DOMAIN, rootDir.replace(':', ';'), ",");	
-				set.add(JMXHelper.objectName(String.format(ronformat, "root")));
-			}
-			return set;
-		} catch (Exception ex) {
-			log.error("Failed to get listen on targets", ex);
-			throw new RuntimeException("Failed to get listen on targets", ex);
-		}
-	}
 	
 	/**
 	 * Compiles the path segment into a set of ObjectName keypairs

@@ -47,10 +47,10 @@ public interface DeployedScriptMXBean {
 	public String getShortName();
 	
 	/**
-	 * Returns a set of JMX ObjectNames for MBeans that this deployment should listen on for changes
-	 * @return a set of JMX ObjectNames for MBeans that this deployment should listen on for changes
+	 * Returns the JMX ObjectName of the configuration MBean that this deployment should listen on for changes
+	 * @return the JMX ObjectName for the watched configuration MBean
 	 */
-	public Set<ObjectName> getListenOnTargets();
+	public ObjectName getWatchedConfiguration();
 	
 	/**
 	 * Returns the last modified timestamp of the script's underlying source file

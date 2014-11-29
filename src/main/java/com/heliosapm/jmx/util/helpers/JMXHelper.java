@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -45,6 +46,7 @@ import javax.management.MBeanInfo;
 import javax.management.MBeanNotificationInfo;
 import javax.management.MBeanServer;
 import javax.management.MBeanServerConnection;
+import javax.management.MBeanServerDelegate;
 import javax.management.MBeanServerFactory;
 import javax.management.MBeanServerInvocationHandler;
 import javax.management.MBeanServerNotification;
@@ -63,6 +65,7 @@ import javax.management.remote.JMXServiceURL;
 
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
+import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 
 
 /**
@@ -1493,29 +1496,75 @@ while(m.find()) {
 		addNotificationListener(getHeliosMBeanServer(), name, listener, filter, handback);
 	}
 	
-	public static void addMBeanRegisteredListener(final ObjectName listenFor, final boolean unregisterOnFirst) {
-		addMBeanRegisteredListener(getHeliosMBeanServer(), listenFor, unregisterOnFirst);
+	/**
+	 * Registers a listener in the default/Helios MBeanServer to listen on MBean registrations matching the passed ObjectName.
+	 * If the passed ObjectName is not a pattern, the listener will be removed once the notification is received.
+	 * If the passed ObjectName is a pattern, multiple callbacks will be processed until the number of notifications
+	 * is equal to the the passed notification count, at which point the listener will be removed. If the passed notification count
+	 * is less than 1, the listener will never be removed.
+	 * @param listenFor The ObjectName to listen on registration for. May be a pattern to receive multiple callbacks 
+	 * @param callback The notification listener to call back on when a registration event occurs
+	 * @param notificationCount The number of notifications to receive before unregistering the listener
+	 */
+	public static void addMBeanRegistrationListener(final ObjectName listenFor, final NotificationListener callback, final int notificationCount) {
+		addMBeanRegistrationListener(getHeliosMBeanServer(), listenFor, callback, notificationCount);
 	}
 	
-	public static void addMBeanRegisteredListener(final MBeanServerConnection server, final ObjectName listenFor, final boolean unregisterOnFirst) {
+	/**
+	 * Registers a listener in the passed MBeanServer to listen on MBean registrations matching the passed ObjectName.
+	 * If the passed ObjectName is not a pattern, the listener will be removed once the notification is received.
+	 * If the passed ObjectName is a pattern, multiple callbacks will be processed until the number of notifications
+	 * is equal to the the passed notification count, at which point the listener will be removed. If the passed notification count
+	 * is less than 1, the listener will never be removed.
+	 * @param server The MBeanServer to register the listener with
+	 * @param listenFor The ObjectName to listen on registration for. May be a pattern to receive multiple callbacks 
+	 * @param callback The notification listener to call back on when a registration event occurs
+	 * @param notificationCount The number of notifications to receive before unregistering the listener
+	 */
+	public static void addMBeanRegistrationListener(final MBeanServerConnection server, final ObjectName listenFor, final NotificationListener callback, final int notificationCount) {
 		if(server==null) throw new IllegalArgumentException("Passed MBeanServer was null");
 		if(listenFor==null) throw new IllegalArgumentException("Passed ObjectName was null");
+		if(callback==null) throw new IllegalArgumentException("Passed Callback was null");
 		final boolean isPattern = listenFor.isPattern();
 		final NotificationListener nl = new NotificationListener() {
+			/** The number of notifications received */
+			final AtomicInteger notificationsReceived = new AtomicInteger(0);
 			@Override
-			public void handleNotification(final Notification notification, final Object handback) {
-				MBeanServerNotification msn = (MBeanServerNotification)notification;
+			public void handleNotification(final Notification notification, final Object handback) {				
+				final MBeanServerNotification msn = (MBeanServerNotification)notification;
 				final ObjectName on = msn.getMBeanName();
-				if(isPattern) {
-					
-				} else {
-					
+				final int ncount = notificationsReceived.incrementAndGet();
+				SharedNotificationExecutor.getInstance().execute(new Runnable() {
+					@Override
+					public void run() {
+						callback.handleNotification(msn, on);
+					}
+				});
+				if(!isPattern || (notificationCount > 0 && ncount >= notificationCount)) {
+					try {
+						server.removeNotificationListener(MBeanServerDelegate.DELEGATE_NAME, this);
+					} catch (Exception ex) {}					
 				}
-				
-				
 			}
 		};
-		
+		final NotificationFilter nf = new NotificationFilter() {
+			/**  */
+			private static final long serialVersionUID = -6799577777517082076L;
+			@Override
+			public boolean isNotificationEnabled(final Notification notification) {
+				if(!(notification instanceof MBeanServerNotification) || !MBeanServerNotification.REGISTRATION_NOTIFICATION.equals(notification.getType())) return false;
+				final MBeanServerNotification msn = (MBeanServerNotification)notification;
+				if(isPattern) {
+					return listenFor.apply(msn.getMBeanName());
+				}
+				return msn.getMBeanName().equals(listenFor);								
+			}
+		};
+		try {
+			server.addNotificationListener(MBeanServerDelegate.DELEGATE_NAME, nl, nf, null);
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to register notification listener for [" + listenFor + "]", ex);
+		}
 	}
 	
 	
