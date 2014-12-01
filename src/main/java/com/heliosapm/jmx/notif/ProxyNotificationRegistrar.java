@@ -100,8 +100,7 @@ public class ProxyNotificationRegistrar extends NotificationBroadcasterSupport i
 			// NEW MBEAN
 		} else {
 			// UNREGISTERED MBEAN
-		}
-		
+		}		
 	}
 	
 	private class ProxyListener {

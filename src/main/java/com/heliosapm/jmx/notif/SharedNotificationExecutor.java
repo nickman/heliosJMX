@@ -25,6 +25,7 @@
 package com.heliosapm.jmx.notif;
 
 import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -35,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import javax.management.ObjectName;
+import javax.management.QueryExp;
 
 import com.heliosapm.jmx.concurrency.JMXManagedThreadPool;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
@@ -82,6 +84,36 @@ public class SharedNotificationExecutor implements ExecutorService {
 	
 	private SharedNotificationExecutor() {
 		threadPool = new JMXManagedThreadPool(NOTIF_THREAD_POOL_OBJECT_NAME, "WatcherNotificationThreadPool", CORES, CORES, 1024, 60000, 100, 90);
+	}
+	
+	
+	public void invokeOp(final ObjectName pattern, final QueryExp query, final String opName, final boolean sync) {
+		invokeOp(pattern, query, opName, new Object[]{}, new String[]{}, sync);
+	}
+	
+	public void invokeOp(final ObjectName pattern, final QueryExp query, final String opName, final Object[] args, final String[] signature, final boolean sync) {
+		if(pattern==null) throw new IllegalArgumentException("The passed ObjectName was null");
+		if(opName==null) throw new IllegalArgumentException("The passed opName was null");
+		final ObjectName[] matches = JMXHelper.query(pattern, query);
+		if(matches.length==0) return;
+		List<Future<?>> futures = new ArrayList<Future<?>>(matches.length);
+		for(final ObjectName on: matches) {
+			futures.add(threadPool.submit(new Runnable(){
+				@Override
+				public void run() {
+					JMXHelper.invoke(on, opName, args, signature);					
+				}
+			}));
+		}
+		if(sync) {
+			for(Future<?> f: futures) {
+				try {
+					f.get();
+				} catch (Exception ex) {
+					throw new RuntimeException("Sync Op [" + opName + "] against [" + pattern + "] timed out", ex);
+				}
+			}
+		}
 	}
 
 

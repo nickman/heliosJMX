@@ -221,7 +221,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 			config.registerInternalListener(this);
 		}
 		checksum = URLHelper.adler32(URLHelper.toURL(sourceFile));
-		lastModified = URLHelper.getLastModified(URLHelper.toURL(sourceFile));		
+		lastModified = URLHelper.getLastModified(URLHelper.toURL(sourceFile));				
 	}
 	
 	/**
@@ -983,11 +983,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 */
 	@Override
 	public Map<String, String> getConfigurationMap() {
-		final Map<String, String> map = new HashMap<String, String>(getConfiguration().size());
-		for(Map.Entry<String, String> entry: getConfiguration().entrySet()) {
-			map.put(entry.getKey(), entry.getValue());
-		}
-		return map;
+		return config.getInternalConfig();
 	}
 	
 	/**
@@ -1016,6 +1012,17 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 //	 * @see com.heliosapm.script.DeployedScript#getWatchedConfiguration()
 //	 */
 //	@Override
+	
+	public void initConfig() {
+		watchedConfig.set(findWatchedConfiguration());
+		if(watchedConfig.get()!=null) {
+			Map<String, String> parentConfig = JMXHelper.getAttribute(watchedConfig.get(), "ConfigurationMap");
+			if(parentConfig!=null && !parentConfig.isEmpty()) {
+				this.config.load(parentConfig);  /// ADD JMX GETINTERNAL CONFIG IN DEPLSCRIPT
+			}
+		}
+	}
+	
 	/**
 	 * Finds the ObjectName of the configuration MBean to watch
 	 * @return the ObjectName of the configuration MBean to watch
@@ -1061,38 +1068,39 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 			if(JMXHelper.isRegistered(watchedObjectName)) {
 				return watchedObjectName;
 			}
-			log.error("Failed to find watched configuration for [" + objectName + "]");
-			throw new RuntimeException("Failed to find watched configuration for [" + objectName + "]");
-		} else {
-			// we're a config
-			if(!shortName.equals(pwd)) {
-				// we're a script config, so look for {pwd}.config
-				keyAttrs.put("name", pwd);
-				ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
-//				if(JMXHelper.isRegistered(watchedObjectName)) {
-					return watchedObjectName;
-//				}
-//				log.warn("Failed to find expected dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");
-				//throw new RuntimeException("Failed to find expected dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");				
-			} else {
-				// we're a {pwd}.connfig, so we need to find {pwd.parent}.config
-				// yank the highest d# attribute so we go up one dir
-				Integer high = JMXHelper.getHighestKey(objectName, "d");
-				if(high==null) {
-					// Unlikely
-					throw new RuntimeException("Failed to find highest dir for [" + objectName + "]. No nums ?-");					
-				}
-				keyAttrs.remove("d" + JMXHelper.getHighestKey(objectName, "d"));
-				// update the name to the {pwd.parent}				
-				keyAttrs.put("name", sourceFile.getParentFile().getParentFile().getName());
-				ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
-//				if(JMXHelper.isRegistered(watchedObjectName)) {
-					return watchedObjectName;
-//				}
-//				log.warn("Failed to find expected parent dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");
-				//throw new RuntimeException("Failed to find expected parent dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");				
-			}
+			log.warn("Failed to find expected dir watched configuration \n\tfor [" + objectName + "] \n\tat ObjectName [" + watchedObjectName + "]");
+			throw new RuntimeException("Failed to find expected dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");				
 		}
+		// we're a config
+		if(!shortName.equals(pwd)) {
+			// we're a script config, so look for {pwd}.config
+			keyAttrs.put("name", pwd);
+			ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+			if(JMXHelper.isRegistered(watchedObjectName)) {
+				return watchedObjectName;
+			}
+			log.warn("Failed to find expected dir watched configuration \n\tfor [" + objectName + "] \n\tat ObjectName [" + watchedObjectName + "]");
+			return null;
+			//throw new RuntimeException("Failed to find expected dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");				
+		}
+		// we're a {pwd}.connfig, so we need to find {pwd.parent}.config
+		// yank the highest d# attribute so we go up one dir
+		Integer high = JMXHelper.getHighestKey(objectName, "d");
+		if(high==null) {
+			return null;
+		}
+		keyAttrs.remove("d" + JMXHelper.getHighestKey(objectName, "d"));
+		if(this.rootDir.equals(sourceFile.getParentFile().getParentFile().getAbsolutePath())) {
+			return null;
+		}
+		// update the name to the {pwd.parent}				
+		keyAttrs.put("name", sourceFile.getParentFile().getParentFile().getName());
+		ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+		if(JMXHelper.isRegistered(watchedObjectName)) {
+			return watchedObjectName;
+		}
+		log.warn("Failed to find expected parent dir watched configuration \n\tfor [" + objectName + "] \n\tat ObjectName [" + watchedObjectName + "]");
+		throw new RuntimeException("Failed to find expected parent dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");
 	}
 	
 	
@@ -1240,7 +1248,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 */
 	@Override
 	public void postRegister(final Boolean registrationDone) {
-		this.watchedConfig.set(findWatchedConfiguration());
+		//this.watchedConfig.set(findWatchedConfiguration());
 	}
 
 	/**

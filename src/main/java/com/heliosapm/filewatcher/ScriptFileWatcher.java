@@ -65,6 +65,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.management.MBeanNotificationInfo;
 import javax.management.Notification;
 import javax.management.NotificationBroadcasterSupport;
+import javax.management.Query;
+import javax.management.QueryExp;
+import javax.management.StringValueExp;
 import javax.management.remote.JMXConnectorServer;
 import javax.management.remote.JMXConnectorServerFactory;
 import javax.management.remote.JMXServiceURL;
@@ -82,6 +85,7 @@ import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
+import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.StateService;
 
 
@@ -202,7 +206,11 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			ex.printStackTrace(System.err);			
 		}		
 		
-		ScriptFileWatcher sfw = getInstance();
+		try {
+			ScriptFileWatcher sfw = getInstance();
+		} catch (Exception ex) {
+			
+		}
 		//sfw.addWatchDirectory(initialHotDir);  //System.getProperty("java.io.tmpdir") + File.separator + "hotdir"
 		final JMXConnectorServer svr = server;
 		new Thread("ExitWatcher") {
@@ -324,7 +332,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 							}
 						}					
 					}
-					return;
+					//return;
 				}
 			}
 			final String name = event.getFileName();
@@ -417,6 +425,7 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 					    }
 						if(watchKey!=null) {
 							for (final WatchEvent<?> event: watchKey.pollEvents()) {
+								if(!started.get()) continue;
 								WatchEvent.Kind<?> kind = event.kind();
 								if (kind == OVERFLOW) {
 									log.warn("OVERFLOW OCCURED");
@@ -571,7 +580,8 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	protected void scanHotDirsAtStart() {
 		final Thread startThread = Thread.currentThread();
 		final String threadName = startThread.getName();
-		final Set<String> deploymentTypes = new LinkedHashSet<String>(NON_SCRIPT_EXTENSIONS);		
+		final Set<String> deploymentTypes = new LinkedHashSet<String>(NON_SCRIPT_EXTENSIONS); // "dir", "config", "fixture", "service"
+		
 		deploymentTypes.add("script");
 		final Map<String, AtomicInteger> typeCounts = new LinkedHashMap<String, AtomicInteger>(deploymentTypes.size());
 		for(String deploymentType: deploymentTypes) {
@@ -587,9 +597,21 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			final long endTime = startTime + timeout;
 			int totalDeployments = 0;
 			final Set<String> copyOfHotDirNames = new HashSet<String>(hotDirNames);
+			int purged = 0;
+			for(String hd: copyOfHotDirNames) {
+				purged += purgeZeroSizedConfigs(new File(hd));
+			}
+			log.info("\n\t===============================================\n\tPurged {} zero sized files at start\n\t===============================================\n", purged);
+			
+			for(String hd: copyOfHotDirNames) {
+				addWatchDirectory(hd);
+				File rootDir = new File(hd);
+				log.info("Added watched dir [{}]", hd);
+				fillInConfigs(rootDir);				
+			}			
 			for(final String deploymentType: deploymentTypes) {
-				for(String hotDirPathName: copyOfHotDirNames) {
-					log.info("Deploying [{}]s in [{}]", deploymentType, hotDirPathName);					
+				for(String hotDirPathName: copyOfHotDirNames) {					
+					log.info("Deploying [{}]s in [{}]", deploymentType, hotDirPathName);
 					try {
 						Set<Future<?>> fs = treeScan(new File(hotDirPathName), true, true, deploymentType);
 						if(!fs.isEmpty()) {
@@ -619,10 +641,43 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 			}
 			b.append("\n\t========================================================\n");
 			log.info(b.toString());
+			final QueryExp QEXP =  Query.isInstanceOf(new StringValueExp(DeployedScript.class.getName()));
+			SharedNotificationExecutor.getInstance().invokeOp(JMXHelper.objectName(DeployedScript.CONFIG_DOMAIN + ":*"), QEXP, "initConfig", true);
+			SharedNotificationExecutor.getInstance().invokeOp(JMXHelper.objectName(DeployedScript.FIXTURE_DOMAIN + ":*"), QEXP, "initConfig", true);
+			SharedNotificationExecutor.getInstance().invokeOp(JMXHelper.objectName(DeployedScript.SERVICE_DOMAIN + ":*"), QEXP, "initConfig", true);
+			SharedNotificationExecutor.getInstance().invokeOp(JMXHelper.objectName(DeployedScript.DEPLOYMENT_DOMAIN + ":*"), QEXP, "initConfig", true);
+		} catch (Exception x) {
+			x.printStackTrace(System.err);
 		} finally {
 			startThread.setName(threadName);
 		}
 	}
+	
+	private int purgeZeroSizedConfigs(final File dir) {
+		int purged = 0;
+		for(final File f: dir.listFiles()) {
+			if(f.isDirectory()) {
+				purged += purgeZeroSizedConfigs(f);
+			} else {
+				if(f.length()==0) {
+					f.delete();
+					purged++;
+				}
+			}
+		}
+		return purged;
+	}
+	
+	private void fillInConfigs(final File dir) throws Exception {
+		File fic = new File(dir, dir.getName() + ".config");
+		if(!fic.exists()) fic.createNewFile();
+		for(final File f: dir.listFiles()) {
+			if(f.isDirectory()) {
+				fillInConfigs(f);
+			}
+		}
+	}
+	
 	
 	/**
 	 * Waits for the completion of the futures in the passed set
@@ -673,6 +728,8 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 	}
 	
 	
+	
+	
 	/**
 	 * Performs a recursive tree scan
 	 * @param dir The directory to scan
@@ -685,14 +742,20 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 		if(dir==null || !dir.exists() || !dir.isDirectory()) return null;		
 		final Set<Future<?>> futures = noDelay ? new HashSet<Future<?>>(128) : null;
 		for(final File dirFile: dir.listFiles()) {
+			if(createdConfigFiles.contains(dirFile)) continue;
 			if(dirFile.isDirectory()) {
 				final File dirConfigFile = new File(dirFile, dirFile.getName() + ".config");
 				if(!dirConfigFile.exists()) {
 					try {
 						dirConfigFile.createNewFile();
-						createdConfigFiles.add(dirConfigFile);
+						createdConfigFiles.add(dirConfigFile);						
+//						if(noDelay) {
+//							final Future<?> future = enqueueFileEvent(0, new FileEvent(dirConfigFile.getAbsolutePath(), ENTRY_CREATE));
+//							future.get();
+//							log.info("Deployed Empty Config File [{}]", dirConfigFile.getAbsolutePath());
+//						}
 					} catch (Exception ex) {
-						throw new RuntimeException("Failed to create missing mandatory config file [" + dirConfigFile + "]");
+						throw new RuntimeException("Failed to create missing mandatory config file [" + dirConfigFile + "]", ex);
 					}
 				}
 				if(noDelay) {

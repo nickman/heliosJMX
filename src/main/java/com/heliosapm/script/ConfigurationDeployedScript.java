@@ -269,4 +269,13 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 		return executable;
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getConfigurationMap()
+	 */
+	@Override
+	public Map<String, String> getConfigurationMap() {
+		return executable.getInternalConfig();
+	}
+	
 }

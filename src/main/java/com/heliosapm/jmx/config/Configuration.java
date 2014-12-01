@@ -284,6 +284,14 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	}
 	
 	/**
+	 * Returns a copy of the internal config
+	 * @return a copy of the internal config
+	 */
+	public Map<String, String> getInternalConfig() {
+		return new HashMap<String, String>(config);
+	}
+	
+	/**
 	 * Inserts or updates a typed configuration item.
 	 * If this operation changes the config, will fire listeners and notifications
 	 * @param key The config item key

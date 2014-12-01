@@ -305,5 +305,10 @@ public interface DeployedScriptMXBean {
 	 * @return The path segments, trimmed as defined
 	 */
 	public String[] getPathSegments(int trim);
+	
+	/**
+	 * Initializes the config
+	 */
+	public void initConfig();
 
 }
