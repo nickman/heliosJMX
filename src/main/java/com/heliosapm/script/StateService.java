@@ -478,8 +478,10 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 						if(compiler==null) {
 							compiler = (DeploymentCompiler<T>) catchAllCompiler;
 						}
-						DeployedScript<T> ds = compiler.deploy(sourceFile);					
-						JMXHelper.registerMBean(ds.getObjectName(), ds);
+						DeployedScript<T> ds = compiler.deploy(sourceFile);
+						if(!JMXHelper.isRegistered(ds.getObjectName())) {
+							JMXHelper.registerMBean(ds.getObjectName(), ds);
+						}
 						newDs.set(true);
 						return ds;
 					} catch (Exception ex) {

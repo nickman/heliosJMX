@@ -1069,11 +1069,11 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 				// we're a script config, so look for {pwd}.config
 				keyAttrs.put("name", pwd);
 				ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
-				if(JMXHelper.isRegistered(watchedObjectName)) {
+//				if(JMXHelper.isRegistered(watchedObjectName)) {
 					return watchedObjectName;
-				}
-				log.error("Failed to find expected dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");
-				throw new RuntimeException("Failed to find expected dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");				
+//				}
+//				log.warn("Failed to find expected dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");
+				//throw new RuntimeException("Failed to find expected dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");				
 			} else {
 				// we're a {pwd}.connfig, so we need to find {pwd.parent}.config
 				// yank the highest d# attribute so we go up one dir
@@ -1086,11 +1086,11 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 				// update the name to the {pwd.parent}				
 				keyAttrs.put("name", sourceFile.getParentFile().getParentFile().getName());
 				ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
-				if(JMXHelper.isRegistered(watchedObjectName)) {
+//				if(JMXHelper.isRegistered(watchedObjectName)) {
 					return watchedObjectName;
-				}
-				log.error("Failed to find expected parent dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");
-				throw new RuntimeException("Failed to find expected parent dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");				
+//				}
+//				log.warn("Failed to find expected parent dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");
+				//throw new RuntimeException("Failed to find expected parent dir watched configuration for [" + objectName + "] at ObjectName [" + watchedObjectName + "]");				
 			}
 		}
 	}
@@ -1240,7 +1240,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 */
 	@Override
 	public void postRegister(final Boolean registrationDone) {
-		/* No Op */
+		this.watchedConfig.set(findWatchedConfiguration());
 	}
 
 	/**

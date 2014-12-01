@@ -153,41 +153,41 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 	
 	
 	
-	/**
-	 * <p>Default implementation for executable, non-config deployments</p>
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getWatchedConfiguration()
-	 */
-	@Override
-	public ObjectName getWatchedConfiguration() {
-		// if this is NOT {pwd}.config, look for {pwd}.config
-		// else look for {parent}/{pwd}.config
-		final String parentDirName = sourceFile.getParentFile().getName();
-		final Hashtable<String, String> keyAttrs = new Hashtable<String, String>(objectName.getKeyPropertyList());
-		final boolean isPwd = shortName.equals(parentDirName);
-		if(!isPwd) {
-			// ====================================
-			// We're in a custom depl config
-			// ====================================			
-			keyAttrs.put("extension", "config");				
-			ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
-			if(JMXHelper.isRegistered(watchedObjectName)) {
-				return watchedObjectName;
-			}
-			throw new RuntimeException("Failed to find default watched configuration [" + watchedObjectName + "] for config [" + objectName + "]");
-		}
-		// ====================================
-		// We're in a pwd depl config
-		// ====================================
-		int highestDir = DeploymentType.getHighestDir(objectName);
-		String pwd = keyAttrs.remove("d" + highestDir);
-		keyAttrs.put("name", pwd);
-		ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
-		if(!JMXHelper.isRegistered(watchedObjectName)) {
-			throw new RuntimeException("Failed to find default watched configuration [" + watchedObjectName + "] for deployment [" + objectName + "]");
-		}
-		return watchedObjectName;
-	}
+//	/**
+//	 * <p>Default implementation for executable, non-config deployments</p>
+//	 * {@inheritDoc}
+//	 * @see com.heliosapm.script.DeployedScript#getWatchedConfiguration()
+//	 */
+//	@Override
+//	public ObjectName getWatchedConfiguration() {
+//		// if this is NOT {pwd}.config, look for {pwd}.config
+//		// else look for {parent}/{pwd}.config
+//		final String parentDirName = sourceFile.getParentFile().getName();
+//		final Hashtable<String, String> keyAttrs = new Hashtable<String, String>(objectName.getKeyPropertyList());
+//		final boolean isPwd = shortName.equals(parentDirName);
+//		if(!isPwd) {
+//			// ====================================
+//			// We're in a custom depl config
+//			// ====================================			
+//			keyAttrs.put("extension", "config");				
+//			ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+//			if(JMXHelper.isRegistered(watchedObjectName)) {
+//				return watchedObjectName;
+//			}
+//			throw new RuntimeException("Failed to find default watched configuration [" + watchedObjectName + "] for config [" + objectName + "]");
+//		}
+//		// ====================================
+//		// We're in a pwd depl config
+//		// ====================================
+//		int highestDir = DeploymentType.getHighestDir(objectName);
+//		String pwd = keyAttrs.remove("d" + highestDir);
+//		keyAttrs.put("name", pwd);
+//		ObjectName watchedObjectName = JMXHelper.objectName(CONFIG_DOMAIN, keyAttrs);
+//		if(!JMXHelper.isRegistered(watchedObjectName)) {
+//			throw new RuntimeException("Failed to find default watched configuration [" + watchedObjectName + "] for deployment [" + objectName + "]");
+//		}
+//		return watchedObjectName;
+//	}
 	
 	
 //	/**

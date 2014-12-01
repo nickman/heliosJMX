@@ -704,6 +704,9 @@ public class ScriptFileWatcher extends NotificationBroadcasterSupport implements
 				else enqueueFileEvent(new FileEvent(dirFile.getAbsolutePath(), ENTRY_CREATE));
 			} else if((extension==null || !"dir".equals(extension))) {
 				final String ext = URLHelper.getExtension(dirFile);
+				if(dirFile.length()==0) {
+					createdConfigFiles.add(dirFile);
+				}
 				if(activateFiles && (extension==null || extension.equals(ext) ||  ("script".equals(extension) && isScript(ext)))) {
 					if(noDelay) {
 						futures.add(enqueueFileEvent(0, new FileEvent(dirFile.getAbsolutePath(), ENTRY_MODIFY)));

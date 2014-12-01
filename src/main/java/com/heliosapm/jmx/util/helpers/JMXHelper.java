@@ -747,8 +747,8 @@ public class JMXHelper {
 		try {
 			server.registerMBean(mbean, objectName);
 		} catch(Exception e) {
-			//throw new RuntimeException("Failed to register MBean [" + objectName + "]", e);
-			System.err.println("Failed to register MBean [" + objectName + "]:" + e);
+			if(isDebugAgentLoaded()) e.printStackTrace(System.err);
+			throw new RuntimeException("Failed to register MBean [" + objectName + "]", e);
 		}
 	}
 	
@@ -770,8 +770,8 @@ public class JMXHelper {
 		try {
 			server.unregisterMBean(objectName);
 		} catch(Exception e) {
-			//throw new RuntimeException("Failed to register MBean [" + objectName + "]", e);
-			System.err.println("Failed to unregister MBean [" + objectName + "]");
+			if(isDebugAgentLoaded()) e.printStackTrace(System.err);
+			throw new RuntimeException("Failed to unregister MBean [" + objectName + "]", e);
 		}		
 	}
 	
@@ -785,8 +785,8 @@ public class JMXHelper {
 		try {
 			server.registerMBean(mbean, objectName);
 		} catch(Exception e) {
+			if(isDebugAgentLoaded()) e.printStackTrace(System.err);
 			throw new RuntimeException("Failed to register MBean [" + objectName + "]", e);
-			//System.err.println("Failed to register MBean [" + objectName + "]:" + e);
 		}		
 	}
 	
@@ -1454,6 +1454,7 @@ while(m.find()) {
 		try {
 			connection.addNotificationListener(name, listener, filter, handback);
 		} catch (Exception ex) {
+			if(isDebugAgentLoaded()) ex.printStackTrace(System.err);
 			throw new RuntimeException("Failed to register JMX Notification Listener", ex);
 		}
 	}
@@ -1481,6 +1482,7 @@ while(m.find()) {
 		try {
 			connection.addNotificationListener(name, listener, filter, handback);
 		} catch (Exception ex) {
+			if(isDebugAgentLoaded()) ex.printStackTrace(System.err);
 			throw new RuntimeException("Failed to register JMX Notification Listener", ex);
 		}
 	}
@@ -1563,6 +1565,7 @@ while(m.find()) {
 		try {
 			server.addNotificationListener(MBeanServerDelegate.DELEGATE_NAME, nl, nf, null);
 		} catch (Exception ex) {
+			if(isDebugAgentLoaded()) ex.printStackTrace(System.err);
 			throw new RuntimeException("Failed to register notification listener for [" + listenFor + "]", ex);
 		}
 	}
@@ -1722,6 +1725,7 @@ while(m.find()) {
 			server.createMBean(className, on, new Object[]{urls, delegateToCLR}, new String[]{URL[].class.getName(), "boolean"});
 			return on;
 		} catch (Exception ex) {
+			if(isDebugAgentLoaded()) ex.printStackTrace(System.err);
 			throw new RuntimeException("Failed to register classloader MBean [" + objectName + "]", ex);
 		}
 	}

@@ -138,17 +138,17 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 		internalConfig.putAll(tempConf.internalConfig);		
 	}
 	
-	/**
-	 * Returns the config and internal config hash maps when serialized
-	 * @return the serializable content for this class
-	 * @throws ObjectStreamException thrown on serialization errors
-	 */
-	@SuppressWarnings("rawtypes")
-	Object writeReplace() throws ObjectStreamException {
-		return new HashMap[] {
-				(HashMap) config, (HashMap) internalConfig
-		};
-	}
+//	/**
+//	 * Returns the config and internal config hash maps when serialized
+//	 * @return the serializable content for this class
+//	 * @throws ObjectStreamException thrown on serialization errors
+//	 */
+//	@SuppressWarnings("rawtypes")
+//	Object writeReplace() throws ObjectStreamException {
+//		return new HashMap[] {
+//				(HashMap) config, (HashMap) internalConfig
+//		};
+//	}
 	
 //	private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
 //		
