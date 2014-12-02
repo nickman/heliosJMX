@@ -67,6 +67,7 @@ public class JSR223DeployedScript extends AbstractDeployedScript<CompiledScript>
 		executable = cs;
 		initExcutable();		
 		locateConfigFiles(sourceFile, rootDir, pathSegments);
+		
 	}
 	
 	/**
@@ -76,10 +77,20 @@ public class JSR223DeployedScript extends AbstractDeployedScript<CompiledScript>
 	@Override
 	public void initExcutable() {
 		if(executable!=null) {
-			executable.getEngine().setBindings(new SimpleBindings(config.getTypedConfigMap()), ScriptContext.ENGINE_SCOPE);
+			executable.getEngine().setBindings(config, ScriptContext.ENGINE_SCOPE);
 			setStatus(DeploymentStatus.READY);
 		}
+		log.info("Output: [{}]", executable.getEngine().getFactory().getOutputStatement("foo"));
 		super.initExcutable();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.AbstractDeployedScript#onConfigurationItemChange(java.lang.String, java.lang.String)
+	 */
+	@Override
+	public final void onConfigurationItemChange(final String key, final String value) {
+		// none required.
 	}
 
 	/**

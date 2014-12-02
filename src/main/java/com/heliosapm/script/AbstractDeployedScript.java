@@ -32,7 +32,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.LinkedHashSet;
@@ -41,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
@@ -51,6 +51,7 @@ import javax.management.MBeanRegistration;
 import javax.management.MBeanServer;
 import javax.management.Notification;
 import javax.management.NotificationBroadcasterSupport;
+import javax.management.NotificationFilter;
 import javax.management.NotificationListener;
 import javax.management.ObjectName;
 
@@ -60,6 +61,7 @@ import org.slf4j.LoggerFactory;
 
 import com.heliosapm.filewatcher.ScriptFileWatcher;
 import com.heliosapm.jmx.config.Configuration;
+import com.heliosapm.jmx.config.ConfigurationManager;
 import com.heliosapm.jmx.config.InternalConfigurationListener;
 import com.heliosapm.jmx.execution.ExecutionSchedule;
 import com.heliosapm.jmx.execution.ScheduleType;
@@ -106,6 +108,16 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	
 	/** The watched configuration file */
 	protected final AtomicReference<ObjectName> watchedConfig = new AtomicReference<ObjectName>(null);
+	/** Flag indicating if config change listener is registered */
+	protected final AtomicBoolean watchedConfigListenerRegistered = new AtomicBoolean(false);
+	/** The config change listener */
+	protected final NotificationListener configChangeListener = new NotificationListener() {
+		@Override
+		public void handleNotification(final Notification notification, final Object handback) {
+			final Configuration configUpdate = (Configuration)notification.getUserData();
+			config.load(configUpdate);
+		}
+	};
 	
 	/** The execution schedule */
 	protected final AtomicReference<ExecutionSchedule> schedule = new AtomicReference<ExecutionSchedule>(ExecutionSchedule.NO_EXEC_SCHEDULE);
@@ -988,6 +1000,22 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	
 	/**
 	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getParentConfigurationMap()
+	 */
+	@Override
+	public Map<String, String> getParentConfigurationMap() {
+		if(watchedConfig.get()!=null) {
+			final Configuration cfg = ConfigurationManager.getInstance().getConfig(watchedConfig.get());
+			if(cfg!=null && !cfg.isEmpty()) {
+				Map<String, String> smap = cfg.getInternalConfig();
+				return smap;
+			}
+		}
+		return Collections.emptyMap();
+	}
+	
+	/**
+	 * {@inheritDoc}
 	 * @see com.heliosapm.script.DeployedScriptMXBean#getStatusName()
 	 */
 	@Override
@@ -1016,10 +1044,38 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	public void initConfig() {
 		watchedConfig.set(findWatchedConfiguration());
 		if(watchedConfig.get()!=null) {
-			Map<String, String> parentConfig = JMXHelper.getAttribute(watchedConfig.get(), "ConfigurationMap");
+			Map<String, String> parentConfig = getParentConfigurationMap();
 			if(parentConfig!=null && !parentConfig.isEmpty()) {
-				this.config.load(parentConfig);  /// ADD JMX GETINTERNAL CONFIG IN DEPLSCRIPT
+				this.getConfiguration().load(parentConfig);
 			}
+			if(watchedConfigListenerRegistered.compareAndSet(false, true)) {
+				try {
+					JMXHelper.addNotificationListener(watchedConfig.get(), configChangeListener, new NotificationFilter(){
+						/**  */
+						private static final long serialVersionUID = -2890751194005498532L;
+		
+						@Override
+						public boolean isNotificationEnabled(final Notification notification) {
+							final Object userData = notification.getUserData();
+							return (
+									notification.getSource().equals(watchedConfig.get())
+									&&
+									NOTIF_CONFIG_MOD.equals(notification.getType())
+									&&
+									userData != null
+									&& 
+									(userData instanceof Configuration)
+									&&
+									!(((Configuration)userData).isEmpty())
+							);
+						}
+					}, null);
+				} catch (Exception ex) {
+					try { JMXHelper.removeNotificationListener(watchedConfig.get(), configChangeListener); } catch (Exception x) {/* No Op */}
+					log.error("Failed to register configuration listener", ex);
+					watchedConfigListenerRegistered.set(false);
+				}
+			}			
 		}
 	}
 	

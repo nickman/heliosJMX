@@ -145,6 +145,14 @@ public interface DeployedScriptMXBean {
 	 */
 	public Map<String, String> getConfigurationMap();
 	
+	/**
+	 * Returns the parent configuration for this deployment
+	 * @return the parent configuration for this deployment
+	 */
+	public Map<String, String> getParentConfigurationMap();
+	
+	
+	
 	
 	/**
 	 * Adds the passed configuration

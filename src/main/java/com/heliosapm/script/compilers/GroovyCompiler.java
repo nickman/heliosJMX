@@ -30,16 +30,34 @@ import groovy.lang.Script;
 import java.io.File;
 import java.io.StringReader;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
+import org.codehaus.groovy.GroovyBugError;
+import org.codehaus.groovy.ast.ASTNode;
+import org.codehaus.groovy.ast.AnnotatedNode;
+import org.codehaus.groovy.ast.AnnotationNode;
+import org.codehaus.groovy.ast.ClassHelper;
+import org.codehaus.groovy.ast.ClassNode;
+import org.codehaus.groovy.ast.FieldNode;
+import org.codehaus.groovy.ast.PropertyNode;
+import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
+import org.codehaus.groovy.control.CompilePhase;
 import org.codehaus.groovy.control.CompilerConfiguration;
+import org.codehaus.groovy.control.SourceUnit;
+import org.codehaus.groovy.control.customizers.CompilationCustomizer;
 import org.codehaus.groovy.control.customizers.ImportCustomizer;
+import org.codehaus.groovy.transform.ASTTransformation;
+import org.codehaus.groovy.transform.ASTTransformationCollectorCodeVisitor;
+import org.codehaus.groovy.transform.GroovyASTTransformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.heliosapm.jmx.config.Dependency;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.GroovyDeployedScript;
@@ -64,11 +82,13 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	
 	/** A set of default imports added to all compiler configurations */
 	private final String[] imports = new String[]{
-			"com.heliosapm.jmx.config.*"		// configuration annotations
+			"import com.heliosapm.jmx.config.*"		// configuration annotations
 	};
 	
 	/** An import customizer added to all compiler configs */
 	protected final ImportCustomizer importCustomizer = new ImportCustomizer();
+	
+	protected final CompilationCustomizer[] all;
 	
 	/** End of line splitter */
 	protected static final Pattern EOL_SPLITTER = Pattern.compile("\n");
@@ -83,10 +103,15 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	public GroovyCompiler(final CompilerConfiguration defaultConfig) {		
 		this.defaultConfig = defaultConfig==null ? new CompilerConfiguration(CompilerConfiguration.DEFAULT) : defaultConfig;
 		this.defaultConfig.setTolerance(0);		
-		applyImports(imports);
-		
-		this.defaultConfig.addCompilationCustomizers(importCustomizer);
-		groovyShell = new GroovyShell(this.defaultConfig);
+		try {
+			applyImports(imports);
+			all = new CompilationCustomizer[] {importCustomizer, new AnnotationFinder(CompilePhase.SEMANTIC_ANALYSIS)};
+			this.defaultConfig.addCompilationCustomizers(all);
+			groovyShell = new GroovyShell(this.defaultConfig);
+		} catch (Exception ex) {
+			ex.printStackTrace(System.err);
+			throw new RuntimeException(ex);
+		}
 	}
 	
 	/**
@@ -158,12 +183,15 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 			if(!p.isEmpty()) {
 				CompilerConfiguration cc = new CompilerConfiguration(defaultConfig);
 				cc.configure(p);
+				cc.addCompilationCustomizers(all);
 				shellToUse = new GroovyShell(cc);
 			}
 		}
 		try {
-			return shellToUse.parse(sourceCode, source.getFile());
+			final Script script = shellToUse.parse(sourceCode, source.getFile());
+			return script;
 		} catch (CompilationFailedException cfe) {
+			log.error("Failed to compile source [" + source + "]", getDiagnostic(cfe),  cfe);
 			throw new CompilerException("Failed to compile source [" + source + "]", getDiagnostic(cfe),  cfe);
 		}
 	}
@@ -233,6 +261,60 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 			}			
 		}		
 		return p;
+	}
+	
+	
+	private static class AnnotationFinder extends CompilationCustomizer implements ASTTransformation {
+		protected final AnnotatedNode inherritCtorsNode = ClassHelper.make(Dependency.class);
+		
+		public static CompilationCustomizer[] get() {
+			List<CompilationCustomizer> finders = new ArrayList<CompilationCustomizer>();
+			for(CompilePhase cp: CompilePhase.values()) {
+				finders.add(new AnnotationFinder(cp));
+			}
+			return finders.toArray(new CompilationCustomizer[finders.size()]);
+		}
+
+		public AnnotationFinder(CompilePhase cp) {
+			super(cp);
+		}
+
+		@Override
+		public void call(SourceUnit source, GeneratorContext context, ClassNode classNode) throws CompilationFailedException {
+			ASTTransformationCollectorCodeVisitor ast = new ASTTransformationCollectorCodeVisitor(source, source.getClassLoader());
+			ast.visitClass(classNode);
+			ast.visitAnnotations(inherritCtorsNode);
+			for(PropertyNode fn : classNode.getProperties()) {				
+				List<AnnotationNode> anns = fn.getAnnotations();
+				if(!anns.isEmpty()) {
+					System.out.println(anns);
+				}
+			}
+			for(FieldNode fn : classNode.getFields()) {				
+				List<AnnotationNode> anns = fn.getAnnotations();
+				if(!anns.isEmpty()) {
+					System.out.println(anns);
+				}
+			}
+			
+			List<AnnotationNode> anns = classNode.getAnnotations();
+			if(!anns.isEmpty()) {
+				System.out.println(anns);
+			}
+			
+		}
+		
+		protected SourceUnit sourceUnit;
+
+		@Override
+		public void visit(ASTNode[] nodes, SourceUnit source) {
+	        if (nodes == null || nodes.length != 2 || !(nodes[0] instanceof AnnotationNode) || !(nodes[1] instanceof AnnotatedNode)) {
+	            throw new GroovyBugError("Internal error: expecting [AnnotationNode, AnnotatedNode] but got: " + (nodes == null ? null : Arrays.asList(nodes)));
+	        }
+	        this.sourceUnit = sourceUnit;
+	        
+		}
+		
 	}
 
 }

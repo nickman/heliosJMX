@@ -9,6 +9,9 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import org.codehaus.groovy.control.CompilePhase;
+import org.codehaus.groovy.transform.GroovyASTTransformation;
+
 /**
  * <p>Title: Dependency</p>
  * <p>Description: Annotation to specify the names and types of dependencies required by a Deployment.</p>
@@ -17,9 +20,10 @@ import java.lang.annotation.Target;
  * <p><b><code>com.heliosapm.jmx.config.Dependency</code></b>
  */
 
-@Target({ElementType.ANNOTATION_TYPE, ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
+@Target({ElementType.ANNOTATION_TYPE, ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.LOCAL_VARIABLE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
+@GroovyASTTransformation(phase = CompilePhase.SEMANTIC_ANALYSIS)
 public @interface Dependency {
 	/**
 	 * An array of configuration keys representing config values that are depended on.

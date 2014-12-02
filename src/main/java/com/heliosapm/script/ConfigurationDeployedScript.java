@@ -143,9 +143,13 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 	 * {@inheritDoc}
 	 * @see com.heliosapm.script.AbstractDeployedScript#setExecutable(java.lang.Object, long, long)
 	 */
+	// FIXME:  Accept all configs during initial load, or updates of the underlying source for this config.
+	//          .... but updates from parent config should not override values declared in this config.
 	@Override
 	public void setExecutable(final Configuration executable, final long checksum, final long timestamp) {
+		ConfigurationManager.getInstance().addConfiguration(objectName, executable);
 		super.setExecutable(executable, checksum, timestamp);
+		
 //		this.config.clear();
 //		this.config.putAll(executable);
 		sendConfigChangedNotification(false);

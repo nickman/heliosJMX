@@ -26,14 +26,11 @@ package com.heliosapm.jmx.config;
 
 import java.beans.PropertyEditor;
 import java.beans.PropertyEditorManager;
-import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.io.ObjectStreamException;
 import java.lang.reflect.Constructor;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
@@ -49,9 +46,12 @@ import javax.management.NotificationEmitter;
 import javax.management.NotificationFilter;
 import javax.management.NotificationListener;
 import javax.management.ObjectName;
+import javax.script.Bindings;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.cliffc.high_scale_lib.NonBlockingHashSet;
+
+import com.heliosapm.script.DeployedScript;
 
 /**
  * <p>Title: Configuration</p>
@@ -61,7 +61,7 @@ import org.cliffc.high_scale_lib.NonBlockingHashSet;
  * <p><code>com.heliosapm.jmx.config.Configuration</code></p>
  */
 
-public class Configuration implements NotificationListener, NotificationFilter, NotificationEmitter, ConfigurationMBean {
+public class Configuration implements Bindings, NotificationListener, NotificationFilter, NotificationEmitter, ConfigurationMBean {
 	
 	/**  */
 	private static final long serialVersionUID = 7007249394730138439L;
@@ -127,6 +127,14 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	}
 	
 	/**
+	 * Indicates if the main config is empty
+	 * @return true if the main config is empty, false otherwise
+	 */
+	public boolean isEmpty() {
+		return config.isEmpty();
+	}
+	
+	/**
 	 * Creates a new Configuration
 	 * @param tempConf A temporary holding container
 	 * @param objectName The JMX ObjectName of the owner of this configuration
@@ -138,17 +146,14 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 		internalConfig.putAll(tempConf.internalConfig);		
 	}
 	
-//	/**
-//	 * Returns the config and internal config hash maps when serialized
-//	 * @return the serializable content for this class
-//	 * @throws ObjectStreamException thrown on serialization errors
-//	 */
-//	@SuppressWarnings("rawtypes")
-//	Object writeReplace() throws ObjectStreamException {
-//		return new HashMap[] {
-//				(HashMap) config, (HashMap) internalConfig
-//		};
-//	}
+	/**
+	 * Returns the config and internal config hash maps when serialized
+	 * @return the serializable content for this class
+	 * @throws ObjectStreamException thrown on serialization errors
+	 */
+	Object writeReplace() throws ObjectStreamException {
+		return getInternalConfig();
+	}
 	
 //	private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
 //		
@@ -168,6 +173,16 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 		internalConfig.putAll(trimmed);
 	}
 	
+	
+	/**
+	 * Merges the passed configuration content into this configuration.
+	 * Any additions or updates will trigger listeners and notification emissions.
+	 * @param content The new content to load
+	 */
+	public void load(final Configuration content) {
+		this.load(content.getInternalConfig());
+	}	
+	
 	/**
 	 * Merges the passed content into this configuration.
 	 * Any additions or updates will trigger listeners and notification emissions.
@@ -180,6 +195,7 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 		final long now = System.currentTimeMillis();
 		for(final Map.Entry<String, String> entry: trimmed.entrySet()) {
 			final String key = entry.getKey();
+			if(this.internalConfig.containsKey(key)) continue;
 			final String value = entry.getValue();
 			final String oldValue = config.put(key, value);
 			if(value.equals(oldValue)) continue;
@@ -231,6 +247,9 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	 * @return the typed config value
 	 */
 	public <T> T get(final String key, final Class<T> type) {
+		if(type.equals(Object.class)) {
+			return (T) config.get(key);
+		}
 		return fromText(get(key), type);
 	}
 
@@ -239,9 +258,9 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	 * @param key The config item key
 	 * @param value The config item value
 	 */
-	private void _put(final String key, final String value) {
+	private String _put(final String key, final String value) {
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
-		if(value==null || value.trim().isEmpty()) return;
+		if(value==null || value.trim().isEmpty()) return null;
 		final String _key = key.trim();
 		final String _value = value.trim();
 		final String oldValue = config.put(_key, _value);
@@ -250,6 +269,10 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 				delegateBroadcaster.sendNotification(new Notification(NOTIF_ALL_DEPS_OK, objectName, sequence.incrementAndGet(), System.currentTimeMillis(), "All declared dependencies satisfied for [" + objectName + "]"));
 			}
 		}
+		final InternalConfigurationListener intListener = internalListener.get();
+		if(intListener!=null) {
+			intListener.onConfigurationItemChange(key, value);
+		}		
 		if(!_value.equals(oldValue)) {
 			final long now = System.currentTimeMillis();
 			if(oldValue==null) {
@@ -258,6 +281,7 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 				delegateBroadcaster.sendNotification(new AttributeChangeNotification(objectName, sequence.incrementAndGet(), now, String.format("#%s Updated config\n%s=%s\n", key, key, value), key, String.class.getName(), oldValue, value));
 			}		
 		}
+		return oldValue;
 	}
 	
 	/**
@@ -296,14 +320,16 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	 * If this operation changes the config, will fire listeners and notifications
 	 * @param key The config item key
 	 * @param value The config item value
+	 * @return The old value that was replaced
 	 */
-	public <T> void putTyped(final String key, final T value) {		
-		if(value==null) return;
+	@SuppressWarnings("unchecked")
+	public <T> T putTyped(final String key, final T value) {		
+		if(value==null) return null;
 		validateInsertedDependency(key, value);
 		if(!(value instanceof String)) {
-			configTypeMap.put(key, value.getClass());
+			return (T) configTypeMap.put(key, value.getClass());
 		}
-		_put(key, toText(value));		
+		return (T) _put(key, toText(value));		
 	}
 	
 	/**
@@ -333,7 +359,7 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 				map.put(key, val);
 			}
 		}
-		return map;
+		return Collections.unmodifiableMap(map);
 	}
 	
 	
@@ -593,26 +619,77 @@ public class Configuration implements NotificationListener, NotificationFilter, 
 	}
 
 	/**
-	 * @return
+	 * @return the key set of the configuration
 	 * @see java.util.Map#keySet()
 	 */
 	public Set<String> keySet() {
 		return config.keySet();
 	}
 
+
 	/**
-	 * @return
-	 * @see java.util.Map#values()
+	 * {@inheritDoc}
+	 * @see javax.script.Bindings#put(java.lang.String, java.lang.Object)
 	 */
-	public Collection<String> values() {
-		return config.values();
+	@Override
+	public Object put(final String name, final Object value) {
+		return putTyped(name, value);
 	}
 
 	/**
-	 * @return
+	 * {@inheritDoc}
+	 * @see javax.script.Bindings#putAll(java.util.Map)
 	 */
-	public Set<Map.Entry<String, String>> entrySet() {
-		return new HashSet<Map.Entry<String, String>>(new HashMap<String, String>(config).entrySet());
+	@Override
+	public void putAll(final Map<? extends String, ? extends Object> toMerge) {
+		for(Map.Entry<? extends String, ? extends Object> entry: toMerge.entrySet()) {
+			put(entry.getKey(), entry.getValue());
+		}		
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.script.Bindings#get(java.lang.Object)
+	 */
+	@Override
+	public Object get(final Object key) {
+		if(DeployedScript.BINDING_NAME.equals(key)) return this;
+		if(key==null || key.toString().trim().isEmpty()) return null;
+		return get(key.toString().trim(), Object.class);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see javax.script.Bindings#remove(java.lang.Object)
+	 */
+	@Override
+	public Object remove(final Object key) {
+		final String v = config.remove(key);
+		if(v!=null) {
+			final InternalConfigurationListener intListener = internalListener.get();
+			if(intListener!=null) {
+				intListener.onConfigurationItemChange(key.toString(), null);
+			}			
+		}
+		return v;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see java.util.Map#values()
+	 */
+	@Override
+	public Collection<Object> values() {
+		return getTypedConfigMap().values();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see java.util.Map#entrySet()
+	 */
+	@Override
+	public Set<java.util.Map.Entry<String, Object>> entrySet() {
+		return getTypedConfigMap().entrySet();
 	}
 
 

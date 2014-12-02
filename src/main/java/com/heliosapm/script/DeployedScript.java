@@ -78,6 +78,8 @@ public interface DeployedScript<T> extends DeployedScriptMXBean, Callable<T> {
 	/** The JMX domain for hot directories */
 	public static final String HOTDIR_DOMAIN = "com.heliosapm.hotdir";
 	
+	/** The binding name for the binding */
+	public static final String BINDING_NAME = "_binding_";
 	
 	
 	/**

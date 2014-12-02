@@ -195,7 +195,7 @@ public class ConfigurationManager extends NotificationBroadcasterSupport impleme
 			public void handleNotification(final Notification n, final Object handback) {
 				try {
 					final ObjectName on = (ObjectName)n.getSource();
-					final Map<String, Object> changedConfig = (Map<String, Object>)n.getUserData(); 
+					final Configuration pconfig = (Configuration)n.getUserData(); 
 //					configs.put(on, changedConfig);
 //					configUpdateCount.incrementAndGet();
 //					notifyDependents(objectName, config);

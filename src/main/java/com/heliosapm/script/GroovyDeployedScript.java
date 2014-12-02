@@ -30,11 +30,13 @@ import groovy.lang.MetaProperty;
 import groovy.lang.Script;
 
 import java.io.File;
-import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import com.heliosapm.jmx.config.Dependency;
 
 /**
  * <p>Title: GroovyDeployedScript</p>
@@ -44,11 +46,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p><code>com.heliosapm.script.GroovyDeployedScript</code></p>
  */
 
-public class GroovyDeployedScript extends AbstractDeployedScript<Script> {
+public class GroovyDeployedScript extends AbstractDeployedScript<Script>  {
 	/** The script meta methods */
 	protected final Map<String, MetaMethod> metaMethods = new ConcurrentHashMap<String, MetaMethod>();
 	/** The script meta properties */
 	protected final Map<String, MetaProperty> metaProperties = new ConcurrentHashMap<String, MetaProperty>();
+	/** The groovy binding */
+	protected final Binding binding;
 
 	/**
 	 * Creates a new GroovyDeployedScript
@@ -57,9 +61,21 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> {
 	 */
 	public GroovyDeployedScript(File sourceFile, final Script gscript) {
 		super(sourceFile);
-		executable = gscript;
+		executable = gscript;	
 		initExcutable();
+		findDependencies();
 		locateConfigFiles(sourceFile, rootDir, pathSegments);
+		binding = new Binding();
+		binding.setProperty(BINDING_NAME, binding);
+	}
+	
+	protected void findDependencies() {
+		for(Field f: executable.getClass().getDeclaredFields()) {
+			Dependency d = f.getAnnotation(Dependency.class);
+			if(d!=null) {
+				log.info("Dependency Annotation found on [{}]", f.getName());
+			}
+		}
 	}
 	
 	/**
@@ -74,10 +90,31 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> {
 			for(MetaProperty mp: executable.getMetaClass().getProperties()) {
 				metaProperties.put(mp.getName(), mp);
 			}
-			executable.setBinding(new Binding(config.getTypedConfigMap()));
+			updateBindings();
+			executable.setBinding(binding);
 			setStatus(DeploymentStatus.READY);
 		}		
 		super.initExcutable();
+	}
+	
+	/**
+	 * Updates the groovy binding from the config
+	 */
+	protected void updateBindings() {
+		for(Map.Entry<String, Object> entry: config.getTypedConfigMap().entrySet()) {
+			binding.setProperty(entry.getKey(), entry.getValue());
+		}		
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.AbstractDeployedScript#onConfigurationItemChange(java.lang.String, java.lang.String)
+	 */
+	@Override
+	public void onConfigurationItemChange(final String key, final String value) {
+		final Object val = config.getTypedConfigMap().get(key);
+		binding.setProperty(key, val);
+		super.onConfigurationItemChange(key, value);
 	}
 	
 	/**

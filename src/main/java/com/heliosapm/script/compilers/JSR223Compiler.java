@@ -30,6 +30,9 @@ import java.net.URL;
 import javax.script.CompiledScript;
 import javax.script.ScriptException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.GroovyDeployedScript;
@@ -47,6 +50,10 @@ import com.heliosapm.script.StateService;
 public class JSR223Compiler implements DeploymentCompiler<CompiledScript> {
 	/** The extensions */
 	private static final String[] extensions = new String[]{"*"};
+	
+	/** Instance logger */
+	private final Logger log = LoggerFactory.getLogger(getClass());
+
 	
 	/** The state service providing the managed script engines */
 	protected final StateService stateService;
@@ -72,6 +79,7 @@ public class JSR223Compiler implements DeploymentCompiler<CompiledScript> {
 		try {
 			return stateService.getCompilerForExtension(extension).compile(URLHelper.getTextFromURL(source, 1000, 1000));
 		} catch (Exception ex) {
+			log.error("Failed to compile source [" + source + "]", getDiagnostic(ex),  ex);
 			throw new CompilerException("Failed to compile source [" + source + "]", getDiagnostic(ex),  ex);
 		}
 	}
