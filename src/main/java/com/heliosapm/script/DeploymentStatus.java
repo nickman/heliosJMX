@@ -24,6 +24,9 @@
  */
 package com.heliosapm.script;
 
+import java.util.EnumSet;
+import java.util.Set;
+
 /**
  * <p>Title: DeploymentStatus</p>
  * <p>Description: Enumerates the possible statuses of a deployment</p> 
@@ -33,12 +36,19 @@ package com.heliosapm.script;
  */
 
 public enum DeploymentStatus {
+	/** Deployed script is initialized */
 	INIT(false, false),
+	/** Deployed script is ready to be executed, but is not scheduled */
 	READY(true, false),	
+	/** Deployed script is paused */
 	PAUSED(true, false),
+	/** Deployed script cannot connect to remote resource */
 	DOWN(false, false),
+	/** Deployed script is broken */
 	BROKEN(false, false),
+	/** Deployed script is ready to be executed and is scheduled */
 	UP(true, true),
+	/** Deployed script is missing one or more dependent config items */
 	NOONFIG(false, false);
 	
 	private DeploymentStatus(boolean canExec, boolean canSchedulerExec) {
@@ -46,6 +56,26 @@ public enum DeploymentStatus {
 		this.canSchedulerExec = canSchedulerExec;
 	}
 	
+	/** Indicates if this status indicates the script can be executed */
 	public final boolean canExec;
+	/** Indicates if this status indicates the script is scheduled, or can be scheduled */
 	public final boolean canSchedulerExec;
+	
+	
+	/**
+	 * Returns an enum set of the specified statuses
+	 * @param statuses The statuses to include in the set
+	 * @return the set
+	 */
+	public static Set<DeploymentStatus> setOf(final DeploymentStatus...statuses) {
+		final Set<DeploymentStatus> set = EnumSet.noneOf(DeploymentStatus.class);
+		if(statuses==null || statuses.length==0) return set;
+		for(DeploymentStatus ds: statuses) {
+			if(ds==null) continue;
+			set.add(ds);
+		}
+		return set;
+		
+		
+	}
 }

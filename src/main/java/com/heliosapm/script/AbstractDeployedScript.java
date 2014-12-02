@@ -116,6 +116,11 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		public void handleNotification(final Notification notification, final Object handback) {
 			final Configuration configUpdate = (Configuration)notification.getUserData();
 			config.load(configUpdate);
+			if(config.areDependenciesReady()) {
+				if(getStatus()==DeploymentStatus.NOONFIG) {
+					setStatus(DeploymentStatus.READY, "All dependencies satisfied");
+				}
+			}
 		}
 	};
 	
@@ -383,6 +388,15 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	}
 	
 	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getPendingDependencies()
+	 */
+	@Override
+	public Map<String, String> getPendingDependencies() {
+		return config.getPendingDependencies();
+	}
+	
+	/**
 	 * Builds the path segments for this file
 	 * @return the path segments for this file
 	 */
@@ -404,18 +418,27 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	@Override
 	public T execute() {
 		final long now = System.currentTimeMillis();
-		try {			
-			final Object ret = doExecute();
-			execCount.incrementAndGet();
-			lastExecTime.set(now);
-			lastExecElapsed.set(System.currentTimeMillis() - now);			
-			return (T) ret;
-		} catch (Exception ex) {
-			final long er = errorCount.incrementAndGet();
-			lastErrorTime.set(System.currentTimeMillis());			
-			log.error("Failed to execute. Error Count: {}", er, ex);
-			throw new RuntimeException("Failed to execute deployed script [" + this.getFileName() + "]", ex);
-		}						
+		DeploymentStatus ds = getStatus();
+		if(ds == DeploymentStatus.NOONFIG) {
+			if(config.areDependenciesReady()) {
+				ds = getStatus();
+			}
+		}
+		if(ds.canExec) {
+			try {			
+				final Object ret = doExecute();
+				execCount.incrementAndGet();
+				lastExecTime.set(now);
+				lastExecElapsed.set(System.currentTimeMillis() - now);			
+				return (T) ret;
+			} catch (Exception ex) {
+				final long er = errorCount.incrementAndGet();
+				lastErrorTime.set(System.currentTimeMillis());			
+				log.error("Failed to execute. Error Count: {}", er, ex);
+				throw new RuntimeException("Failed to execute deployed script [" + this.getFileName() + "]", ex);
+			}
+		}
+		return null;
 	}
 	
 	/**
@@ -459,11 +482,41 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 * @return the prior status
 	 */
 	protected DeploymentStatus setStatus(final DeploymentStatus status) {
+		return setStatus(status, null);
+	}
+	
+	/**
+	 * Sets the status for this deployment
+	 * @param status The status to set to
+	 * @param messageFormat An optional message format, ignored if null
+	 * @param tokens The message format tokens, ignored if the format is null 
+	 * @return the prior status
+	 */
+	protected DeploymentStatus setStatus(final DeploymentStatus status, final String messageFormat, final Object...tokens) {
+		return setStatus(status, null, messageFormat, tokens);
+	}
+	
+	
+	/**
+	 * Sets the status for this deployment
+	 * @param status The status to set to
+	 * @param ifStatusIn Optional set of statuses that the current status must be in for the status change to fire.
+	 * Ignored if null or empty
+	 * @param messageFormat An optional message format, ignored if null
+	 * @param tokens The message format tokens, ignored if the format is null 
+	 * @return the prior status
+	 */
+	protected DeploymentStatus setStatus(final DeploymentStatus status, final Set<DeploymentStatus> ifStatusIn, final String messageFormat, final Object...tokens) {
+		if(ifStatusIn!=null && !ifStatusIn.isEmpty() && ifStatusIn.contains(this.status.get())) return this.status.get(); 
 		final DeploymentStatus priorStatus = this.status.getAndSet(status);
 		if(priorStatus!=status) {
 			final long now = System.currentTimeMillis();
 			statusTime.set(System.currentTimeMillis());
-			lastStatusMessage.set(String.format("[%s]: Status set to %s", new Date(now), status));
+			if(messageFormat==null) {
+				lastStatusMessage.set(String.format("[%s]: Status set to %s", new Date(now), status));
+			} else {
+				lastStatusMessage.set(String.format("[%s]: Status set to %s", new Date(now), status) + " : " + String.format(messageFormat, tokens));
+			}
 		}
 		return priorStatus;
 	}
@@ -493,7 +546,11 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 * @see com.heliosapm.script.DeployedScript#initExcutable()
 	 */
 	public void initExcutable() {
-		/* No Op */
+		if(config.areDependenciesReady()) {
+			setStatus(DeploymentStatus.READY);
+		} else {
+			setStatus(DeploymentStatus.NOONFIG, "Pending Dependencies: %s", config.getPendingDependencyKeys().toString());			
+		}		
 	}
 	
 	/**

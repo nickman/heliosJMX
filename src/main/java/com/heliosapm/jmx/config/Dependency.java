@@ -23,7 +23,6 @@ import org.codehaus.groovy.transform.GroovyASTTransformation;
 @Target({ElementType.ANNOTATION_TYPE, ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.LOCAL_VARIABLE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@GroovyASTTransformation(phase = CompilePhase.SEMANTIC_ANALYSIS)
 public @interface Dependency {
 	/**
 	 * An array of configuration keys representing config values that are depended on.

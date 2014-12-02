@@ -28,9 +28,12 @@ import java.beans.PropertyEditor;
 import java.beans.PropertyEditorManager;
 import java.io.ObjectStreamException;
 import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
@@ -171,6 +174,7 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 		final Map<String, String> trimmed = trim(content);
 		config.putAll(trimmed);
 		internalConfig.putAll(trimmed);
+		pendingDependencies.removeAll(config.keySet());
 	}
 	
 	
@@ -341,6 +345,38 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
 		final String _key = key.trim();		
 		dependencies.put(_key, type==null ? Object.class : type);
+		if(config.containsKey(_key)) {
+			pendingDependencies.remove(_key);
+		} else {
+			pendingDependencies.add(_key);
+		}		
+	}
+	
+	/**
+	 * Adds the dependencies specified in the passed annotation instance
+	 * @param deps An array of @Dependency annotations
+	 */
+	public void addDependency(final Dependency...deps) {
+		if(deps!=null && deps.length!=0) {
+			for(Dependency dep: deps) {
+				if(dep==null) continue;
+				final Class<?> type = dep.type();
+				Set<String> keys = new HashSet<String>(Arrays.asList(dep.keys()));
+				for(String key: keys) {
+					addDependency(key, type);
+				}
+			}
+		}
+	}
+	
+	/**
+	 * Adds the dependencies specified in the passed annotation instance
+	 * @param deps A @Dependencies annotation
+	 */
+	public void addDependency(final Dependencies deps) {
+		if(deps!=null) {
+			addDependency(deps.value());
+		}
 	}
 	
 	/**
@@ -394,6 +430,40 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 	@Override
 	public Set<String> getPendingDependencyKeys() {
 		return Collections.unmodifiableSet(pendingDependencies);
+	}
+	
+	/**
+	 * Returns a map of pending dependencies as a map of class names keyed by the config key
+	 * @return a map of class names keyed by the config key
+	 */
+	public Map<String, String> getPendingDependencies() {
+		Map<String, String> map = new HashMap<String, String>(pendingDependencies.size());
+		for(Iterator<String> iter = pendingDependencies.iterator(); iter.hasNext();) {
+			final String key = iter.next();
+			if(!dependencies.containsKey(key) || config.containsKey(key)) {
+				iter.remove();
+				continue;
+			}
+			map.put(key, dependencies.get(key).getName());
+		}
+		return map;
+	}
+	
+	/**
+	 * Determines if all dependencies are satisfied
+	 * @return true if all dependencies are satisfied, false otherwise
+	 */
+	public boolean areDependenciesReady() {
+		if(pendingDependencies.isEmpty()) return true;
+		
+		for(final String key: dependencies.keySet()) {
+			if(config.containsKey(key)) {
+				pendingDependencies.remove(key);
+				continue;
+			}
+			return false;
+		}
+		return true;
 	}
 	
 	/**

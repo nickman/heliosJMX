@@ -59,6 +59,12 @@ public interface DeployedScriptMXBean {
 	public long getLastModified();
 	
 	/**
+	 * Returns a map of pending dependencies as a map of types keyed by the config key
+	 * @return a map of pending dependencies as a map of types keyed by the config key
+	 */
+	public Map<String, String> getPendingDependencies();
+	
+	/**
 	 * Returns the last modified date of the script's underlying source file
 	 * @return the last modified date of the script's underlying source file
 	 */

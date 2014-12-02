@@ -36,14 +36,11 @@ import java.util.List;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
-import org.codehaus.groovy.GroovyBugError;
-import org.codehaus.groovy.ast.ASTNode;
 import org.codehaus.groovy.ast.AnnotatedNode;
 import org.codehaus.groovy.ast.AnnotationNode;
+import org.codehaus.groovy.ast.ClassCodeVisitorSupport;
 import org.codehaus.groovy.ast.ClassHelper;
 import org.codehaus.groovy.ast.ClassNode;
-import org.codehaus.groovy.ast.FieldNode;
-import org.codehaus.groovy.ast.PropertyNode;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilePhase;
@@ -51,12 +48,10 @@ import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.control.customizers.CompilationCustomizer;
 import org.codehaus.groovy.control.customizers.ImportCustomizer;
-import org.codehaus.groovy.transform.ASTTransformation;
-import org.codehaus.groovy.transform.ASTTransformationCollectorCodeVisitor;
-import org.codehaus.groovy.transform.GroovyASTTransformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.heliosapm.jmx.config.Dependencies;
 import com.heliosapm.jmx.config.Dependency;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.DeployedScript;
@@ -87,7 +82,9 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	
 	/** An import customizer added to all compiler configs */
 	protected final ImportCustomizer importCustomizer = new ImportCustomizer();
-	
+	/** Annotation finder to find script level annotations and promote them to the class level */
+	protected final AnnotationFinder annotationFinder = new AnnotationFinder(CompilePhase.CANONICALIZATION);
+	/** The compilation customizers to apply to the groovy compiler */
 	protected final CompilationCustomizer[] all;
 	
 	/** End of line splitter */
@@ -105,7 +102,7 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 		this.defaultConfig.setTolerance(0);		
 		try {
 			applyImports(imports);
-			all = new CompilationCustomizer[] {importCustomizer, new AnnotationFinder(CompilePhase.SEMANTIC_ANALYSIS)};
+			all = new CompilationCustomizer[] {importCustomizer, annotationFinder};
 			this.defaultConfig.addCompilationCustomizers(all);
 			groovyShell = new GroovyShell(this.defaultConfig);
 		} catch (Exception ex) {
@@ -262,57 +259,47 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 		}		
 		return p;
 	}
-	
-	
-	private static class AnnotationFinder extends CompilationCustomizer implements ASTTransformation {
-		protected final AnnotatedNode inherritCtorsNode = ClassHelper.make(Dependency.class);
-		
-		public static CompilationCustomizer[] get() {
-			List<CompilationCustomizer> finders = new ArrayList<CompilationCustomizer>();
-			for(CompilePhase cp: CompilePhase.values()) {
-				finders.add(new AnnotationFinder(cp));
-			}
-			return finders.toArray(new CompilationCustomizer[finders.size()]);
-		}
 
-		public AnnotationFinder(CompilePhase cp) {
+	
+	
+	private class AnnotationFinder extends CompilationCustomizer {
+		//protected final AnnotationNode dependencyNode = new AnnotationNode(ClassHelper.make(Dependency.class));
+		
+//		public static CompilationCustomizer[] get() {
+//			List<CompilationCustomizer> finders = new ArrayList<CompilationCustomizer>();
+//			for(CompilePhase cp: CompilePhase.values()) {
+//				finders.add(new AnnotationFinder(cp));
+//			}
+//			return finders.toArray(new CompilationCustomizer[finders.size()]);
+//		}
+
+		public AnnotationFinder(final CompilePhase cp) {
 			super(cp);
 		}
 
 		@Override
-		public void call(SourceUnit source, GeneratorContext context, ClassNode classNode) throws CompilationFailedException {
-			ASTTransformationCollectorCodeVisitor ast = new ASTTransformationCollectorCodeVisitor(source, source.getClassLoader());
-			ast.visitClass(classNode);
-			ast.visitAnnotations(inherritCtorsNode);
-			for(PropertyNode fn : classNode.getProperties()) {				
-				List<AnnotationNode> anns = fn.getAnnotations();
-				if(!anns.isEmpty()) {
-					System.out.println(anns);
+		public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
+			final ClassCodeVisitorSupport visitor = new ClassCodeVisitorSupport() {
+				@Override
+				protected SourceUnit getSourceUnit() {
+					return source;
 				}
-			}
-			for(FieldNode fn : classNode.getFields()) {				
-				List<AnnotationNode> anns = fn.getAnnotations();
-				if(!anns.isEmpty()) {
-					System.out.println(anns);
+				/**
+				 * {@inheritDoc}
+				 * @see org.codehaus.groovy.ast.ClassCodeVisitorSupport#visitAnnotations(org.codehaus.groovy.ast.AnnotatedNode)
+				 */
+				@Override
+				public void visitAnnotations(final AnnotatedNode node) {
+					for(AnnotationNode dep: node.getAnnotations()) {
+						if(dep.isTargetAllowed(AnnotationNode.TYPE_TARGET)) {
+							node.getDeclaringClass().addAnnotation(dep);
+							log.debug("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());
+						}
+					}
+					super.visitAnnotations(node);
 				}
-			}
-			
-			List<AnnotationNode> anns = classNode.getAnnotations();
-			if(!anns.isEmpty()) {
-				System.out.println(anns);
-			}
-			
-		}
-		
-		protected SourceUnit sourceUnit;
-
-		@Override
-		public void visit(ASTNode[] nodes, SourceUnit source) {
-	        if (nodes == null || nodes.length != 2 || !(nodes[0] instanceof AnnotationNode) || !(nodes[1] instanceof AnnotatedNode)) {
-	            throw new GroovyBugError("Internal error: expecting [AnnotationNode, AnnotatedNode] but got: " + (nodes == null ? null : Arrays.asList(nodes)));
-	        }
-	        this.sourceUnit = sourceUnit;
-	        
+			};
+			classNode.visitContents(visitor);
 		}
 		
 	}

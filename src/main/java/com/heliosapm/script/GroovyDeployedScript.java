@@ -36,7 +36,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.heliosapm.jmx.config.Dependencies;
 import com.heliosapm.jmx.config.Dependency;
+import com.heliosapm.jmx.config.Scheduled;
 
 /**
  * <p>Title: GroovyDeployedScript</p>
@@ -62,21 +64,12 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script>  {
 	public GroovyDeployedScript(File sourceFile, final Script gscript) {
 		super(sourceFile);
 		executable = gscript;	
-		initExcutable();
-		findDependencies();
+		initExcutable();		
 		locateConfigFiles(sourceFile, rootDir, pathSegments);
 		binding = new Binding();
 		binding.setProperty(BINDING_NAME, binding);
 	}
 	
-	protected void findDependencies() {
-		for(Field f: executable.getClass().getDeclaredFields()) {
-			Dependency d = f.getAnnotation(Dependency.class);
-			if(d!=null) {
-				log.info("Dependency Annotation found on [{}]", f.getName());
-			}
-		}
-	}
 	
 	/**
 	 * {@inheritDoc}
@@ -92,7 +85,13 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script>  {
 			}
 			updateBindings();
 			executable.setBinding(binding);
-			setStatus(DeploymentStatus.READY);
+			config.addDependency(executable.getClass().getAnnotation(Dependencies.class));
+			config.addDependency(executable.getClass().getAnnotation(Dependency.class));
+			
+			final Scheduled scheduled = executable.getClass().getAnnotation(Scheduled.class);
+			if(scheduled!=null) {
+				this.setExecutionSchedule(scheduled.value());
+			}
 		}		
 		super.initExcutable();
 	}
