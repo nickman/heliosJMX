@@ -271,7 +271,11 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 */
 	@Override
 	public void onDependencyReadinessChange(final boolean ready, final String message) {
-		
+		if(ready) {
+			setStatus(DeploymentStatus.READY, DeploymentStatus.setOf(DeploymentStatus.NOONFIG), message);
+		} else {
+			setStatus(DeploymentStatus.NOONFIG, DeploymentStatus.setOf(DeploymentStatus.READY), message);setStatus(DeploymentStatus.READY, DeploymentStatus.setOf(DeploymentStatus.NOONFIG), message);
+		}
 	}
 	
 	/**
@@ -531,7 +535,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 * @return the prior status
 	 */
 	protected DeploymentStatus setStatus(final DeploymentStatus status, final Set<DeploymentStatus> ifStatusIn, final String messageFormat, final Object...tokens) {
-		if(ifStatusIn!=null && !ifStatusIn.isEmpty() && ifStatusIn.contains(this.status.get())) return this.status.get(); 
+		if(ifStatusIn!=null && !ifStatusIn.isEmpty() && !ifStatusIn.contains(this.status.get())) return this.status.get(); 
 		final DeploymentStatus priorStatus = this.status.getAndSet(status);
 		if(priorStatus!=status) {
 			final long now = System.currentTimeMillis();
@@ -570,10 +574,10 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 * @see com.heliosapm.script.DeployedScript#initExcutable()
 	 */
 	public void initExcutable() {
-		if(config.areDependenciesReady()) {
+		if(getConfiguration().areDependenciesReady()) {
 			setStatus(DeploymentStatus.READY);
 		} else {
-			setStatus(DeploymentStatus.NOONFIG, "Pending Dependencies: %s", config.getPendingDependencyKeys().toString());			
+			setStatus(DeploymentStatus.NOONFIG, "Pending Dependencies: %s", getConfiguration().getPendingDependencyKeys().toString());			
 		}		
 	}
 	
