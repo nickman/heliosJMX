@@ -81,6 +81,12 @@ public interface DeployedScript<T> extends DeployedScriptMXBean, Callable<T> {
 	/** The binding name for the binding */
 	public static final String BINDING_NAME = "_binding_";
 	
+	/**
+	 * Indicates if the passed text is a comment line for this script's language
+	 * @param text The text to test
+	 * @return true if the passed text is a comment line for this script's language, false otherwise
+	 */
+	public boolean isCommentLine(String text);
 	
 	/**
 	 * Updates the executable

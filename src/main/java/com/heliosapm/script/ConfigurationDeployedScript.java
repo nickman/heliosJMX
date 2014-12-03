@@ -82,6 +82,19 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 		ConfigurationManager.getInstance().addConfiguration(objectName, executable);
 	}
 	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#isCommentLine(java.lang.String)
+	 */
+	@Override
+	public boolean isCommentLine(final String text) {
+		if(text==null || text.trim().isEmpty()) return false;
+		String _text = text.trim();
+		return (
+			_text.startsWith("#")			
+		);
+	}
+
 	
 //	public boolean isConfigFor(String deployment) {
 //		if(deployment==null || deployment.trim().isEmpty()) return false;

@@ -243,12 +243,36 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	
 	/**
 	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScript#isCommentLine(java.lang.String)
+	 */
+	@Override
+	public boolean isCommentLine(final String text) {
+		if(text==null || text.trim().isEmpty()) return false;
+		String _text = text.trim();
+		return (
+			_text.startsWith("//") ||
+			(_text.startsWith("/*") && _text.endsWith("*/"))
+		);
+	}
+	
+	
+	/**
+	 * {@inheritDoc}
 	 * @see com.heliosapm.jmx.config.InternalConfigurationListener#onConfigurationItemChange(java.lang.String, java.lang.String)
 	 */
 	@Override
 	public void onConfigurationItemChange(final String key, final String value) {
 		
 	}	
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.jmx.config.InternalConfigurationListener#onDependencyReadinessChange(boolean, java.lang.String)
+	 */
+	@Override
+	public void onDependencyReadinessChange(final boolean ready, final String message) {
+		
+	}
 	
 	/**
 	 * {@inheritDoc}

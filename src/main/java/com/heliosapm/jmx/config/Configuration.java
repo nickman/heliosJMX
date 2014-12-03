@@ -34,9 +34,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -54,6 +56,7 @@ import javax.script.Bindings;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.cliffc.high_scale_lib.NonBlockingHashSet;
 
+import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.script.DeployedScript;
 
 /**
@@ -107,6 +110,8 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 	protected final Map<String, Class<?>> dependencies = new NonBlockingHashMap<String, Class<?>>();
 	/** Maps known config item types to the config item key */
 	private final NonBlockingHashMap<String, Class<?>> configTypeMap = new NonBlockingHashMap<String, Class<?>>();
+	/** Flag indicating if dependencies are closed (satisfied) */
+	private final AtomicBoolean dependenciesClosed = new AtomicBoolean(true);
 	
 	
 	
@@ -219,6 +224,7 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 				delegateBroadcaster.sendNotification(n);
 			}
 		}
+		checkDependencies();
 	}
 	
 	/**
@@ -268,23 +274,16 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 		final String _key = key.trim();
 		final String _value = value.trim();
 		final String oldValue = config.put(_key, _value);
-		if(pendingDependencies.remove(_key)) {
-			if(pendingDependencies.isEmpty()) {
-				delegateBroadcaster.sendNotification(new Notification(NOTIF_ALL_DEPS_OK, objectName, sequence.incrementAndGet(), System.currentTimeMillis(), "All declared dependencies satisfied for [" + objectName + "]"));
-			}
-		}
-		final InternalConfigurationListener intListener = internalListener.get();
-		if(intListener!=null) {
-			intListener.onConfigurationItemChange(key, value);
-		}		
 		if(!_value.equals(oldValue)) {
+			sendItemChange(_key, _value);
 			final long now = System.currentTimeMillis();
 			if(oldValue==null) {
 				delegateBroadcaster.sendNotification(new AttributeChangeNotification(objectName, sequence.incrementAndGet(), now, String.format("#%s Inserted new config\n%s=%s\n", key, key, value), key, String.class.getName(), oldValue, value));
 			} else {
 				delegateBroadcaster.sendNotification(new AttributeChangeNotification(objectName, sequence.incrementAndGet(), now, String.format("#%s Updated config\n%s=%s\n", key, key, value), key, String.class.getName(), oldValue, value));
-			}		
-		}
+			}
+			checkDependencies();
+		}		
 		return oldValue;
 	}
 	
@@ -331,9 +330,9 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 		if(value==null) return null;
 		validateInsertedDependency(key, value);
 		if(!(value instanceof String)) {
-			return (T) configTypeMap.put(key, value.getClass());
+			configTypeMap.put(key, value.getClass());
 		}
-		return (T) _put(key, toText(value));		
+		return (T) _put(key, toText(value));  // state change check in _put		
 	}
 	
 	/**
@@ -341,7 +340,7 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 	 * @param key The key of the dependency
 	 * @param type The type that the dependency value must be of to satisfy the dependency
 	 */
-	public void addDependency(final String key, final Class<?> type) {
+	private void addDependency(final String key, final Class<?> type) {
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
 		final String _key = key.trim();		
 		dependencies.put(_key, type==null ? Object.class : type);
@@ -367,6 +366,7 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 				}
 			}
 		}
+		checkDependencies();
 	}
 	
 	/**
@@ -454,16 +454,59 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 	 * @return true if all dependencies are satisfied, false otherwise
 	 */
 	public boolean areDependenciesReady() {
-		if(pendingDependencies.isEmpty()) return true;
-		
-		for(final String key: dependencies.keySet()) {
-			if(config.containsKey(key)) {
-				pendingDependencies.remove(key);
-				continue;
+		return dependenciesClosed.get();
+	}
+	
+	/**
+	 * Executes an active check against the config to verify if dependencies are ready.
+	 * If the dependency readiness changes as a result, the config listener will be notified.
+	 * @return true if ready, false otherwise
+	 */
+	public boolean checkDependencies() {
+		final Set<String> closed = new LinkedHashSet<String>();
+		final Set<String> open = new LinkedHashSet<String>();
+		if(!pendingDependencies.isEmpty()) {
+			for(final String key: dependencies.keySet()) {
+				if(config.containsKey(key)) {
+					if(pendingDependencies.remove(key)) {
+						closed.add(key);
+					}
+				} else {
+					open.add(key);
+				}
 			}
-			return false;
 		}
-		return true;
+		final boolean ready = pendingDependencies.isEmpty();
+		if(ready) {
+			fireDependencyStateChange(ready, "Dependencies are ready after closing " + closed.toString());
+		} else {
+			fireDependencyStateChange(ready, "Pending Dependencies " + open.toString());
+		}
+		return ready;
+	}
+	
+	/**
+	 * Submits a dependency state change. If this results in the actual state changing,
+	 * the state change will be propagated to the config listener
+	 * @param proposedState The new proposed state
+	 * @param message The associated state change message
+	 * @return true if the state was changed, false if the state was already in the proposed state
+	 */
+	protected boolean fireDependencyStateChange(final boolean proposedState, final String message) {
+		final boolean changed = dependenciesClosed.compareAndSet(!proposedState, proposedState);
+		if(changed) {
+			delegateBroadcaster.sendNotification(new Notification(NOTIF_ALL_DEPS_OK, objectName, sequence.incrementAndGet(), System.currentTimeMillis(), "All declared dependencies satisfied for [" + objectName + "]"));
+			SharedNotificationExecutor.getInstance().execute(new Runnable(){
+				@Override
+				public void run() {					
+					final InternalConfigurationListener listener = internalListener.get();
+					if(listener!=null) {
+						listener.onDependencyReadinessChange(proposedState, message);
+					}
+				}
+			});
+		}
+		return changed;
 	}
 	
 	/**
@@ -703,7 +746,7 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 	 */
 	@Override
 	public Object put(final String name, final Object value) {
-		return putTyped(name, value);
+		return putTyped(name, value); // state change check downstream
 	}
 
 	/**
@@ -715,6 +758,7 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 		for(Map.Entry<? extends String, ? extends Object> entry: toMerge.entrySet()) {
 			put(entry.getKey(), entry.getValue());
 		}		
+		// state change check downstream
 	}
 
 	/**
@@ -736,30 +780,47 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 	public Object remove(final Object key) {
 		final String v = config.remove(key);
 		if(v!=null) {
-			final InternalConfigurationListener intListener = internalListener.get();
-			if(intListener!=null) {
-				intListener.onConfigurationItemChange(key.toString(), null);
-			}			
+			sendItemChange(key.toString(), null);
+			checkDependencies();
 		}
 		return v;
 	}
+	
+	/**
+	 * Triggers a config item notification against the config listener
+	 * @param key The changed config item key
+	 * @param value The changed config item value
+	 */
+	private void sendItemChange(final String key,final String value) {
+		final InternalConfigurationListener intListener = internalListener.get();
+		if(intListener!=null) {
+			SharedNotificationExecutor.getInstance().execute(new Runnable(){
+				@Override
+				public void run() {
+					intListener.onConfigurationItemChange(key.toString(), value);
+				}
+			});			
+		}				
+	}
 
 	/**
+	 * <p>Returns an unmodifiable collection of the config items</p>
 	 * {@inheritDoc}
 	 * @see java.util.Map#values()
 	 */
 	@Override
-	public Collection<Object> values() {
-		return getTypedConfigMap().values();
+	public Collection<Object> values() {		
+		return Collections.unmodifiableCollection(getTypedConfigMap().values());
 	}
 
 	/**
+	 * <p>Returns an unmodifiable entry set of the config items</p>
 	 * {@inheritDoc}
 	 * @see java.util.Map#entrySet()
 	 */
 	@Override
 	public Set<java.util.Map.Entry<String, Object>> entrySet() {
-		return getTypedConfigMap().entrySet();
+		return Collections.unmodifiableMap(new HashMap<String, Object>(getTypedConfigMap())).entrySet();
 	}
 
 

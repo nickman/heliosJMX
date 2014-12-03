@@ -41,5 +41,13 @@ public interface InternalConfigurationListener {
 	 */
 	public void onConfigurationItemChange(String key, String value);
 	
+	/**
+	 * Fired when the dependency readiness state of the configuration changes
+	 * @param ready true if ready, false otherwise
+	 * @param message A readiness message. Not relevant when dependencies are ready,
+	 * should list the pending dependency keys if not ready.
+	 */
+	public void onDependencyReadinessChange(boolean ready, String message);
+	
 	
 }
