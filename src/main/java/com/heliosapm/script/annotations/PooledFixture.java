@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2014, Helios Development Group and individual contributors
+ * Copyright 2007, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -22,29 +22,16 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.jmx.config;
-
-import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+package com.heliosapm.script.annotations;
 
 /**
- * <p>Title: Scheduled</p>
- * <p>Description: Annotation to define a scheduling period on deployable scripts</p> 
+ * <p>Title: PooledFixture</p>
+ * <p>Description: Annotation to define a fixture script as a pool</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.jmx.config.Scheduled</code></p>
+ * <p><code>com.heliosapm.script.annotations.PooledFixture</code></p>
  */
-@Target({ElementType.ANNOTATION_TYPE, ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.LOCAL_VARIABLE})
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-public @interface Scheduled {
 
-	/**
-	 * The type of scheduler to be setup
-	 */
-	String value() default "d15";  // fixed delay, 15s
-	
+public @interface PooledFixture {
+
 }

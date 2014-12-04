@@ -1,7 +1,7 @@
 /**
  * 
  */
-package com.heliosapm.jmx.config;
+package com.heliosapm.script.annotations;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -14,7 +14,7 @@ import java.lang.annotation.Target;
  * <p>Description: Annotation to specify multiple sets of names and types of dependencies required by a Deployment.</p>
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><b><code>com.heliosapm.jmx.config.Dependencies</code></b>
+ * <p><b><code>com.heliosapm.script.annotations.Dependencies</code></b>
  */
 @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)

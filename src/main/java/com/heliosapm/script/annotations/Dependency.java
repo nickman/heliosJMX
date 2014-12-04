@@ -1,7 +1,7 @@
 /**
  * 
  */
-package com.heliosapm.jmx.config;
+package com.heliosapm.script.annotations;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -9,15 +9,12 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import org.codehaus.groovy.control.CompilePhase;
-import org.codehaus.groovy.transform.GroovyASTTransformation;
-
 /**
  * <p>Title: Dependency</p>
  * <p>Description: Annotation to specify the names and types of dependencies required by a Deployment.</p>
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><b><code>com.heliosapm.jmx.config.Dependency</code></b>
+ * <p><b><code>com.heliosapm.script.annotations.Dependency</code></b>
  */
 
 @Target({ElementType.ANNOTATION_TYPE, ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.LOCAL_VARIABLE})

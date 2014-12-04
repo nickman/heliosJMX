@@ -58,6 +58,8 @@ import org.cliffc.high_scale_lib.NonBlockingHashSet;
 
 import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.script.DeployedScript;
+import com.heliosapm.script.annotations.Dependencies;
+import com.heliosapm.script.annotations.Dependency;
 
 /**
  * <p>Title: Configuration</p>

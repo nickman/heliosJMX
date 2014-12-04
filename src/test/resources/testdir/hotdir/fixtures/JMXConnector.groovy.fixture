@@ -1,0 +1,13 @@
+@Dependency(keys=["thost", "foobar"])
+import javax.management.remote.*;
+import com.heliosapm.script.annotations.*
+
+try {
+	String serviceURL = jmxConnectorServiceURL;
+	surl = new JMXServiceURL(serviceURL);
+	return JMXConnectorFactory.connect();
+} catch (e) {
+	System.err.println("Failed to connect to [$jmxConnectorServiceURL]");
+	e.printStackTrace(System.err);
+	throw e;
+}	

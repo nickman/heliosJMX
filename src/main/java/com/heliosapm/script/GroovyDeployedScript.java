@@ -30,15 +30,14 @@ import groovy.lang.MetaProperty;
 import groovy.lang.Script;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.heliosapm.jmx.config.Dependencies;
-import com.heliosapm.jmx.config.Dependency;
-import com.heliosapm.jmx.config.Scheduled;
+import com.heliosapm.script.annotations.Dependencies;
+import com.heliosapm.script.annotations.Dependency;
+import com.heliosapm.script.annotations.Scheduled;
 
 /**
  * <p>Title: GroovyDeployedScript</p>

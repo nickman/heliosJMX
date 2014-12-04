@@ -73,6 +73,7 @@ import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.compilers.CompilerException;
 import com.heliosapm.script.compilers.ConfigurationCompiler;
 import com.heliosapm.script.compilers.DeploymentCompiler;
+import com.heliosapm.script.compilers.FixtureCompiler;
 import com.heliosapm.script.compilers.GroovyCompiler;
 import com.heliosapm.script.compilers.JSR223Compiler;
 
@@ -641,12 +642,15 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 			} catch (Throwable ex) {
 				log.warn("Failed to install SEF [{}]. Skipping.", foundSef.getClass().getName());				
 			}
-		}
+		}		
 		installDeploymentCompiler(new GroovyCompiler());
 		loadJavaScriptHelpers();
 		catchAllCompiler = new JSR223Compiler(this);
 		configurationCompiler = new ConfigurationCompiler();
+		final FixtureCompiler<Object> fixtureCompiler = new FixtureCompiler<Object>(this);
+		installDeploymentCompiler(fixtureCompiler);
 		deploymentCompilers.put("config", configurationCompiler);
+		deploymentCompilers.put("fixture", fixtureCompiler);
 		JMXHelper.registerMBean(this, OBJECT_NAME);
 	}
 	

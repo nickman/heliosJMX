@@ -30,16 +30,13 @@ import groovy.lang.Script;
 import java.io.File;
 import java.io.StringReader;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
 import org.codehaus.groovy.ast.AnnotatedNode;
 import org.codehaus.groovy.ast.AnnotationNode;
 import org.codehaus.groovy.ast.ClassCodeVisitorSupport;
-import org.codehaus.groovy.ast.ClassHelper;
 import org.codehaus.groovy.ast.ClassNode;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
@@ -51,11 +48,11 @@ import org.codehaus.groovy.control.customizers.ImportCustomizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.heliosapm.jmx.config.Dependencies;
-import com.heliosapm.jmx.config.Dependency;
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.GroovyDeployedScript;
+
+
 
 /**
  * <p>Title: GroovyCompiler</p>
@@ -77,7 +74,9 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	
 	/** A set of default imports added to all compiler configurations */
 	private final String[] imports = new String[]{
-			"import com.heliosapm.jmx.config.*"		// configuration annotations
+			"import com.heliosapm.script.annotations.*",		// configuration annotations
+			"import javax.management.*", 						// JMX Core
+			"import javax.management.remote.*", 				// JMX Remoting
 	};
 	
 	/** An import customizer added to all compiler configs */
