@@ -457,7 +457,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 				final Object ret = doExecute();
 				execCount.incrementAndGet();
 				lastExecTime.set(now);
-				lastExecElapsed.set(System.currentTimeMillis() - now);			
+				long elapsed = System.currentTimeMillis() - now;
+				lastExecElapsed.set(elapsed);
+				log.info("Elapsed: [{}] ms.", elapsed);
 				return (T) ret;
 			} catch (Exception ex) {
 				final long er = errorCount.incrementAndGet();

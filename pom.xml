@@ -38,7 +38,10 @@
 		<logback.version>1.1.2</logback.version>
 		<ning.version>1.8.14</ning.version>
 		<json.version>20140107</json.version>
+		<bonecp.version>0.8.0.RELEASE</bonecp.version>
+		<pools.version>2.2</pools.version>
 		<hawtio-version>1.5-SNAPSHOT</hawtio-version>
+		<hikari.version>2.2.5</hikari.version>
 		<!-- Plugin Versions -->
 		<jar-plugin.version>2.3</jar-plugin.version>
 		<source-plugin.version>2.2</source-plugin.version>
@@ -104,6 +107,28 @@
 		  <groupId>org.quartz-scheduler</groupId>
 		  <artifactId>quartz</artifactId>
 		  <version>${quartz.version}</version>
+		</dependency>
+		
+		<!-- BoneCP DataSource -->
+		<dependency>
+		  <groupId>com.jolbox</groupId>
+		  <artifactId>bonecp</artifactId>
+		  <version>${bonecp.version}</version>
+		</dependency>
+		
+		<dependency>
+		    <groupId>com.zaxxer</groupId>
+		    <artifactId>HikariCP-java6</artifactId>
+		    <version>${hikari.version}</version>
+		    <scope>compile</scope>
+		</dependency>
+		
+		
+		<!-- Apache Commons Pools -->
+		<dependency>
+		  <groupId>org.apache.commons</groupId>
+		  <artifactId>commons-pool2</artifactId>
+		  <version>${pools.version}</version>
 		</dependency>
 		
 		

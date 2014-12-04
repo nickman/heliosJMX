@@ -76,20 +76,24 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script>  {
 	 */
 	public void initExcutable() {
 		if(executable!=null) {
-			for(MetaMethod mm: executable.getMetaClass().getMethods()) {
-				metaMethods.put(mm.getName(), mm);
-			}
-			for(MetaProperty mp: executable.getMetaClass().getProperties()) {
-				metaProperties.put(mp.getName(), mp);
-			}
-			updateBindings();
-			executable.setBinding(binding);
-			config.addDependency(executable.getClass().getAnnotation(Dependencies.class));
-			config.addDependency(executable.getClass().getAnnotation(Dependency.class));
-			
-			final Scheduled scheduled = executable.getClass().getAnnotation(Scheduled.class);
-			if(scheduled!=null) {
-				this.setExecutionSchedule(scheduled.value());
+			try {
+				for(MetaMethod mm: executable.getMetaClass().getMethods()) {
+					metaMethods.put(mm.getName(), mm);
+				}
+				for(MetaProperty mp: executable.getMetaClass().getProperties()) {
+					metaProperties.put(mp.getName(), mp);
+				}
+				updateBindings();
+				executable.setBinding(binding);
+				config.addDependency(executable.getClass().getAnnotation(Dependencies.class));
+				config.addDependency(executable.getClass().getAnnotation(Dependency.class));
+				
+				final Scheduled scheduled = executable.getClass().getAnnotation(Scheduled.class);
+				if(scheduled!=null) {
+					this.setExecutionSchedule(scheduled.value());
+				}
+			} catch (Exception ex) {
+				ex.printStackTrace(System.err);
 			}
 		}		
 		super.initExcutable();

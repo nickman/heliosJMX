@@ -5,8 +5,10 @@ import groovy.transform.Field;
 
 tmpl = new File('/tmp').listFiles().length 
 //return new File('/tmp').listFiles().length *2
-println "Temp Length: $tmpl"
+//println "Temp Length: $tmpl"
 println "THost: $thost";
 r = new Random(System.currentTimeMillis());
-Thread.sleep(Math.abs(r.nextInt(10)));
+long sleep = Math.abs(r.nextInt(10) * 1000);
+println "Sleeping for $sleep ms...";
+Thread.sleep(sleep);
 return tmpl;

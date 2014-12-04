@@ -24,6 +24,8 @@
  */
 package com.heliosapm.script;
 
+import groovy.lang.Script;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -153,6 +155,9 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 	private final Map<String, DeploymentCompiler<?>> deploymentCompilers = new NonBlockingHashMap<String, DeploymentCompiler<?>>(16);
 	/** The catch-all deployment compiler */
 	private final DeploymentCompiler<CompiledScript> catchAllCompiler;
+	/** The groovy deployment compiler */
+	private final DeploymentCompiler<Script> groovyCompiler;
+	
 	/** The configuration deployment compiler */
 	private final DeploymentCompiler<Configuration> configurationCompiler;
 	
@@ -642,9 +647,10 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 			} catch (Throwable ex) {
 				log.warn("Failed to install SEF [{}]. Skipping.", foundSef.getClass().getName());				
 			}
-		}		
-		installDeploymentCompiler(new GroovyCompiler());
+		}				
 		loadJavaScriptHelpers();
+		groovyCompiler = new GroovyCompiler();
+		installDeploymentCompiler(groovyCompiler);
 		catchAllCompiler = new JSR223Compiler(this);
 		configurationCompiler = new ConfigurationCompiler();
 		final FixtureCompiler<Object> fixtureCompiler = new FixtureCompiler<Object>(this);
