@@ -48,8 +48,7 @@ public class ConfigurableGroovyScriptEngineFactory extends GroovyScriptEngineFac
 	 * Creates a new ConfigurableGroovyScriptEngineFactory
 	 */
 	public ConfigurableGroovyScriptEngineFactory() {
-		groovyClassLoader = new GroovyClassLoader(Thread.currentThread().getContextClassLoader(),       CompilerConfiguration config,
-                boolean useConfigurationClasspath);
+		groovyClassLoader = new GroovyClassLoader(Thread.currentThread().getContextClassLoader(), compilationCustomizer.getDefaultConfig(), true);
 	}
 	
 	/**
@@ -58,7 +57,7 @@ public class ConfigurableGroovyScriptEngineFactory extends GroovyScriptEngineFac
 	 */
 	@Override
 	public String getEngineName() {	
-		return "Configurable" + super.getEngineName();
+		return "Configurable " + super.getEngineName();
 	}
 	
 	/**
@@ -67,7 +66,7 @@ public class ConfigurableGroovyScriptEngineFactory extends GroovyScriptEngineFac
 	 */
 	@Override
 	public ScriptEngine getScriptEngine() {
-		return new ConfigurableGroovyScriptEngineImpl();
+		return new ConfigurableGroovyScriptEngineImpl(groovyClassLoader);
 	}
 
 }

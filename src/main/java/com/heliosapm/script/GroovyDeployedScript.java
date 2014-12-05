@@ -62,11 +62,11 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script>  {
 	 */
 	public GroovyDeployedScript(File sourceFile, final Script gscript) {
 		super(sourceFile);
-		executable = gscript;	
-		initExcutable();		
+		executable = gscript;				
 		locateConfigFiles(sourceFile, rootDir, pathSegments);
 		binding = new Binding();
 		binding.setProperty(BINDING_NAME, binding);
+		initExcutable();		
 	}
 	
 	

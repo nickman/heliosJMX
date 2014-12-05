@@ -24,12 +24,18 @@
  */
 package com.heliosapm.script.compilers.groovy;
 
+import groovy.lang.GroovyClassLoader;
+
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.Reader;
 import java.io.StringReader;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.codehaus.groovy.ast.AnnotatedNode;
@@ -75,6 +81,12 @@ import com.heliosapm.jmx.util.helpers.URLHelper;
  */
 
 public class GroovyCompilationCustomizer {
+	
+	/** Understood compiler option keys */
+	public static final Set<String> COMPILER_OPTIONS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
+			"groovy.warnings", "groovy.source.encoding", "groovy.target.bytecode", "groovy.classpath", "groovy.output.verbose", "groovy.output.debug", "groovy.errors.tolerance", "groovy.script.extension", "groovy.script.base"
+	)));
+	
 	/** The default compiler configuration */
 	protected final CompilerConfiguration defaultConfig;
 	/** Instance logger */
@@ -94,6 +106,9 @@ public class GroovyCompilationCustomizer {
 	/** The compilation customizers to apply to the groovy compiler */
 	protected final CompilationCustomizer[] all;
 	
+	/** The default groovy class loader returned if no compilation customizations are found */
+	protected final GroovyClassLoader defaultGroovyClassLoader;
+	
 	/** End of line splitter */
 	protected static final Pattern EOL_SPLITTER = Pattern.compile("\n");
 	/** Pattern to clean up the header line to convert into properties */
@@ -108,7 +123,7 @@ public class GroovyCompilationCustomizer {
 	 */
 	public GroovyCompilationCustomizer() {
 		this.defaultConfig = new CompilerConfiguration(CompilerConfiguration.DEFAULT);
-		this.defaultConfig.setTolerance(0);		
+		this.defaultConfig.setTolerance(0);				
 		try {
 			applyImports(imports);
 			all = new CompilationCustomizer[] {importCustomizer, annotationFinder};
@@ -117,6 +132,7 @@ public class GroovyCompilationCustomizer {
 			ex.printStackTrace(System.err);
 			throw new RuntimeException(ex);
 		}
+		defaultGroovyClassLoader = new GroovyClassLoader(getClass().getClassLoader(), defaultConfig);
 	}
 	
 	/**
@@ -158,9 +174,43 @@ public class GroovyCompilationCustomizer {
 	 * @param source the script source
 	 * @return the compiler configuration
 	 */
+	public CompilerConfiguration getConfiguration(final File source) {
+		return customizeCompiler(getHeaderLine(URLHelper.toURL(source)));
+	}
+	
+	/**
+	 * Returns a GroovyClassLoader with a customized compiler configuration 
+	 * for the passed source if the source specifies recognized compiler config in a header
+	 * @param source the script source
+	 * @return the compiler configuration
+	 */
+	@SuppressWarnings("resource")
+	public GroovyClassLoader getGroovyClassLoader(final File source) {
+		final CompilerConfiguration cc = customizeCompiler(getHeaderLine(URLHelper.toURL(source)));
+		return cc==defaultConfig ? defaultGroovyClassLoader : new GroovyClassLoader(defaultGroovyClassLoader, cc);
+	}
+	
+	/**
+	 * Returns a customized compiler configuration for the passed source
+	 * @param source the script source
+	 * @return the compiler configuration
+	 */
 	public CompilerConfiguration getConfiguration(final URL source) {
 		return customizeCompiler(getHeaderLine(source));
 	}
+	
+	/**
+	 * Returns a GroovyClassLoader with a customized compiler configuration 
+	 * for the passed source if the source specifies recognized compiler config in a header
+	 * @param source the script source
+	 * @return the compiler configuration
+	 */
+	@SuppressWarnings("resource")
+	public GroovyClassLoader getGroovyClassLoader(final URL source) {
+		final CompilerConfiguration cc = customizeCompiler(getHeaderLine(source));
+		return cc==defaultConfig ? defaultGroovyClassLoader : new GroovyClassLoader(defaultGroovyClassLoader, cc);
+	}
+	
 	
 	/**
 	 * Returns a customized compiler configuration for the passed source
@@ -172,6 +222,19 @@ public class GroovyCompilationCustomizer {
 	}
 	
 	/**
+	 * Returns a GroovyClassLoader with a customized compiler configuration 
+	 * for the passed source if the source specifies recognized compiler config in a header
+	 * @param source the script source
+	 * @return the compiler configuration
+	 */
+	@SuppressWarnings("resource")
+	public GroovyClassLoader getGroovyClassLoader(final Reader source) {
+		final CompilerConfiguration cc = customizeCompiler(getHeaderLine(source));
+		return cc==defaultConfig ? defaultGroovyClassLoader : new GroovyClassLoader(defaultGroovyClassLoader, cc);
+	}
+	
+	
+	/**
 	 * Returns a customized compiler configuration for the passed source
 	 * @param source the script source
 	 * @return the compiler configuration
@@ -181,18 +244,36 @@ public class GroovyCompilationCustomizer {
 	}
 	
 	/**
+	 * Returns a GroovyClassLoader with a customized compiler configuration 
+	 * for the passed source if the source specifies recognized compiler config in a header
+	 * @param source the script source
+	 * @return the compiler configuration
+	 */
+	@SuppressWarnings("resource")
+	public GroovyClassLoader getGroovyClassLoader(final String source) {
+		final CompilerConfiguration cc = customizeCompiler(getHeaderLine(source));
+		return cc==defaultConfig ? defaultGroovyClassLoader : new GroovyClassLoader(defaultGroovyClassLoader, cc);
+	}
+	
+	
+	/**
 	 * Clones the default compiler configuration and attempts to read the customized compler options
 	 * from the passed header line
 	 * @param headerLine The first line of the source
 	 * @return The compiler configuration
 	 */
-	protected CompilerConfiguration customizeCompiler(final String headerLine) {
-		final CompilerConfiguration cc = new CompilerConfiguration(defaultConfig);
+	protected CompilerConfiguration customizeCompiler(final String headerLine) {		
 		if(headerLine!=null && !headerLine.trim().isEmpty() && headerLine.trim().startsWith("//")) {
 			final Properties p = getHeaderProperties(headerLine.trim());
-			cc.configure(p);
+			Set<String> props = p.stringPropertyNames();
+			props.retainAll(p.stringPropertyNames());
+			if(!props.isEmpty()) {
+				final CompilerConfiguration cc = new CompilerConfiguration(defaultConfig);
+				cc.configure(p);
+				return cc;
+			}
 		}
-		return cc;		
+		return defaultConfig;		
 	}
 	
 	/**

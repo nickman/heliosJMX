@@ -24,13 +24,15 @@
  */
 package com.heliosapm.script.compilers.groovy;
 
+import groovy.lang.GroovyClassLoader;
+
+import java.io.IOException;
 import java.io.Reader;
 
 import javax.script.CompiledScript;
 import javax.script.ScriptException;
 
-import groovy.lang.GroovyClassLoader;
-
+import org.codehaus.groovy.jsr223.GroovyCompiledScript;
 import org.codehaus.groovy.jsr223.GroovyScriptEngineImpl;
 
 /**
@@ -56,11 +58,55 @@ public class ConfigurableGroovyScriptEngineImpl extends GroovyScriptEngineImpl {
 		this.gclassLoader = classLoader;
 	}
 	
+	
+	/**
+	 * {@inheritDoc}
+	 * @see org.codehaus.groovy.jsr223.GroovyScriptEngineImpl#compile(java.io.Reader)
+	 */
 	@Override
-	public CompiledScript compile(Reader reader) throws ScriptException {
-		GroovyClassLoader gcl = new GroovyClassLoader(this.gclassLoader, compilationCustomizer.getConfiguration(reader));
-		gcl.s
-		return super.compile(reader);
+	public CompiledScript compile(final Reader source) throws ScriptException {
+		GroovyClassLoader gcl = compilationCustomizer.getGroovyClassLoader(source); 
+		final String src = readFully(source);
+		Class<?> clazz = gcl.parseClass(src);		
+		return new GroovyCompiledScript(this, clazz);
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see org.codehaus.groovy.jsr223.GroovyScriptEngineImpl#compile(java.lang.String)
+	 */
+	@Override
+	public CompiledScript compile(final String source) throws ScriptException {
+		GroovyClassLoader gcl = compilationCustomizer.getGroovyClassLoader(source); 
+		Class<?> clazz = gcl.parseClass(source);		
+		return new GroovyCompiledScript(this, clazz);
+	}
+	
+	
+	/**
+	 * {@inheritDoc}
+	 * @see javax.script.AbstractScriptEngine#eval(java.io.Reader)
+	 */
+	@Override
+	public Object eval(Reader reader) throws ScriptException {
+		// TODO Auto-generated method stub
+		return super.eval(reader);
+	}
+	
+	
+    private String readFully(Reader reader) throws ScriptException {
+        char[] arr = new char[8 * 1024]; // 8K at a time
+        StringBuilder buf = new StringBuilder();
+        int numChars;
+        try {
+            while ((numChars = reader.read(arr, 0, arr.length)) > 0) {
+                buf.append(arr, 0, numChars);
+            }
+        } catch (IOException exp) {
+            throw new ScriptException(exp);
+        }
+        return buf.toString();
+    }
+	
 
 }

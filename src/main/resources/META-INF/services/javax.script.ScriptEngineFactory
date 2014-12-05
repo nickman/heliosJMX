@@ -1,3 +1,4 @@
 com.sun.script.java.JavaScriptEngineFactory
 com.sun.phobos.script.javascript.RhinoScriptEngineFactory
 com.sun.phobos.script.javascript.EmbeddedRhinoScriptEngineFactory
+com.heliosapm.script.compilers.groovy.ConfigurableGroovyScriptEngineFactory

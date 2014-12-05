@@ -78,6 +78,7 @@ import com.heliosapm.script.compilers.DeploymentCompiler;
 import com.heliosapm.script.compilers.FixtureCompiler;
 import com.heliosapm.script.compilers.GroovyCompiler;
 import com.heliosapm.script.compilers.JSR223Compiler;
+import com.heliosapm.script.compilers.groovy.ConfigurableGroovyScriptEngineFactory;
 
 /**
  * <p>Title: StateService</p>
@@ -157,6 +158,8 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 	private final DeploymentCompiler<CompiledScript> catchAllCompiler;
 	/** The groovy deployment compiler */
 	private final DeploymentCompiler<Script> groovyCompiler;
+	/** The groovy jsr223 ScriptEngine */
+	private final ScriptEngine groovyConfigurableCompiler;
 	
 	/** The configuration deployment compiler */
 	private final DeploymentCompiler<Configuration> configurationCompiler;
@@ -629,6 +632,10 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 	 */
 	private StateService() {
 		super(SharedNotificationExecutor.getInstance(), notificationInfos);
+		ConfigurableGroovyScriptEngineFactory cgsef = new ConfigurableGroovyScriptEngineFactory();
+		groovyConfigurableCompiler = new ConfigurableGroovyScriptEngineFactory().getScriptEngine();
+		installScriptEngineFactory(cgsef);
+		
 		sem = new ScriptEngineManager(getScriptClasspath());
 		engineBindings = new SimpleBindings();
 		engineBindings.put("stateService", this);		
@@ -650,6 +657,7 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 		}				
 		loadJavaScriptHelpers();
 		groovyCompiler = new GroovyCompiler();
+		
 		installDeploymentCompiler(groovyCompiler);
 		catchAllCompiler = new JSR223Compiler(this);
 		configurationCompiler = new ConfigurationCompiler();
