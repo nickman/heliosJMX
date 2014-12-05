@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
@@ -110,6 +111,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	protected final AtomicReference<ObjectName> watchedConfig = new AtomicReference<ObjectName>(null);
 	/** Flag indicating if config change listener is registered */
 	protected final AtomicBoolean watchedConfigListenerRegistered = new AtomicBoolean(false);
+	/** The version number of this deployment */
+	protected final AtomicInteger version = new AtomicInteger(0);
+	
 	/** The config change listener */
 	protected final NotificationListener configChangeListener = new NotificationListener() {
 		@Override
@@ -397,6 +401,15 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	
 	/**
 	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getVersion()
+	 */
+	@Override
+	public int getVersion() {		
+		return version.get();
+	}
+	
+	/**
+	 * {@inheritDoc}
 	 * @see com.heliosapm.script.DeployedScriptMXBean#getPathSegments(int)
 	 */
 	@Override
@@ -459,7 +472,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 				lastExecTime.set(now);
 				long elapsed = System.currentTimeMillis() - now;
 				lastExecElapsed.set(elapsed);
-				log.info("Elapsed: [{}] ms.", elapsed);
+				log.debug("Elapsed: [{}] ms.", elapsed);
 				return (T) ret;
 			} catch (Exception ex) {
 				final long er = errorCount.incrementAndGet();
@@ -564,8 +577,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 			this.lastModified = timestamp;
 			final long now = System.currentTimeMillis();
 			lastModTime.set(now);
+			final int v = version.incrementAndGet();
 			initExcutable();
-			final String message = String.format("[%s]: Recompiled Deployment [%s]", new Date(now), sourceFile.getAbsolutePath());
+			final String message = String.format("[%s]: Recompiled Deployment v.%s, [%s]", new Date(now), v, sourceFile.getAbsolutePath());
 			lastStatusMessage.set(message);
 			sendNotification(new Notification(NOTIF_RECOMPILE, objectName, sequence.incrementAndGet(), now, message));
 		}

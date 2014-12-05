@@ -47,6 +47,14 @@ public interface DeployedScriptMXBean {
 	public String getShortName();
 	
 	/**
+	 * Returns the version of this deployment.
+	 * The version starts at <b><code>1</code></b> and is incremented each
+	 * time the script is hot updated.
+	 * @return the version of this deployment
+	 */
+	public int getVersion();
+	
+	/**
 	 * Returns the JMX ObjectName of the configuration MBean that this deployment should listen on for changes
 	 * @return the JMX ObjectName for the watched configuration MBean
 	 */

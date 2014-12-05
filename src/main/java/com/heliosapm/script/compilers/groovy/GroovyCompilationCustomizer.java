@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2014, Helios Development Group and individual contributors
+ * Copyright 2007, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -22,12 +22,10 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.script.compilers;
+package com.heliosapm.script.compilers.groovy;
 
-import groovy.lang.GroovyShell;
-import groovy.lang.Script;
-
-import java.io.File;
+import java.io.BufferedReader;
+import java.io.Reader;
 import java.io.StringReader;
 import java.net.URL;
 import java.util.Arrays;
@@ -49,26 +47,36 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.heliosapm.jmx.util.helpers.URLHelper;
-import com.heliosapm.script.DeployedScript;
-import com.heliosapm.script.GroovyDeployedScript;
 
 
 
 /**
- * <p>Title: GroovyCompiler</p>
- * <p>Description: Native groovy script compiler.</p> 
+ * <p>Title: GroovyCompilationCustomizer</p>
+ * <p>Description: Base groovy compiler customizer</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.compilers.GroovyCompiler</code></p>
+ * <p><code>com.heliosapm.script.compilers.groovy.GroovyCompilationCustomizer</code></p>
+ * <p><li>
+ * <ul><b>groovy.warnings</b>: Sets the warning level of the compiler:<li>
+ *     <ul><b>{@link org.codehaus.groovy.control.messages.WarningMessage#NONE} (0)</b>: Ignore all errors</ul>
+ *     <ul><b>{@link org.codehaus.groovy.control.messages.WarningMessage#LIKELY_ERRORS} (1)</b>: Likely errors</ul>
+ *     <ul><b>{@link org.codehaus.groovy.control.messages.WarningMessage#POSSIBLE_ERRORS} (2)</b>: Possible errors</ul>
+ *     <ul><b>{@link org.codehaus.groovy.control.messages.WarningMessage#PARANOIA} (3)</b>: Any and all errors</ul>
+ * </li></ul>
+ * <ul><b>groovy.source.encoding</b>: Sets the Source Encoding</ul>
+ * <ul><b>groovy.target.bytecode</b>: Sets the Target Bytecode</ul>
+ * <ul><b>groovy.classpath</b>: Sets the Classpath</ul>
+ * <ul><b>groovy.output.verbose</b>: Sets the Verbosity (true/false)</ul>
+ * <ul><b>groovy.output.debug</b>: Sets the Debug (true/false)</ul>
+ * <ul><b>groovy.errors.tolerance</b>: Sets the Tolerance which is the number of non-fatal errors (per unit) that should be tolerated before compilation is aborted</ul>
+ * <ul><b>groovy.script.extension</b>: Sets the Default Script Extension</ul>
+ * <ul><b>groovy.script.base</b>: Sets the Script Base Class</ul>
+ * </li></p>
  */
 
-public class GroovyCompiler implements DeploymentCompiler<Script> {
-	/** The extensions */
-	private static final String[] extensions = new String[]{"groovy"};
+public class GroovyCompilationCustomizer {
 	/** The default compiler configuration */
 	protected final CompilerConfiguration defaultConfig;
-	/** The default groovy shell */
-	protected final GroovyShell groovyShell;
 	/** Instance logger */
 	private final Logger log = LoggerFactory.getLogger(getClass());
 	
@@ -91,39 +99,25 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	/** Pattern to clean up the header line to convert into properties */
 	protected static final Pattern CLEAN_HEADER = Pattern.compile("(?:,|$)");
 	
+	/** The platform EOL string */
+	public static final String EOL = System.getProperty("line.separator", "\n");
 	
+
 	/**
-	 * Creates a new GroovyCompiler
-	 * @param defaultConfig The default configuration
+	 * Creates a new GroovyCompilationCustomizer
 	 */
-	public GroovyCompiler(final CompilerConfiguration defaultConfig) {		
-		this.defaultConfig = defaultConfig==null ? new CompilerConfiguration(CompilerConfiguration.DEFAULT) : defaultConfig;
+	public GroovyCompilationCustomizer() {
+		this.defaultConfig = new CompilerConfiguration(CompilerConfiguration.DEFAULT);
 		this.defaultConfig.setTolerance(0);		
 		try {
 			applyImports(imports);
 			all = new CompilationCustomizer[] {importCustomizer, annotationFinder};
 			this.defaultConfig.addCompilationCustomizers(all);
-			groovyShell = new GroovyShell(this.defaultConfig);
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
 			throw new RuntimeException(ex);
 		}
 	}
-	
-	/**
-	 * Creates a new GroovyCompiler
-	 */
-	public GroovyCompiler() {
-		this((CompilerConfiguration)null);
-	}
-
-	/**
-	 * Creates a new GroovyCompiler
-	 * @param defaultConfig The default configuration properties
-	 */
-	public GroovyCompiler(final Properties defaultConfig) {
-		this(defaultConfig==null ? new CompilerConfiguration(CompilerConfiguration.DEFAULT) : new CompilerConfiguration(defaultConfig));
-	}	
 	
 	/**
 	 * Applies the configured imports to the compiler configuration
@@ -159,87 +153,86 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 		defaultConfig.addCompilationCustomizers(importCustomizer);
 	}
 	
-	
-	
-
 	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.compilers.DeploymentCompiler#compile(java.net.URL)
+	 * Returns a customized compiler configuration for the passed source
+	 * @param source the script source
+	 * @return the compiler configuration
 	 */
-	@Override
-	public Script compile(final URL source) throws CompilerException {
-		if(source==null) throw new IllegalArgumentException("The passed source URL was null");
-		final String extension = URLHelper.getExtension(source, "").trim().toLowerCase();
-		if(!"groovy".equals(extension)) throw new RuntimeException("Source type [" + extension + "] in source URL [" + source + "] is not supported by this compiler");
-		String sourceCode = URLHelper.getTextFromURL(source, 1000, 1000);
-		String headerLine = EOL_SPLITTER.split(sourceCode, 2)[0].trim();
-		GroovyShell shellToUse = groovyShell;
-		if(headerLine.startsWith("//")) {
-			Properties p = getHeaderProperties(headerLine);
-			if(!p.isEmpty()) {
-				CompilerConfiguration cc = new CompilerConfiguration(defaultConfig);
-				cc.configure(p);
-				cc.addCompilationCustomizers(all);
-				shellToUse = new GroovyShell(cc);
-			}
+	public CompilerConfiguration getConfiguration(final URL source) {
+		return customizeCompiler(getHeaderLine(source));
+	}
+	
+	/**
+	 * Returns a customized compiler configuration for the passed source
+	 * @param source the script source
+	 * @return the compiler configuration
+	 */
+	public CompilerConfiguration getConfiguration(final Reader source) {
+		return customizeCompiler(getHeaderLine(source));
+	}
+	
+	/**
+	 * Returns a customized compiler configuration for the passed source
+	 * @param source the script source
+	 * @return the compiler configuration
+	 */
+	public CompilerConfiguration getConfiguration(final String source) {
+		return customizeCompiler(getHeaderLine(source));
+	}
+	
+	/**
+	 * Clones the default compiler configuration and attempts to read the customized compler options
+	 * from the passed header line
+	 * @param headerLine The first line of the source
+	 * @return The compiler configuration
+	 */
+	protected CompilerConfiguration customizeCompiler(final String headerLine) {
+		final CompilerConfiguration cc = new CompilerConfiguration(defaultConfig);
+		if(headerLine!=null && !headerLine.trim().isEmpty() && headerLine.trim().startsWith("//")) {
+			final Properties p = getHeaderProperties(headerLine.trim());
+			cc.configure(p);
 		}
+		return cc;		
+	}
+	
+	/**
+	 * Reads the header line from the passed reader
+	 * @param reader The source reader
+	 * @return The first line from the reader
+	 */
+	protected String getHeaderLine(final Reader reader) {
+		final BufferedReader br = new BufferedReader(reader);
 		try {
-			final Script script = shellToUse.parse(sourceCode, source.getFile());
-			return script;
-		} catch (CompilationFailedException cfe) {
-			log.error("Failed to compile source [" + source + "]", getDiagnostic(cfe),  cfe);
-			throw new CompilerException("Failed to compile source [" + source + "]", getDiagnostic(cfe),  cfe);
+			return br.readLine();
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to get header line from reader:" + reader, ex);
+		} finally {
+			try { br.close(); } catch (Exception x) {/* No Op */}
+			try { reader.close(); } catch (Exception x) {/* No Op */}
 		}
 	}
 	
 	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.compilers.DeploymentCompiler#deploy(java.lang.String)
+	 * Reads the header line from the passed string
+	 * @param source The source to get the header from
+	 * @return The first line from the source
 	 */
-	@Override
-	public DeployedScript<Script> deploy(final String sourceFile) throws CompilerException {
-		final Script executable;
-		try {
-			executable = compile(URLHelper.toURL(new File(sourceFile)));
-			return new GroovyDeployedScript(new File(sourceFile), executable);
-		} catch (CompilerException er) {
-			final GroovyDeployedScript gds = new GroovyDeployedScript(new File(sourceFile), null);
-			final URL sourceURL = URLHelper.toURL(sourceFile);
-			final long ad32 = URLHelper.adler32(sourceURL);
-			final long ts = URLHelper.getLastModified(sourceURL);
-			gds.setFailedExecutable(er.getDiagnostic(), ad32, ts);
-			return gds;
-		}				
-	}
-	
- 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.compilers.DeploymentCompiler#getSupportedExtensions()
-	 */
-	@Override
-	public String[] getSupportedExtensions() {
-		return extensions;
+	protected String getHeaderLine(final String source) {
+		final int index = source.indexOf(EOL);
+		if(index==-1) return "";
+		return source.substring(0, index);
 	}
 	
 	/**
-	 * Renders the exception into a compiler diagnostic
-	 * @param t The compiler thrown exception
-	 * @return the compiler diagnostic
+	 * Reads the header line from the source accessed at the passed URL
+	 * @param source The URL of the source to get the header from
+	 * @return The first line from the source
 	 */
-	protected String getDiagnostic(final Throwable t) {
-		if(t==null) return "Null underlying exception";
-		if(t instanceof CompilationFailedException) {
-			final CompilationFailedException se = (CompilationFailedException)t;
-			return new StringBuilder()
-				.append("Message: ").append(se.getMessage())
-				.append(", ProcessingUnit: ").append(se.getUnit()==null ? "none" : se.getUnit().getPhaseDescription())
-				.append(", Module: ").append(se.getModule()==null ? "none" : se.getModule().getDescription())
-				.toString();
-		}
-		return "NonCompiler Diagnostic:" + t.toString();
+	protected String getHeaderLine(final URL source) {
+		return URLHelper.getLines(source, 1)[0];
 	}
-
+	
+	
 	
 	/**
 	 * Reads the header line of the source file and parses into a properties file
@@ -258,9 +251,16 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 		}		
 		return p;
 	}
-
 	
 	
+	
+	/**
+	 * <p>Title: AnnotationFinder</p>
+	 * <p>Description: CompilationCustomizer to find local field annotations defined in a script and promote them to the class</p> 
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.script.compilers.groovy.GroovyCompilationCustomizer.AnnotationFinder</code></p>
+	 */
 	private class AnnotationFinder extends CompilationCustomizer {
 
 		public AnnotationFinder(final CompilePhase cp) {
@@ -294,23 +294,12 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 		
 	}
 
+
+	/**
+	 * Returns 
+	 * @return the defaultConfig
+	 */
+	public final CompilerConfiguration getDefaultConfig() {
+		return defaultConfig;
+	}
 }
-
-
-/*
-		DeploymentCompiler Options
-		================
-		
-"groovy.warnings"	getWarningLevel()
-"groovy.source.encoding"	getSourceEncoding()
-"groovy.target.directory"	getTargetDirectory()
-"groovy.target.bytecode"	getTargetBytecode()
-"groovy.classpath"	getClasspath()
-"groovy.output.verbose"	getVerbose()
-"groovy.output.debug"	getDebug()
-"groovy.errors.tolerance"	getTolerance()
-"groovy.script.extension"	getDefaultScriptExtension()
-"groovy.script.base"	getScriptBaseClass()
-"groovy.recompile"	getRecompileGroovySource()
-"groovy.recompile.minimumInterval"	getMinimumRecompilationInterval()		
-*/

@@ -77,9 +77,11 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script>  {
 	public void initExcutable() {
 		if(executable!=null) {
 			try {
+				metaMethods.clear();
 				for(MetaMethod mm: executable.getMetaClass().getMethods()) {
 					metaMethods.put(mm.getName(), mm);
 				}
+				metaProperties.clear();
 				for(MetaProperty mp: executable.getMetaClass().getProperties()) {
 					metaProperties.put(mp.getName(), mp);
 				}
