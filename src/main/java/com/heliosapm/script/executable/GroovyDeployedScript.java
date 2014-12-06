@@ -22,7 +22,7 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.script;
+package com.heliosapm.script.executable;
 
 import groovy.lang.Binding;
 import groovy.lang.MetaMethod;
@@ -35,6 +35,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.heliosapm.script.AbstractDeployedScript;
+import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.annotations.Dependencies;
 import com.heliosapm.script.annotations.Dependency;
 import com.heliosapm.script.annotations.Scheduled;
@@ -47,7 +49,7 @@ import com.heliosapm.script.annotations.Scheduled;
  * <p><code>com.heliosapm.script.GroovyDeployedScript</code></p>
  */
 
-public class GroovyDeployedScript extends AbstractDeployedScript<Script>  {
+public class GroovyDeployedScript extends AbstractDeployedScript<Script> implements DeployedExecutableMXBean {
 	/** The script meta methods */
 	protected final Map<String, MetaMethod> metaMethods = new ConcurrentHashMap<String, MetaMethod>();
 	/** The script meta properties */
@@ -123,7 +125,7 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script>  {
 	
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getDeploymentClassName()
+	 * @see com.heliosapm.script.executable.DeployedExecutableMXBean#getDeploymentClassName()
 	 */
 	@Override
 	public String getDeploymentClassName() {

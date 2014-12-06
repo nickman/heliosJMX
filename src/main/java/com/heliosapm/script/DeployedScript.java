@@ -75,6 +75,9 @@ public interface DeployedScript<T> extends DeployedScriptMXBean, Callable<T> {
 	public static final String SERVICE_DOMAIN = "com.heliosapm.service";
 	/** The JMX domain for deployments */
 	public static final String DEPLOYMENT_DOMAIN = "com.heliosapm.deployment";
+	/** The JMX domain for data sources */
+	public static final String DATASOURCE_DOMAIN = "com.heliosapm.datasource";
+	
 	/** The JMX domain for hot directories */
 	public static final String HOTDIR_DOMAIN = "com.heliosapm.hotdir";
 	

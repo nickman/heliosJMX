@@ -41,9 +41,9 @@ import org.json.JSONObject;
 
 import com.heliosapm.jmx.config.Configuration;
 import com.heliosapm.jmx.util.helpers.URLHelper;
-import com.heliosapm.script.ConfigurationDeployedScript;
 import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.StateService;
+import com.heliosapm.script.configuration.ConfigurationDeployedScript;
 
 /**
  * <p>Title: ConfigurationCompiler</p>

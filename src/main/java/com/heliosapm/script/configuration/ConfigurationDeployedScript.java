@@ -22,7 +22,7 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.script;
+package com.heliosapm.script.configuration;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -41,6 +41,8 @@ import com.heliosapm.jmx.config.Configuration;
 import com.heliosapm.jmx.config.ConfigurationManager;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.URLHelper;
+import com.heliosapm.script.AbstractDeployedScript;
+import com.heliosapm.script.DeployedScript;
 
 /**
  * <p>Title: ConfigurationDeployedScript</p>
@@ -268,14 +270,6 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 		return getExecutable().get(name);
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getInvocables()
-	 */
-	@Override
-	public Set<String> getInvocables() {
-		return getExecutable().keySet();
-	}
 
 	/**
 	 * {@inheritDoc}
@@ -288,7 +282,7 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getConfigurationMap()
+	 * @see com.heliosapm.script.executable.DeployedExecutableMXBean#getConfigurationMap()
 	 */
 	@Override
 	public Map<String, String> getConfigurationMap() {

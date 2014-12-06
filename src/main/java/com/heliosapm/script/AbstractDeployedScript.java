@@ -390,29 +390,14 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	}
 	
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getDomain()
-	 */
-	@Override
 	public String getDomain() {
 		return DEPLOYMENT_DOMAIN;
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getVersion()
-	 */
-	@Override
 	public int getVersion() {		
 		return version.get();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getPathSegments(int)
-	 */
-	@Override
 	public String[] getPathSegments(final int trim) {
 		if(trim==0) return pathSegments.clone();
 		final int pLength = pathSegments.length;
@@ -428,11 +413,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return psegs.toArray(new String[pLength-absTrim]);
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getPendingDependencies()
-	 */
-	@Override
 	public Map<String, String> getPendingDependencies() {
 		return config.getPendingDependencies();
 	}
@@ -597,11 +577,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		}		
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getDeploymentClassName()
-	 */
-	@Override
 	public String getDeploymentClassName() {
 		if(executable==null) return null;
 		return executable.getClass().getName();
@@ -632,11 +607,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	}
 	
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#setExecutionSchedule(java.lang.String)
-	 */
-	@Override
 	public void setExecutionSchedule(final String scheduleExpression) {
 		if(scheduleExpression==null) throw new IllegalArgumentException("The passed Schedule Expression was null");
 		final ExecutionSchedule newSchedule = ExecutionSchedule.getInstance(scheduleExpression, false);
@@ -661,20 +631,11 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 			scheduleHandle.set(ScheduledExecutionService.getInstance().scheduleDeploymentExecution(this));
 		}	
 	}
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#pauseScheduledExecutions()
-	 */
-	@Override
+	
 	public void pauseScheduledExecutions() {
 		setExecutionSchedule(ExecutionSchedule.NO_EXEC_SCHEDULE);
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#resumeScheduledExecutions()
-	 */
-	@Override
 	public String resumeScheduledExecutions() {
 		final ExecutionSchedule es = pausedSchedule.get();
 		if(es==null) {
@@ -695,57 +656,27 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	}
 	
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getFileName()
-	 */
-	@Override
 	public String getFileName() {
 		return sourceFile.getAbsolutePath();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getShortName()
-	 */
-	@Override
 	public String getShortName() {	
 		return shortName;
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getLinkedFileName()
-	 */
-	@Override
 	public String getLinkedFileName() {		
 		return linkedFile==null ? null : linkedFile.getAbsolutePath();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getExtension()
-	 */
-	@Override
 	public String getExtension() {
 		return extension;
 	}
 
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getRoot()
-	 */
-	@Override
 	public String getRoot() {
 		return rootDir;
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getPathSegments()
-	 */
-	@Override
 	public String[] getPathSegments() {
 		return pathSegments;
 	}
@@ -801,11 +732,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 //		}
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#addConfiguration(java.lang.String, java.lang.String)
-	 */
-	@Override
 	public void addConfiguration(final String key, final String value) {
 		addConfiguration(key, (Object)value);		
 	}
@@ -834,17 +760,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return (E)getConfiguration().get(key);
 	}
 	
-//	/**
-//	 * Triggers a config reload when a config item this deployment depends on changes
-//	 * @param dependency The JMX ObjectName of the config item this deployment depends on
-//	 * @param changedConfig The new config
-//	 */
-//	public void triggerConfigChange(final ObjectName dependency, final Map<String, Object> changedConfig) {
-//		config.putAll(changedConfig);
-////		ConfigurationManager.getInstance().addConfiguration(objectName, config);
-//	}
-	
-	
 	/**
 	 * {@inheritDoc}
 	 * @see com.heliosapm.script.DeployedScript#getConfig(java.lang.String)
@@ -864,130 +779,65 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return status.get();
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#returnSourceBytes()
-	 */
-	@Override
 	public byte[] returnSourceBytes() {
 		return URLHelper.getBytesFromURL(URLHelper.toURL(sourceFile));
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#returnSource()
-	 */
-	@Override
 	public String returnSource() {
 		return URLHelper.getTextFromURL(URLHelper.toURL(sourceFile), 1000, 1000);
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getLastModTime()
-	 */
-	@Override
 	public long getLastModTime() {
 		return lastModTime.get();
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getLastExecTime()
-	 */
-	@Override
 	public long getLastExecTime() {
 		return lastExecTime.get();
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getLastErrorTime()
-	 */
-	@Override
 	public long getLastErrorTime() {
 		return lastErrorTime.get();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getLastExecElapsed()
-	 */
-	@Override
 	public long getLastExecElapsed() {
 		return lastExecElapsed.get();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getStatusMessage()
-	 */
-	@Override
 	public String getStatusMessage() {
 		return lastStatusMessage.get();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getExecutionTimeout()
-	 */
-	@Override
 	public long getExecutionTimeout() {
 		return timeout;
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#setExecutionTimeout(long)
-	 */
-	@Override
 	public void setExecutionTimeout(final long timeout) {
 		this.timeout = timeout;
 	}
 	
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getExecutionCount()
-	 */
-	@Override
 	public long getExecutionCount() {
 		return execCount.get();
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getErrorCount()
-	 */
-	@Override
 	public long getErrorCount() {
 		return errorCount.get();
 	}
 
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getObjectName()
-	 */
-	@Override
 	public ObjectName getObjectName() {
 		return objectName;
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#pause()
-	 */
-	@Override
 	public void pause() {
 		setStatus(DeploymentStatus.PAUSED);		
 	}
-
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#toJSON()
-	 */
-	@Override
+	
+	public void resume() {
+		// TODO: How do we know what to resume to ?
+	}
+	
+	
 	public String toJSON() {
 		JSONObject json = new JSONObject();
 		json.put("sourceFile", this.sourceFile.getAbsolutePath());
@@ -1009,22 +859,10 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return json.toString();
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getSchedule()
-	 */
-	@Override
 	public String getSchedule() {
 		return schedule.get().toString();
 	}
 
-	
-
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#updateSource(java.lang.String, boolean)
-	 */
-	@Override
 	public void updateSource(final String source, final boolean recompile) {
 		String header = URLHelper.getLines(URLHelper.toURL(sourceFile), 1)[0].trim();
 		String newHeader = null;
@@ -1041,69 +879,33 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#undeploy()
-	 */
-	@Override
 	public void undeploy() {
 		executable = null;
 		getConfiguration().clear();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#isExecutable()
-	 */
-	@Override
 	public boolean isExecutable() {
 		return status.get().canExec;
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#isScheduleExecutable()
-	 */
-	@Override
 	public boolean isScheduleExecutable() {
 		return status.get().canSchedulerExec;
 	}
 	
-	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#executeForString()
-	 */
-	@Override
 	public String executeForString() {		
 		Object obj = execute();
 		return obj==null ? null : obj.toString();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getConfigString(java.lang.String)
-	 */
-	@Override
 	public String getConfigString(final String key) {
 		Object obj = getConfig(key);
 		return obj==null ? null : obj.toString();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getConfigurationMap()
-	 */
-	@Override
 	public Map<String, String> getConfigurationMap() {
 		return config.getInternalConfig();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getParentConfigurationMap()
-	 */
-	@Override
 	public Map<String, String> getParentConfigurationMap() {
 		if(watchedConfig.get()!=null) {
 			final Configuration cfg = ConfigurationManager.getInstance().getConfig(watchedConfig.get());
@@ -1115,15 +917,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return Collections.emptyMap();
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getStatusName()
-	 */
-	@Override
 	public String getStatusName() {		
 		return getStatus().name();
 	}
-	
 	
 	/**
 	 * Callack when a deployment listens on the {pwd}.config because the {shortName}.config
@@ -1134,13 +930,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	protected void onReplaceWatchedConfiguration(final ObjectName directConfigObjectName) {
 		
 	}
-	
-//	/**
-//	 * <p>Default implementation for executable, non-config deployments</p>
-//	 * {@inheritDoc}
-//	 * @see com.heliosapm.script.DeployedScript#getWatchedConfiguration()
-//	 */
-//	@Override
 	
 	public void initConfig() {
 		watchedConfig.set(findWatchedConfiguration());
@@ -1347,40 +1136,18 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		return configs;
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#isConfigFor(java.lang.String)
-	 */
-	@Override
 	public boolean isConfigFor(String deployment) {
 		return false;
 	}
 
-
-	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getChecksum()
-	 */
-	@Override
 	public long getChecksum() {
 		return checksum;
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getLastModified()
-	 */
-	@Override
 	public long getLastModified() {
 		return lastModified;
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getLastModifiedDate()
-	 */
-	@Override
 	public Date getLastModifiedDate() {
 		return new Date(lastModified);
 	}

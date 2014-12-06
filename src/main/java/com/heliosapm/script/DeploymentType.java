@@ -60,6 +60,8 @@ public enum DeploymentType {
 	CONFIG(DeployedScript.CONFIG_DOMAIN ,"config"),
 	/** Represents a fixture deployment */
 	FIXTURE(DeployedScript.FIXTURE_DOMAIN ,"fixture"),
+	/** Represents a datasource deployment */
+	DATASOURCE(DeployedScript.DATASOURCE_DOMAIN ,"datasource"),	
 	/** Represents a service deployment */	
 	SERVICE(DeployedScript.SERVICE_DOMAIN ,"service"),
 	/** Represents an executable script configuration deployment */

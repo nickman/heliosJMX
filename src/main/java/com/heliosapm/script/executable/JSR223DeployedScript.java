@@ -22,7 +22,7 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.script;
+package com.heliosapm.script.executable;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
@@ -36,6 +36,10 @@ import javax.script.SimpleBindings;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
 
+import com.heliosapm.script.AbstractDeployedScript;
+import com.heliosapm.script.DeployedScript;
+import com.heliosapm.script.DeploymentStatus;
+
 /**
  * <p>Title: JSR223DeployedScript</p>
  * <p>Description: A deployment for JSR233 scripted deployments</p> 
@@ -44,7 +48,7 @@ import org.mozilla.javascript.ContextFactory;
  * <p><code>com.heliosapm.script.JSR223DeployedScript</code></p>
  */
 
-public class JSR223DeployedScript extends AbstractDeployedScript<CompiledScript> {
+public class JSR223DeployedScript extends AbstractDeployedScript<CompiledScript> implements DeployedExecutableMXBean {
 
 	
 	static {

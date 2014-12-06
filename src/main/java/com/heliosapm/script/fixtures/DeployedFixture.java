@@ -30,7 +30,7 @@ import java.util.Set;
 
 import com.heliosapm.script.AbstractDeployedScript;
 import com.heliosapm.script.DeployedScript;
-import com.heliosapm.script.DeployedScriptMXBean;
+import com.heliosapm.script.executable.DeployedExecutableMXBean;
 
 /**
  * <p>Title: DeployedFixture</p>
@@ -41,7 +41,7 @@ import com.heliosapm.script.DeployedScriptMXBean;
  * @param <T> The type of objects returned from the fixture
  */
 
-public class DeployedFixture<T> extends AbstractDeployedScript<Fixture<T>> implements DeployedFixtureScriptMBean<T> {
+public class DeployedFixture<T> extends AbstractDeployedScript<Fixture<T>> implements DeployedFixtureMXBean<T>, Fixture<T> {
 	
 	/**
 	 * Creates a new DeployedFixture
@@ -74,15 +74,6 @@ public class DeployedFixture<T> extends AbstractDeployedScript<Fixture<T>> imple
 		return null;
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScriptMXBean#getInvocables()
-	 */
-	@Override
-	public Set<String> getInvocables() {
-		// TODO Auto-generated method stub
-		return null;
-	}
 
 	/**
 	 * {@inheritDoc}

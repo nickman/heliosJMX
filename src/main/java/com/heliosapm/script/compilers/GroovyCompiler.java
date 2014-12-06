@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory;
 
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.DeployedScript;
-import com.heliosapm.script.GroovyDeployedScript;
+import com.heliosapm.script.executable.GroovyDeployedScript;
 
 
 

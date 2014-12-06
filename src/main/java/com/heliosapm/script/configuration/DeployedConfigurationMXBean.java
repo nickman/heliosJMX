@@ -22,19 +22,45 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.script.fixtures;
+package com.heliosapm.script.configuration;
 
-import com.heliosapm.script.DeployedScript;
+import java.util.Map;
+
+import com.heliosapm.script.DeployedScriptMXBean;
 
 /**
- * <p>Title: DeployedFixtureScriptMBean</p>
- * <p>Description: Extended MBean interface for fixtures</p> 
+ * <p>Title: DeployedConfigurationMXBean</p>
+ * <p>Description: JMX MXBean interface for deployed configurations</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.fixtures.DeployedFixtureScriptMBean</code></p>
- * @param <T> The type of objects returned from the fixture
+ * <p><code>com.heliosapm.script.configuration.DeployedConfigurationMXBean</code></p>
  */
 
-public interface DeployedFixtureScriptMBean<T> extends DeployedScript<Fixture<T>> , Fixture<T> {
+public interface DeployedConfigurationMXBean extends DeployedScriptMXBean {
+	/**
+	 * Returns the local configuration for this deployment
+	 * @return the local configuration for this deployment
+	 */
+	public Map<String, String> getConfigurationMap();
 	
+	/**
+	 * Returns the parent configuration for this deployment
+	 * @return the parent configuration for this deployment
+	 */
+	public Map<String, String> getParentConfigurationMap();
+	
+	/**
+	 * Adds the passed configuration
+	 * @param key The config key
+	 * @param value The config value
+	 */
+	public void addConfiguration(String key, String value);
+	
+	/**
+	 * Returns the config item as a string with the passed key
+	 * @param key The config key to get the config for
+	 * @return the config value or null if not found
+	 */
+	public String getConfigString(String key);
+
 }

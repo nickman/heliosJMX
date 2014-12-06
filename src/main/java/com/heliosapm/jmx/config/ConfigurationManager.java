@@ -49,9 +49,9 @@ import org.slf4j.LoggerFactory;
 
 import com.heliosapm.jmx.notif.SharedNotificationExecutor;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
-import com.heliosapm.script.ConfigurationDeployedScript;
 import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.DeploymentType;
+import com.heliosapm.script.configuration.ConfigurationDeployedScript;
 
 /**
  * <p>Title: ConfigurationManager</p>
