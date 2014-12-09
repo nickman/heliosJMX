@@ -85,7 +85,7 @@ import com.heliosapm.script.compilers.groovy.ConfigurableGroovyScriptEngineFacto
  * <p>Description: Singleton service for saving state and providing numerical deltas</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.jmx.util.helpers.StateService</code></p>
+ * <p><code>com.heliosapm.script.StateService</code></p>
  */
 
 public class StateService extends NotificationBroadcasterSupport implements StateServiceMXBean, RemovalListener<Object, Object> { 

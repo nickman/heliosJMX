@@ -212,7 +212,7 @@ public class TestClient {
 //		    runtime = conn.getAttribute(new ObjectName(ManagementFactory.RUNTIME_MXBEAN_NAME), "Name").toString();
 //		    LOG.log("Connected at [%s]. Runtime: [%s]", new Date(), runtime);
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:k=/home/nwhitehead/.ssh/np_dsa,u=nwhitehe,sk=false,rto=3000");
-			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://njwmintx:8006/ssh/jmxmp:");
+			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18089/ssh/jmxmp:");
 			
 			
 			

@@ -751,12 +751,14 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 				if(dv!=null) top.put(opt, dv);
 			}
 		}
+		
 		StringBuilder b = new StringBuilder("\nSSHOptions: [");
 		for(Map.Entry<SSHOption, Object> entry: top.entrySet()) {
 			b.append("\n\t").append(entry.getKey()).append(" : [").append(entry.getValue()).append("]");
 		}
 		b.append("\n]");
-		LOG.log(b);
+		
+		//LOG.log(b);
 //		if(!top.isEmpty()) {
 //			StringBuilder b = new StringBuilder("\n\tFinal SSHoptions:\n\t===================================================");
 //			for(Map.Entry<SSHOption, Object> entry: top.entrySet()) {

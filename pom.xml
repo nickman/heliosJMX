@@ -42,6 +42,7 @@
 		<pools.version>2.2</pools.version>
 		<hawtio-version>1.5-SNAPSHOT</hawtio-version>
 		<hikari.version>2.2.5</hikari.version>
+		<bsf.version>3.0-beta2</bsf.version>
 		<!-- Plugin Versions -->
 		<jar-plugin.version>2.3</jar-plugin.version>
 		<source-plugin.version>2.2</source-plugin.version>
@@ -86,6 +87,11 @@
 			<version>${junit.version}</version>
 		</dependency>
 		
+			<!-- ==========================================================			
+			  Beanshell Dependencies
+			    ========================================================== -->			
+		
+		
 		<!-- hawt.io console -->
 		
 		<dependency>
@@ -122,6 +128,8 @@
 		    <version>${hikari.version}</version>
 		    <scope>compile</scope>
 		</dependency>
+		
+		
 		
 		
 		<!-- Apache Commons Pools -->
@@ -175,12 +183,13 @@
 		      <version>${guava.version}</version>
 		    </dependency>
 
+
 			<dependency>
 			  <groupId>org.mozilla</groupId>
 			  <artifactId>rhino</artifactId>
-			  <version>${rhino.version}</version>
-			  <scope>runtime</scope>
+			  <version>${rhino.version}</version>			  
 			</dependency>
+
 
 			<!-- 
 			<dependency>
@@ -365,18 +374,26 @@
                     <artifactSet>
                       <excludes>
                       	<exclude>log4j:log4j:jar:</exclude>
-                      	<exclude>org.javassist:javassist:jar:</exclude>
+                      	<exclude>org.slf4j:*:jar:</exclude>
+                      	<exclude>org.codehaus.groovy:*:jar:</exclude>
+ 						<exclude>META-INF/*.SF</exclude>
+		                <exclude>META-INF/*.DSA</exclude>
+		                <exclude>META-INF/*.RSA</exclude>                      	
                       </excludes>
                       <includes>
                         
                       </includes>
                     </artifactSet>
-              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-              <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
-            <includePluginDependencies>false</includePluginDependencies>
-            <transformers>
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">                        
-                      </transformer>
+              		<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+              		<addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+              		<includePluginDependencies>false</includePluginDependencies>
+            		<transformers>
+                    	<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"></transformer>
+                    	<transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+                    		<resource>.SF</resource>
+                    		<resource>.DSA</resource>
+                    		<resource>.RSA</resource>
+                		</transformer>
                     </transformers>
                   </configuration>
                 </execution>
