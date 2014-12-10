@@ -22,28 +22,32 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.script.fixtures;
+package com.heliosapm.script.annotations;
 
-import com.heliosapm.script.DeployedScriptMXBean;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
- * <p>Title: DeployedFixtureMXBean</p>
- * <p>Description: Extended MBean interface for fixtures</p> 
+ * <p>Title: Fixture</p>
+ * <p>Description: Annotation to define properties of a fixture</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.fixtures.DeployedFixtureMXBean</code></p>
- * @param <T> The type of objects returned from the fixture
+ * <p><code>com.heliosapm.script.annotations.Fixture</code></p>
  */
-
-public interface DeployedFixtureMXBean<T> extends DeployedScriptMXBean {
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface Fixture {
 	/**
-	 * Returns the fixture return type name
-	 * @return the fixture return type name
+	 * The fixture name
 	 */
-	public String getFixtureTypeName();
+	String name();
+	
 	/**
-	 * Returns the fixture name
-	 * @return the fixture name
+	 * The fixture type
 	 */
-	public String getFixtureName();
+	Class<?> type() default Object.class;
 }

@@ -179,37 +179,6 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	/** The deployment's insta notifications */
 	protected final Set<MBeanNotificationInfo> instanceNotificationInfos = new HashSet<MBeanNotificationInfo>(Arrays.asList(notificationInfos));
 	
-	/*
-	 * Config Update Events:
-	 * =====================
-	 * On Updated Config (direct mod)
-	 * On Updated Config (updated source)
-	 * 		broadcast change with config in payload
-	 * 
-	 * 
-	 * 
-	 */
-
-	/*
-	 * Exe Update Events:
-	 * =====================
-	 * On Updated Config (direct mod)
-	 * On Updated Config (updated source)
-	 * 		internal update event
-	 * On watched config update
-	 * 		load passed config, fire internal updates
-	 * On swapped watch file
-	 * 		unregister old watched watch
-	 * 		register new watch
-	 * 		load new watch
-	 * 		internal update event
-	 * 
-	 * 
-	 * 
-	 * 
-	 */
-	
-	
 	/**
 	 * Creates a new AbstractDeployedScript
 	 * @param sourceFile The originating source file
@@ -569,6 +538,7 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 * {@inheritDoc}
 	 * @see com.heliosapm.script.DeployedScript#initExcutable()
 	 */
+	@Override
 	public void initExcutable() {
 		if(getConfiguration().areDependenciesReady()) {
 			setStatus(DeploymentStatus.READY);
@@ -577,6 +547,11 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		}		
 	}
 	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.DeployedScriptMXBean#getDeploymentClassName()
+	 */
+	@Override
 	public String getDeploymentClassName() {
 		if(executable==null) return null;
 		return executable.getClass().getName();
@@ -931,6 +906,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		
 	}
 	
+	/**
+	 * Initializes the configuration
+	 */
 	public void initConfig() {
 		watchedConfig.set(findWatchedConfiguration());
 		if(watchedConfig.get()!=null) {

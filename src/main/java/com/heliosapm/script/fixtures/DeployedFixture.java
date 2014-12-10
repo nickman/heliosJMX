@@ -26,11 +26,8 @@ package com.heliosapm.script.fixtures;
 
 import java.io.File;
 import java.util.Map;
-import java.util.Set;
 
 import com.heliosapm.script.AbstractDeployedScript;
-import com.heliosapm.script.DeployedScript;
-import com.heliosapm.script.executable.DeployedExecutableMXBean;
 
 /**
  * <p>Title: DeployedFixture</p>
@@ -42,16 +39,34 @@ import com.heliosapm.script.executable.DeployedExecutableMXBean;
  */
 
 public class DeployedFixture<T> extends AbstractDeployedScript<Fixture<T>> implements DeployedFixtureMXBean<T>, Fixture<T> {
+	/** The public fixture name */
+	protected final String fixtureName;
+	/** The fixture's return type */
+	protected final Class<T> fixtureType;
+	/** The fixture type simple name */
+	protected final String fixtureTypeName;
 	
 	/**
 	 * Creates a new DeployedFixture
 	 * @param sourceFile The fixture source file
 	 * @param executable The fixture executable
 	 */
+	@SuppressWarnings("unchecked")
 	public DeployedFixture(final File sourceFile, final Fixture<T> executable) {
 		super(sourceFile);
 		this.executable = executable;
-		initExcutable();		
+		initExcutable();
+		final com.heliosapm.script.annotations.Fixture fixtureAnnotation = 
+				this.executable.getClass().getAnnotation(com.heliosapm.script.annotations.Fixture.class);
+		if(fixtureAnnotation!=null) {
+			fixtureName = fixtureAnnotation.name();
+			fixtureType = (Class<T>) fixtureAnnotation.type();
+		} else {
+			fixtureName = shortName;
+			fixtureType = (Class<T>) getFixtureType();
+		}
+		fixtureTypeName = fixtureType.isPrimitive() ? fixtureType.getName() : fixtureType.getSimpleName();
+		FixtureAccessor.newFixtureAccessor(this);
 	}
 	
 	/**
@@ -63,6 +78,40 @@ public class DeployedFixture<T> extends AbstractDeployedScript<Fixture<T>> imple
 		return FIXTURE_DOMAIN;
 	}
 	
+	/**
+	 * Attempts to determine the return type of the fixture
+	 * @return the return type of the fixture
+	 */
+	public Class<?> getFixtureType() {
+		if(fixtureType!=null) return fixtureType;
+		try {
+			try {
+				return executable.getClass().getDeclaredMethod("get", Map.class).getReturnType();
+			} catch (NoSuchMethodException nse) {
+				return executable.getClass().getMethod("get", Map.class).getReturnType();
+			}
+		} catch (Exception ex) {
+			return Object.class;
+		}
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.fixtures.DeployedFixtureMXBean#getFixtureTypeName()
+	 */
+	@Override
+	public String getFixtureTypeName() {		
+		return fixtureTypeName;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.fixtures.DeployedFixtureMXBean#getFixtureName()
+	 */
+	@Override
+	public String getFixtureName() {		
+		return fixtureName;
+	}
 
 	/**
 	 * {@inheritDoc}

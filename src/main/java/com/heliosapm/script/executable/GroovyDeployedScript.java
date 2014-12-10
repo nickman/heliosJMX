@@ -36,7 +36,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.heliosapm.script.AbstractDeployedScript;
-import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.annotations.Dependencies;
 import com.heliosapm.script.annotations.Dependency;
 import com.heliosapm.script.annotations.Scheduled;

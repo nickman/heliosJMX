@@ -38,6 +38,11 @@ import javax.management.ObjectName;
  */
 
 public interface DeployedScriptMXBean {
+	
+	/**
+	 * Initializes the configuration
+	 */
+	public void initConfig();	
 
 	/**
 	 * Returns the deployment domain for this deployment

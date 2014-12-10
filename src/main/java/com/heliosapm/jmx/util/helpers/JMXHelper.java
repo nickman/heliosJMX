@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -1762,7 +1763,7 @@ while(m.find()) {
 	public static ObjectName publishClassLoader(CharSequence objectName, URL...urls) {
 		return publishClassLoader(getHeliosMBeanServer(), objectName, true, false, urls);
 	}
-	
+
 	/**
 	 * Returns a string representing the passed ObjectName with the properties sorted
 	 * alphabetically by the property key
@@ -1775,65 +1776,268 @@ while(m.find()) {
 			b.append(prop.getKey()).append("=").append(prop.getValue()).append(",");
 		}
 		return b.deleteCharAt(b.length()-1).toString();
-	}	
-	
-	
-	
-}
+	}
+
+	/**
+	 * Determines if the passed notification is an MBean Unregistration or Registration Notification
+	 * @param notif The notification to test
+	 * @param unregistered The optional object name to test against
+	 * @param type The notification types to listen on
+	 * @return true if the notification was an MBean Unregistration Notification,
+	 * and if an ObjectName was supplied,if it matched the unregistered MBean's ObjectName
+	 */
+	public static boolean isMBeanRegDeregEvent(final Notification notif, final ObjectName unregistered, final String...type) {
+		final Set<String> types = new HashSet<String>(Arrays.asList(type));
+		return (
+				notif != null &&
+				notif instanceof MBeanServerNotification &&
+				types.contains(notif.getType()) &&
+				(
+						unregistered == null ||
+						(
+								unregistered.isPattern() ? unregistered.apply(((MBeanServerNotification)notif).getMBeanName()) 
+										:
+											unregistered.equals(((MBeanServerNotification)notif).getMBeanName())
+								)
+						)
+				);
+	}
 
 
-	
+	/**
+	 * Determines if the passed notification is an MBean Unregistration Notification
+	 * @param notif The notification to test
+	 * @param unregistered The optional object name to test against
+	 * @return true if the notification was an MBean Unregistration Notification,
+	 * and if an ObjectName was supplied,if it matched the unregistered MBean's ObjectName
+	 */
+	public static boolean isUnregistration(final Notification notif, final ObjectName unregistered) {
+		return isMBeanRegDeregEvent(notif, unregistered, MBeanServerNotification.UNREGISTRATION_NOTIFICATION);
+	}
 
-class NVP {
-	String name = null;
-	Object value = null;
+	/**
+	 * Determines if the passed notification is an MBean Registration Notification
+	 * @param notif The notification to test
+	 * @param registered The optional object name to test against
+	 * @return true if the notification was an MBean Registration Notification,
+	 * and if an ObjectName was supplied,if it matched the registered MBean's ObjectName
+	 */
+	public static boolean isRegistration(final Notification notif, final ObjectName registered) {
+		return isMBeanRegDeregEvent(notif, registered, MBeanServerNotification.REGISTRATION_NOTIFICATION);
+	}
+
+	/**
+	 * Registers an action to be excuted when an MBean is unregistered
+	 * @param connection The MBeanServer where the MBean is registered
+	 * @param objectName The ObjectName of the MBeanServer to fire the action on
+	 * @param action The action to execute
+	 * @return The created listener/filter
+	 */
+	public static MBeanRegistrationListener onMBeanUnregistered(final MBeanServerConnection connection, final ObjectName objectName, final MBeanEventHandler action) {
+		return new MBeanRegistrationListener(connection, objectName, null, action);
+	}
+
+	/**
+	 * Registers an action to be excuted when an MBean is unregistered from the default MBeanServer
+	 * @param objectName The ObjectName of the MBeanServer to fire the action on
+	 * @param action The action to execute
+	 * @return The created listener/filter
+	 */
+	public static MBeanRegistrationListener onMBeanUnregistered(final ObjectName objectName, final MBeanEventHandler action) {
+		return new MBeanRegistrationListener(null, objectName, null, action);
+	}
+
+	/**
+	 * Registers an action to be excuted when an MBean is registered
+	 * @param connection The MBeanServer where the MBean is registered
+	 * @param objectName The ObjectName of the MBeanServer to fire the action on
+	 * @param action The action to execute
+	 * @return The created listener/filter
+	 */
+	public static MBeanRegistrationListener onMBeanRegistered(final MBeanServerConnection connection, final ObjectName objectName, final MBeanEventHandler action) {
+		return new MBeanRegistrationListener(connection, objectName, action, null);
+	}
+
+	/**
+	 * Registers an action to be excuted when an MBean is registered from the default MBeanServer
+	 * @param objectName The ObjectName of the MBeanServer to fire the action on
+	 * @param action The action to execute
+	 * @return The created listener/filter
+	 */
+	public static MBeanRegistrationListener onMBeanRegistered(final ObjectName objectName, final MBeanEventHandler action) {
+		return new MBeanRegistrationListener(null, objectName, action, null);
+	}
+
+	/**
+	 * <p>Title: MBeanEventHandler</p>
+	 * <p>Description: Callback handler for handling an MBeanRegistrationListener event</p> 
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.jmx.util.helpers.JMXHelper.MBeanEventHandler</code></p>
+	 */
+	public static interface MBeanEventHandler {
+		/**
+		 * Fired when an MBeanRegistrationListener event occurs
+		 * @param connection The MBeanServer where the event occured
+		 * @param objectName The ObjectName of the MBean that triggered the event
+		 * @param reg true if a registration, false if an unregistration
+		 */
+		public void onEvent(MBeanServerConnection connection, ObjectName objectName, boolean reg);
+	}
 	
-	public static Collection<NVP> generate(Object...args) {
-		List<NVP> list = new ArrayList<NVP>(args.length);
-		String name = null;		
-		for(int i=0; i<args.length; i++) {
-			if(i+1 < args.length) {
-				name=args[i].toString();
-				i++;
-				list.add(new NVP(name, args[i]));
+	/**
+	 * <p>Title: MBeanRegistrationListener</p>
+	 * <p>Description: A notification listener that executes a defined action when an MBean is registered/unregistered</p> 
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><code>com.heliosapm.jmx.util.helpers.JMXHelper.MBeanDeregistrationListener</code></p>
+	 */
+	public static class MBeanRegistrationListener implements NotificationListener, NotificationFilter {
+		/**  */
+		private static final long serialVersionUID = 5428542937613697900L;
+		/** The object name to listen for the deregistration event on */
+		protected final ObjectName objectName;
+		/** The action to execute when the target object name is unregistered */
+		protected final MBeanEventHandler uaction;
+		/** The action to execute when the target object name is registered */
+		protected final MBeanEventHandler raction;
+		
+		/** The MBeanServer where the MBean is registered */
+		protected final MBeanServerConnection connection;
+		/** Indicates if should be fired on registration */
+		final boolean reg;
+		/** Indicates if should be fired on unregistration */
+		final boolean unreg;
+		/** Indicates if the listener has been unregistered */
+		final AtomicBoolean complete = new AtomicBoolean(false);
+
+		/**
+		 * Creates a new MBeanDeregistrationListener
+		 * @param connection The MBeanServer where the MBean is registered
+		 * @param objectName The object name to listen for the deregistration event on
+		 * @param raction The action to execute when the target object name is registered
+		 * @param uaction The action to execute when the target object name is unregistered
+		 */
+		public MBeanRegistrationListener(final MBeanServerConnection connection, final ObjectName objectName, 
+				final MBeanEventHandler raction, final MBeanEventHandler uaction) {
+			this.objectName = objectName;
+			this.raction = raction;
+			this.uaction = uaction;
+			this.connection = connection!=null ? connection : getHeliosMBeanServer();
+			this.reg = raction!=null;
+			this.unreg = uaction!=null;
+			try {
+				connection.addNotificationListener(MBeanServerDelegate.DELEGATE_NAME, this, this, null);
+			} catch (Exception ex) {
+				throw new RuntimeException("Failed to register MBeanDeregistrationListener on [" + objectName + "]", ex);
 			}
 		}
-		return list;
+		
+		private static final String[] REG = {MBeanServerNotification.REGISTRATION_NOTIFICATION};
+		private static final String[] UNREG = {MBeanServerNotification.UNREGISTRATION_NOTIFICATION};
+		private static final String[] REGUNREG = {MBeanServerNotification.REGISTRATION_NOTIFICATION, MBeanServerNotification.UNREGISTRATION_NOTIFICATION};
+
+		@Override
+		public boolean isNotificationEnabled(final Notification notification) {
+			return isMBeanRegDeregEvent(notification, objectName,
+				reg&&unreg ? REGUNREG : reg ? REG : UNREG	
+			);
+		}		
+
+		@Override
+		public void handleNotification(final Notification notification, final Object handback) {
+			if(reg && isRegistration(notification, objectName)) {
+				try {					
+					raction.onEvent(connection, objectName, true);
+				} catch (Exception ex) {
+					ex.printStackTrace(System.err);
+				}				
+			} else if(unreg && isUnregistration(notification, objectName)) {				
+				try {
+					uaction.onEvent(connection, objectName, false);
+				} catch (Exception ex) {
+					ex.printStackTrace(System.err);
+				}					
+			}
+//			if(!objectName.isPattern() && didAction && ) {
+//				try { connection.removeNotificationListener(MBeanServerDelegate.DELEGATE_NAME, this, this, null);
+//				} catch (Exception ex) {/* No Op */}
+//			}
+		}
+		
+		/**
+		 * Unregisters this listener
+		 * @return true if successful, false if failed
+		 */
+		public boolean unregister() {
+			if(complete.compareAndSet(false, true)) {
+				try {
+					connection.removeNotificationListener(MBeanServerDelegate.DELEGATE_NAME, this, this, null);
+					return true;
+				} catch (Exception ex) {
+					return false;
+				}				
+			} else {
+				return true;
+			}
+		}
 	}
-	
-	
-	/**
-	 * @param name The NVP name
-	 * @param value The NVP value
-	 */
-	public NVP(String name, Object value) {
-		super();
-		this.name = name;
-		this.value = value;
+
+
+
+
+	static class NVP {
+		String name = null;
+		Object value = null;
+
+		public static Collection<NVP> generate(Object...args) {
+			List<NVP> list = new ArrayList<NVP>(args.length);
+			String name = null;		
+			for(int i=0; i<args.length; i++) {
+				if(i+1 < args.length) {
+					name=args[i].toString();
+					i++;
+					list.add(new NVP(name, args[i]));
+				}
+			}
+			return list;
+		}
+
+
+		/**
+		 * @param name The NVP name
+		 * @param value The NVP value
+		 */
+		public NVP(String name, Object value) {
+			super();
+			this.name = name;
+			this.value = value;
+		}
+		/**
+		 * @return the name
+		 */
+		public String getName() {
+			return name;
+		}
+		/**
+		 * @param name the name to set
+		 */
+		public void setName(String name) {
+			this.name = name;
+		}
+		/**
+		 * @return the value
+		 */
+		public Object getValue() {
+			return value;
+		}
+		/**
+		 * @param value the value to set
+		 */
+		public void setValue(Object value) {
+			this.value = value;
+		}
+
 	}
-	/**
-	 * @return the name
-	 */
-	public String getName() {
-		return name;
-	}
-	/**
-	 * @param name the name to set
-	 */
-	public void setName(String name) {
-		this.name = name;
-	}
-	/**
-	 * @return the value
-	 */
-	public Object getValue() {
-		return value;
-	}
-	/**
-	 * @param value the value to set
-	 */
-	public void setValue(Object value) {
-		this.value = value;
-	}
-	
 }
+

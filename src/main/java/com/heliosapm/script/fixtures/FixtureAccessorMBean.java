@@ -24,26 +24,20 @@
  */
 package com.heliosapm.script.fixtures;
 
-import com.heliosapm.script.DeployedScriptMXBean;
+import java.util.Map;
 
 /**
- * <p>Title: DeployedFixtureMXBean</p>
- * <p>Description: Extended MBean interface for fixtures</p> 
+ * <p>Title: FixtureAccessorMBean</p>
+ * <p>Description: Simple MBean interface for {@link FixtureAccessor}s</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.fixtures.DeployedFixtureMXBean</code></p>
- * @param <T> The type of objects returned from the fixture
+ * <p><code>com.heliosapm.script.fixtures.FixtureAccessorMBean</code></p>
+ * @param <T> The type returned by the invoked fixture
  */
 
-public interface DeployedFixtureMXBean<T> extends DeployedScriptMXBean {
-	/**
-	 * Returns the fixture return type name
-	 * @return the fixture return type name
-	 */
-	public String getFixtureTypeName();
-	/**
-	 * Returns the fixture name
-	 * @return the fixture name
-	 */
-	public String getFixtureName();
+public interface FixtureAccessorMBean<T> {
+	public T get(final Map<String, Object> config);	
+	
+	public T get();
+
 }
