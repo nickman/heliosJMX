@@ -68,7 +68,7 @@ public class ConfigurableGroovyScriptEngineImpl extends GroovyScriptEngineImpl {
 		GroovyClassLoader gcl = compilationCustomizer.getGroovyClassLoader(source); 
 		final String src = readFully(source);
 		Class<?> clazz = gcl.parseClass(src);		
-		return new GroovyCompiledScript(this, clazz);
+		return new ConfigurableGroovyCompiledScript(this, clazz);
 	}
 	
 	/**
@@ -79,7 +79,7 @@ public class ConfigurableGroovyScriptEngineImpl extends GroovyScriptEngineImpl {
 	public CompiledScript compile(final String source) throws ScriptException {
 		GroovyClassLoader gcl = compilationCustomizer.getGroovyClassLoader(source); 
 		Class<?> clazz = gcl.parseClass(source);		
-		return new GroovyCompiledScript(this, clazz);
+		return new ConfigurableGroovyCompiledScript(this, clazz);
 	}
 	
 	

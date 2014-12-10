@@ -24,6 +24,8 @@
  */
 package com.heliosapm.script.fixtures;
 
+import java.util.Set;
+
 import com.heliosapm.script.DeployedScriptMXBean;
 
 /**
@@ -46,4 +48,11 @@ public interface DeployedFixtureMXBean<T> extends DeployedScriptMXBean {
 	 * @return the fixture name
 	 */
 	public String getFixtureName();
+	
+	/**
+	 * Returns a set of the parameters keys
+	 * @return a set of the parameters keys
+	 */
+	public Set<String> getParamKeys();
+
 }

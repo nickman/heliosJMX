@@ -25,6 +25,7 @@
 package com.heliosapm.script.compilers;
 
 import java.io.File;
+import java.lang.annotation.Annotation;
 import java.net.URL;
 import java.util.Map;
 
@@ -39,6 +40,7 @@ import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.StateService;
 import com.heliosapm.script.annotations.Dependency;
+import com.heliosapm.script.compilers.groovy.ConfigurableGroovyCompiledScript;
 import com.heliosapm.script.fixtures.DeployedFixture;
 import com.heliosapm.script.fixtures.Fixture;
 
@@ -135,7 +137,7 @@ public class FixtureCompiler<T> implements DeploymentCompiler<Fixture<T>> {
 	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
 	 * <p><code>com.heliosapm.script.compilers.FixtureCompiler.AbstractFixture</code></p>
 	 */
-	private class AbstractFixture implements Fixture<T> {
+	public class AbstractFixture implements Fixture<T> {
 		/** The underlying compiled script */
 		final CompiledScript cs;		
 		/** The name of the fixture's script */
@@ -152,6 +154,18 @@ public class FixtureCompiler<T> implements DeploymentCompiler<Fixture<T>> {
 			this.cs = cs;
 			this.name = name;
 			flog = LoggerFactory.getLogger(getClass().getEnclosingClass().getName() + "." + this.name);
+		}
+		
+		/**
+		 * Returns the annotations of the underlying exec
+		 * @param annotationClass The annotation to get
+		 * @return the annotation or null if it was not present
+		 */
+		public <A extends Annotation> A getAnnotation(final Class<A> annotationClass) {
+			if(cs instanceof ConfigurableGroovyCompiledScript) {
+				return ((ConfigurableGroovyCompiledScript)cs).getAnnotation(annotationClass);
+			}
+			return cs.getClass().getAnnotation(annotationClass);
 		}
 
 		/**

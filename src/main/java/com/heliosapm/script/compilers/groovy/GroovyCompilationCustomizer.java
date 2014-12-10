@@ -34,14 +34,19 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 import org.codehaus.groovy.ast.AnnotatedNode;
 import org.codehaus.groovy.ast.AnnotationNode;
 import org.codehaus.groovy.ast.ClassCodeVisitorSupport;
+import org.codehaus.groovy.ast.ClassHelper;
 import org.codehaus.groovy.ast.ClassNode;
+import org.codehaus.groovy.ast.expr.ClassExpression;
+import org.codehaus.groovy.ast.expr.ConstantExpression;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilePhase;
@@ -103,8 +108,15 @@ public class GroovyCompilationCustomizer {
 	protected final ImportCustomizer importCustomizer = new ImportCustomizer();
 	/** Annotation finder to find script level annotations and promote them to the class level */
 	protected final AnnotationFinder annotationFinder = new AnnotationFinder(CompilePhase.CANONICALIZATION);
+	/** Fixture processor to add the fixture fields */
+	protected final FixtureProcessor fixtureProcessor = new FixtureProcessor(CompilePhase.CANONICALIZATION);
+	
 	/** The compilation customizers to apply to the groovy compiler */
 	protected final CompilationCustomizer[] all;
+	
+	/** A map to track what's been done during the compilation phase */
+	protected final ConcurrentHashMap<String, Object> compilerContext = new ConcurrentHashMap<String, Object>();
+	
 	
 	/** The default groovy class loader returned if no compilation customizations are found */
 	protected final GroovyClassLoader defaultGroovyClassLoader;
@@ -113,6 +125,16 @@ public class GroovyCompilationCustomizer {
 	protected static final Pattern EOL_SPLITTER = Pattern.compile("\n");
 	/** Pattern to clean up the header line to convert into properties */
 	protected static final Pattern CLEAN_HEADER = Pattern.compile("(?:,|$)");
+	/** The fixture annotation class node */
+	protected static final ClassNode FIXTURE_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.Fixture.class);
+	/** The fixture param annotation class node */
+	protected static final ClassNode FIXTURE_ARG_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.FixtureArg.class);
+	
+	/** The fixture annotation node */
+	protected static final AnnotationNode FIXTURE_ANNOTATION = new AnnotationNode(FIXTURE_CLASS_NODE);
+	/** The fixture param annotation node */
+	protected static final AnnotationNode FIXTURE_ARG_ANNOTATION = new AnnotationNode(FIXTURE_ARG_CLASS_NODE);
+	
 	
 	/** The platform EOL string */
 	public static final String EOL = System.getProperty("line.separator", "\n");
@@ -126,13 +148,20 @@ public class GroovyCompilationCustomizer {
 		this.defaultConfig.setTolerance(0);				
 		try {
 			applyImports(imports);
-			all = new CompilationCustomizer[] {importCustomizer, annotationFinder};
+			all = new CompilationCustomizer[] {importCustomizer, annotationFinder, fixtureProcessor};
 			this.defaultConfig.addCompilationCustomizers(all);
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
 			throw new RuntimeException(ex);
 		}
 		defaultGroovyClassLoader = new GroovyClassLoader(getClass().getClassLoader(), defaultConfig);
+	}
+	
+	/**
+	 * Clears the compiler context
+	 */
+	public void clearCompilerContext() {
+		compilerContext.clear();
 	}
 	
 	/**
@@ -333,15 +362,46 @@ public class GroovyCompilationCustomizer {
 		return p;
 	}
 	
-	
-	
 	/**
-	 * <p>Title: AnnotationFinder</p>
-	 * <p>Description: CompilationCustomizer to find local field annotations defined in a script and promote them to the class</p> 
-	 * <p>Company: Helios Development Group LLC</p>
-	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
-	 * <p><code>com.heliosapm.script.compilers.groovy.GroovyCompilationCustomizer.AnnotationFinder</code></p>
+	 * Adds a CompilationCustomizer to the compiler config
+	 * @param cc the CompilationCustomizer to add
 	 */
+	public void addCompilationCustomizer(final CompilationCustomizer cc) {
+		defaultConfig.addCompilationCustomizers(cc);
+	}
+	
+	
+	
+	private class FixtureProcessor extends CompilationCustomizer {
+
+		/**
+		 * Creates a new FixtureProcessor
+		 * @param phase
+		 */
+		public FixtureProcessor(final CompilePhase phase) {
+			super(phase);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 * @see org.codehaus.groovy.control.CompilationUnit.PrimaryClassNodeOperation#call(org.codehaus.groovy.control.SourceUnit, org.codehaus.groovy.classgen.GeneratorContext, org.codehaus.groovy.ast.ClassNode)
+		 */
+		@Override
+		public void call(SourceUnit source, GeneratorContext context, ClassNode classNode) throws CompilationFailedException {
+			if(!compilerContext.containsKey("annotations")) {
+				annotationFinder.call(source, context, classNode);
+			}
+			if((boolean)compilerContext.get("annotations")) {
+				final List<AnnotationNode> fixAnns = classNode.getAnnotations(FIXTURE_CLASS_NODE);
+				if(!fixAnns.isEmpty()) {
+					final AnnotationNode fix = fixAnns.get(0);
+					String name = ((ConstantExpression)fix.getMember("name")).getText();
+					Class<?> clazz = ((ClassExpression)fix.getMember("type")).getType().getTypeClass();
+				}
+			}
+		}
+	}
+	
 	private class AnnotationFinder extends CompilationCustomizer {
 
 		public AnnotationFinder(final CompilePhase cp) {
@@ -350,30 +410,40 @@ public class GroovyCompilationCustomizer {
 
 		@Override
 		public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
-			final ClassCodeVisitorSupport visitor = new ClassCodeVisitorSupport() {
-				@Override
-				protected SourceUnit getSourceUnit() {
-					return source;
+			try {
+				if(compilerContext.containsKey("annotations")) {
+					return;
 				}
-				/**
-				 * {@inheritDoc}
-				 * @see org.codehaus.groovy.ast.ClassCodeVisitorSupport#visitAnnotations(org.codehaus.groovy.ast.AnnotatedNode)
-				 */
-				@Override
-				public void visitAnnotations(final AnnotatedNode node) {
-					for(AnnotationNode dep: node.getAnnotations()) {
-						if(dep.isTargetAllowed(AnnotationNode.TYPE_TARGET)) {
-							node.getDeclaringClass().addAnnotation(dep);
-							log.debug("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());
-						}
+				final ClassCodeVisitorSupport visitor = new ClassCodeVisitorSupport() {
+					@Override
+					protected SourceUnit getSourceUnit() {
+						return source;
 					}
-					super.visitAnnotations(node);
-				}
-			};
-			classNode.visitContents(visitor);
+					/**
+					 * {@inheritDoc}
+					 * @see org.codehaus.groovy.ast.ClassCodeVisitorSupport#visitAnnotations(org.codehaus.groovy.ast.AnnotatedNode)
+					 */
+					@Override
+					public void visitAnnotations(final AnnotatedNode node) {
+						for(AnnotationNode dep: node.getAnnotations()) {
+							if(dep.isTargetAllowed(AnnotationNode.TYPE_TARGET)) {
+								node.getDeclaringClass().addAnnotation(dep);
+								compilerContext.put("annotations", true);
+								log.debug("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());
+							}
+						}
+						super.visitAnnotations(node);
+					}
+				};
+				classNode.visitContents(visitor);
+			} finally {
+				compilerContext.putIfAbsent("annotations", true);
+			}
 		}
 		
 	}
+
+
 
 
 	/**
@@ -382,5 +452,13 @@ public class GroovyCompilationCustomizer {
 	 */
 	public final CompilerConfiguration getDefaultConfig() {
 		return defaultConfig;
+	}
+
+	/**
+	 * Returns the 
+	 * @return the compilerContext
+	 */
+	public ConcurrentHashMap<String, Object> getCompilerContext() {
+		return compilerContext;
 	}
 }

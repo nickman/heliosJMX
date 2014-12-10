@@ -25,9 +25,14 @@
 package com.heliosapm.script.fixtures;
 
 import java.io.File;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import com.heliosapm.script.AbstractDeployedScript;
+import com.heliosapm.script.annotations.FixtureArg;
+import com.heliosapm.script.compilers.FixtureCompiler.AbstractFixture;
 
 /**
  * <p>Title: DeployedFixture</p>
@@ -45,6 +50,8 @@ public class DeployedFixture<T> extends AbstractDeployedScript<Fixture<T>> imple
 	protected final Class<T> fixtureType;
 	/** The fixture type simple name */
 	protected final String fixtureTypeName;
+	/** The fixture parameter names and types */
+	protected final Map<String, Class<?>> paramNameTypes = new HashMap<String, Class<?>>();
 	
 	/**
 	 * Creates a new DeployedFixture
@@ -57,10 +64,13 @@ public class DeployedFixture<T> extends AbstractDeployedScript<Fixture<T>> imple
 		this.executable = executable;
 		initExcutable();
 		final com.heliosapm.script.annotations.Fixture fixtureAnnotation = 
-				this.executable.getClass().getAnnotation(com.heliosapm.script.annotations.Fixture.class);
+				(com.heliosapm.script.annotations.Fixture) ((AbstractFixture)this.executable).getAnnotation(com.heliosapm.script.annotations.Fixture.class);
 		if(fixtureAnnotation!=null) {
 			fixtureName = fixtureAnnotation.name();
 			fixtureType = (Class<T>) fixtureAnnotation.type();
+			for(FixtureArg farg: fixtureAnnotation.params()) {
+				paramNameTypes.put(farg.name(), farg.type());
+			}
 		} else {
 			fixtureName = shortName;
 			fixtureType = (Class<T>) getFixtureType();
@@ -68,6 +78,24 @@ public class DeployedFixture<T> extends AbstractDeployedScript<Fixture<T>> imple
 		fixtureTypeName = fixtureType.isPrimitive() ? fixtureType.getName() : fixtureType.getSimpleName();
 		FixtureAccessor.newFixtureAccessor(this);
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.fixtures.DeployedFixtureMXBean#getParamKeys()
+	 */
+	@Override
+	public Set<String> getParamKeys() {
+		return paramNameTypes.keySet();
+	}
+	
+	/**
+	 * Returns a map of the parameter types keyed by the parameter name
+	 * @return a map of the parameter types keyed by the parameter name
+	 */
+	public Map<String, Class<?>> getParamTypes() {
+		return Collections.unmodifiableMap(paramNameTypes);
+	}
+
 	
 	/**
 	 * {@inheritDoc}

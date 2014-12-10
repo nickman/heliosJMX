@@ -95,6 +95,11 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 				if(scheduled!=null) {
 					this.setExecutionSchedule(scheduled.value());
 				}
+				final com.heliosapm.script.annotations.Fixture fixture = executable.getClass().getAnnotation(com.heliosapm.script.annotations.Fixture.class);
+				if(fixture!=null) {
+					
+				}
+				
 			} catch (Exception ex) {
 				ex.printStackTrace(System.err);
 			}

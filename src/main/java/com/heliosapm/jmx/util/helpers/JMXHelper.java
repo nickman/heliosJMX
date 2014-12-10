@@ -1927,7 +1927,7 @@ while(m.find()) {
 			this.reg = raction!=null;
 			this.unreg = uaction!=null;
 			try {
-				connection.addNotificationListener(MBeanServerDelegate.DELEGATE_NAME, this, this, null);
+				this.connection.addNotificationListener(MBeanServerDelegate.DELEGATE_NAME, this, this, null);
 			} catch (Exception ex) {
 				throw new RuntimeException("Failed to register MBeanDeregistrationListener on [" + objectName + "]", ex);
 			}

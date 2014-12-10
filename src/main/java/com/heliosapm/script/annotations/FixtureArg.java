@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2007, Helios Development Group and individual contributors
+ * Copyright 2014, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -31,28 +31,24 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * <p>Title: Fixture</p>
- * <p>Description: Annotation to define properties of a fixture</p> 
+ * <p>Title: FixtureArg</p>
+ * <p>Description: Annotation to define the arguments expected by a fixture</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.annotations.Fixture</code></p>
+ * <p><code>com.heliosapm.script.annotations.FixtureArg</code></p>
  */
-@Target({ElementType.LOCAL_VARIABLE, ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
+@Target({ElementType.ANNOTATION_TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface Fixture {
+
+public @interface FixtureArg {
 	/**
-	 * The fixture name
+	 * The field name of the argument
 	 */
 	String name();
 	
 	/**
-	 * The fixture type
+	 * The type of the argument
 	 */
 	Class<?> type() default Object.class;
-	
-	/**
-	 * An array of fixture argument definitions
-	 */
-	FixtureArg[] params() default {};
 }

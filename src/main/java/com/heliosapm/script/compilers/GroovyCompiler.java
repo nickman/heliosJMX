@@ -34,23 +34,17 @@ import java.util.Arrays;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
-import org.codehaus.groovy.ast.AnnotatedNode;
-import org.codehaus.groovy.ast.AnnotationNode;
-import org.codehaus.groovy.ast.ClassCodeVisitorSupport;
-import org.codehaus.groovy.ast.ClassNode;
-import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilePhase;
 import org.codehaus.groovy.control.CompilerConfiguration;
-import org.codehaus.groovy.control.SourceUnit;
-import org.codehaus.groovy.control.customizers.CompilationCustomizer;
-import org.codehaus.groovy.control.customizers.ImportCustomizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.heliosapm.jmx.util.helpers.URLHelper;
 import com.heliosapm.script.DeployedScript;
+import com.heliosapm.script.compilers.groovy.GroovyCompilationCustomizer;
 import com.heliosapm.script.executable.GroovyDeployedScript;
+import com.heliosapm.script.fixtures.FixtureInjectionCustomizer;
 
 
 
@@ -65,99 +59,37 @@ import com.heliosapm.script.executable.GroovyDeployedScript;
 public class GroovyCompiler implements DeploymentCompiler<Script> {
 	/** The extensions */
 	private static final String[] extensions = new String[]{"groovy"};
-	/** The default compiler configuration */
-	protected final CompilerConfiguration defaultConfig;
+	/** The customizable compilation */
+	protected final GroovyCompilationCustomizer compilationCustomizer = new GroovyCompilationCustomizer();
 	/** The default groovy shell */
 	protected final GroovyShell groovyShell;
 	/** Instance logger */
 	private final Logger log = LoggerFactory.getLogger(getClass());
-	
-	/** A set of default imports added to all compiler configurations */
-	private final String[] imports = new String[]{
-			"import com.heliosapm.script.annotations.*",		// configuration annotations
-			"import javax.management.*", 						// JMX Core
-			"import javax.management.remote.*", 				// JMX Remoting
-	};
-	
-	/** An import customizer added to all compiler configs */
-	protected final ImportCustomizer importCustomizer = new ImportCustomizer();
-	/** Annotation finder to find script level annotations and promote them to the class level */
-	protected final AnnotationFinder annotationFinder = new AnnotationFinder(CompilePhase.CANONICALIZATION);
-	/** The compilation customizers to apply to the groovy compiler */
-	protected final CompilationCustomizer[] all;
 	
 	/** End of line splitter */
 	protected static final Pattern EOL_SPLITTER = Pattern.compile("\n");
 	/** Pattern to clean up the header line to convert into properties */
 	protected static final Pattern CLEAN_HEADER = Pattern.compile("(?:,|$)");
 	
-	
-	/**
-	 * Creates a new GroovyCompiler
-	 * @param defaultConfig The default configuration
-	 */
-	public GroovyCompiler(final CompilerConfiguration defaultConfig) {		
-		this.defaultConfig = defaultConfig==null ? new CompilerConfiguration(CompilerConfiguration.DEFAULT) : defaultConfig;
-		this.defaultConfig.setTolerance(0);		
-		try {
-			applyImports(imports);
-			all = new CompilationCustomizer[] {importCustomizer, annotationFinder};
-			this.defaultConfig.addCompilationCustomizers(all);
-			groovyShell = new GroovyShell(this.defaultConfig);
-		} catch (Exception ex) {
-			ex.printStackTrace(System.err);
-			throw new RuntimeException(ex);
-		}
-	}
-	
 	/**
 	 * Creates a new GroovyCompiler
 	 */
-	public GroovyCompiler() {
-		this((CompilerConfiguration)null);
+	public GroovyCompiler() {		
+		groovyShell = new GroovyShell(compilationCustomizer.getDefaultConfig());
+		compilationCustomizer.addCompilationCustomizer(new FixtureInjectionCustomizer(CompilePhase.CANONICALIZATION, compilationCustomizer.getCompilerContext()));
 	}
+	
+
 
 	/**
 	 * Creates a new GroovyCompiler
 	 * @param defaultConfig The default configuration properties
 	 */
 	public GroovyCompiler(final Properties defaultConfig) {
-		this(defaultConfig==null ? new CompilerConfiguration(CompilerConfiguration.DEFAULT) : new CompilerConfiguration(defaultConfig));
+		this();
+		compilationCustomizer.getDefaultConfig().configure(defaultConfig);		
 	}	
 	
-	/**
-	 * Applies the configured imports to the compiler configuration
-	 * @param imps  The imports to add
-	 */
-	public void applyImports(String...imps) {		
-		for(String imp: imps) {
-			String _imp = imp.trim().replaceAll("\\s+", " ");
-			if(!_imp.startsWith("import")) {
-				log.warn("Unrecognized import [" + imp + "]");
-				continue;
-			}
-			if(_imp.startsWith("import static ")) {
-				if(_imp.endsWith(".*")) {
-					importCustomizer.addStaticStars(_imp.replace("import static ", "").replace(".*", ""));
-				} else {
-					String cleaned = _imp.replace("import static ", "").replace(".*", "");
-					int index = cleaned.lastIndexOf('.');
-					if(index==-1) {
-						log.warn("Failed to parse non-star static import [" + imp + "]");
-						continue;
-					}
-					importCustomizer.addStaticImport(cleaned.substring(0, index), cleaned.substring(index+1));
-				}
-			} else {
-				if(_imp.endsWith(".*")) {
-					importCustomizer.addStarImports(_imp.replace("import ", "").replace(".*", ""));
-				} else {
-					importCustomizer.addImports(_imp.replace("import ", ""));
-				}
-			}
-		}
-		defaultConfig.addCompilationCustomizers(importCustomizer);
-	}
 	
 	
 	
@@ -168,6 +100,7 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	 */
 	@Override
 	public Script compile(final URL source) throws CompilerException {
+		compilationCustomizer.clearCompilerContext();
 		if(source==null) throw new IllegalArgumentException("The passed source URL was null");
 		final String extension = URLHelper.getExtension(source, "").trim().toLowerCase();
 		if(!"groovy".equals(extension)) throw new RuntimeException("Source type [" + extension + "] in source URL [" + source + "] is not supported by this compiler");
@@ -177,9 +110,8 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 		if(headerLine.startsWith("//")) {
 			Properties p = getHeaderProperties(headerLine);
 			if(!p.isEmpty()) {
-				CompilerConfiguration cc = new CompilerConfiguration(defaultConfig);
-				cc.configure(p);
-				cc.addCompilationCustomizers(all);
+				CompilerConfiguration cc = new CompilerConfiguration(compilationCustomizer.getDefaultConfig());
+				cc.configure(p);				
 				shellToUse = new GroovyShell(cc);
 			}
 		}
@@ -259,43 +191,7 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 		return p;
 	}
 
-	
-	
-	private class AnnotationFinder extends CompilationCustomizer {
-
-		public AnnotationFinder(final CompilePhase cp) {
-			super(cp);
-		}
-
-		@Override
-		public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
-			final ClassCodeVisitorSupport visitor = new ClassCodeVisitorSupport() {
-				@Override
-				protected SourceUnit getSourceUnit() {
-					return source;
-				}
-				/**
-				 * {@inheritDoc}
-				 * @see org.codehaus.groovy.ast.ClassCodeVisitorSupport#visitAnnotations(org.codehaus.groovy.ast.AnnotatedNode)
-				 */
-				@Override
-				public void visitAnnotations(final AnnotatedNode node) {
-					for(AnnotationNode dep: node.getAnnotations()) {
-						if(dep.isTargetAllowed(AnnotationNode.TYPE_TARGET)) {
-							node.getDeclaringClass().addAnnotation(dep);
-							log.debug("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());
-						}
-					}
-					super.visitAnnotations(node);
-				}
-			};
-			classNode.visitContents(visitor);
-		}
-		
-	}
-
 }
-
 
 /*
 		DeploymentCompiler Options

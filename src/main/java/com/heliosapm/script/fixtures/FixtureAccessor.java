@@ -24,7 +24,9 @@
  */
 package com.heliosapm.script.fixtures;
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
@@ -51,6 +53,7 @@ public class FixtureAccessor<T>  implements Fixture<T>, FixtureAccessorMBean<T> 
 	protected final DeployedFixture<T> fixture;
 	/** The accessor JMX ObjectName */
 	protected final ObjectName objectName;
+	/** The 
 	/** Instance logger */
 	protected final Logger log;
 	
@@ -73,6 +76,11 @@ public class FixtureAccessor<T>  implements Fixture<T>, FixtureAccessorMBean<T> 
 	 */
 	public FixtureAccessor(final DeployedFixture<T> fixture) {
 		this.fixture = fixture;
+
+//		@Fixture(name="JMXConnector", type=javax.management.remote.JMXConnector.class, params=[
+//            @FixtureArg(name="jmxUrl", type=java.lang.String.class)
+		
+		
 		log = LoggerFactory.getLogger(getClass().getName() + "." + fixture.getFixtureName());
 		objectName = JMXHelper.objectName(DeployedScript.FIXTURE_DOMAIN + ".invokers:name=" + fixture.getFixtureName() + ",type=" + fixture.getFixtureTypeName());
 		JMXHelper.registerMBean(this, objectName);
@@ -85,11 +93,35 @@ public class FixtureAccessor<T>  implements Fixture<T>, FixtureAccessorMBean<T> 
 		});		
 	}
 	
+	/**
+	 * Returns a set of the parameters keys
+	 * @return a set of the parameters keys
+	 */
+	public Set<String> getParamKeys() {
+		return fixture.getParamKeys();
+	}
+	
+	/**
+	 * Returns a map of the parameter types keyed by the parameter name
+	 * @return a map of the parameter types keyed by the parameter name
+	 */
+	public Map<String, Class<?>> getParamTypes() {
+		return fixture.getParamTypes();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.fixtures.Fixture#get(java.util.Map)
+	 */
 	@Override
 	public T get(final Map<String, Object> config) {	
 		return fixture.get(config);
 	}
 	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.fixtures.Fixture#get()
+	 */
 	@Override
 	public T get() {
 		return fixture.get();
