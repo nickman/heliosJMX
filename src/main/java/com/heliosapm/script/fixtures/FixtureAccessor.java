@@ -24,7 +24,6 @@
  */
 package com.heliosapm.script.fixtures;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -48,25 +47,21 @@ import com.heliosapm.script.DeployedScript;
  * @param <T> The type returned by the wrapped fixture
  */
 
-public class FixtureAccessor<T>  implements Fixture<T>, FixtureAccessorMBean<T> {
+public class FixtureAccessor<T>  implements FixtureAccessorMBean<T> {
 	/** The fixture this accessor invokes against */
 	protected final DeployedFixture<T> fixture;
 	/** The accessor JMX ObjectName */
 	protected final ObjectName objectName;
-	/** The 
 	/** Instance logger */
 	protected final Logger log;
-	
-	/*
-	 * com.heliosapm.fixture:root=/home/nwhitehead/hprojects/heliosJMX/src/test/resources/testdir/hotdir,d1=fixtures,name=JMXConnector,extension=fixture
-	 */
 	
 	/**
 	 * Creates a new FixtureAccessor for the passed fixture
 	 * @param fixture the fixture to create the accessor for
+	 * @return The created FixtureAccessor
 	 */
-	public static <T> void newFixtureAccessor(final DeployedFixture<T> fixture) {
-		final FixtureAccessor<T> fa = new FixtureAccessor<T>(fixture);
+	public static <T> FixtureAccessor<T> newFixtureAccessor(final DeployedFixture<T> fixture) {
+		return new FixtureAccessor<T>(fixture);
 	}
 	
 	
@@ -91,6 +86,7 @@ public class FixtureAccessor<T>  implements Fixture<T>, FixtureAccessorMBean<T> 
 				log.info("Unregistered Fixture Invoker [{}]", objectName);
 			}
 		});		
+		FixtureCache.getInstance().put(this);
 	}
 	
 	/**
@@ -127,6 +123,50 @@ public class FixtureAccessor<T>  implements Fixture<T>, FixtureAccessorMBean<T> 
 		return fixture.get();
 	}
 	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.fixtures.FixtureAccessorMBean#getObjectName()
+	 */
+	@Override
+	public ObjectName getObjectName() {
+		return objectName;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.fixtures.FixtureAccessorMBean#getFixtureName()
+	 */
+	@Override
+	public String getFixtureName() {
+		return fixture.getFixtureName();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.fixtures.FixtureAccessorMBean#getFixtureType()
+	 */
+	@Override
+	public Class<T> getFixtureType() {
+		return (Class<T>) fixture.getFixtureType();
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.fixtures.FixtureAccessorMBean#getFixtureTypeName()
+	 */
+	@Override
+	public String getFixtureTypeName() {
+		return fixture.getFixtureTypeName();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.fixtures.FixtureAccessorMBean#getFixtureObjectName()
+	 */
+	@Override
+	public ObjectName getFixtureObjectName() {		
+		return fixture.getObjectName();
+	}
 	
 	 
 

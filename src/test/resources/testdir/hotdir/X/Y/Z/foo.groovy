@@ -1,10 +1,14 @@
 /* groovy.errors.tolerance=0, groovy.output.verbose=true, groovy.output.debug=true */ 
 @Scheduled("d5")
 @Dependency(keys=["thost", "foobar"])
-@InjectFixture(name="JMXConnector")
+@InjectFixtureResult(name="JMXConnector")
 def connector = null;
-a = 1;
+@InjectFixture(name="JMXConnector")
+@Field
+connectorFactory = null;
+a = 2;
 try {
+	println "connectorFactory: $connectorFactory";
 	tmpDir = System.getProperty("java.io.tmpdir");
 	//println "TMP: ${tmpDir}";
 	tmpl = new File(tmpDir).listFiles().length 	

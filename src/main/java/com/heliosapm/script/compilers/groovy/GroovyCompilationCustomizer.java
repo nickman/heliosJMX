@@ -102,12 +102,13 @@ public class GroovyCompilationCustomizer {
 			"import com.heliosapm.script.annotations.*",		// configuration annotations
 			"import javax.management.*", 						// JMX Core
 			"import javax.management.remote.*", 				// JMX Remoting
+			"import groovy.transform.*"							// Groovy AST transforms
 	};
 	
 	/** An import customizer added to all compiler configs */
 	protected final ImportCustomizer importCustomizer = new ImportCustomizer();
 	/** Annotation finder to find script level annotations and promote them to the class level */
-	protected final AnnotationFinder annotationFinder = new AnnotationFinder(CompilePhase.CANONICALIZATION);
+	protected final AnnotationFinder annotationFinder = new AnnotationFinder(CompilePhase.OUTPUT);  //CompilePhase.CANONICALIZATION);
 	/** Fixture processor to add the fixture fields */
 	protected final FixtureProcessor fixtureProcessor = new FixtureProcessor(CompilePhase.CANONICALIZATION);
 	
@@ -425,11 +426,13 @@ public class GroovyCompilationCustomizer {
 					 */
 					@Override
 					public void visitAnnotations(final AnnotatedNode node) {
-						for(AnnotationNode dep: node.getAnnotations()) {
+						for(AnnotationNode dep: node.getAnnotations()) {	
+							int bitMask = ElementTypeMapping.getMaskFor(dep);
+							dep.setAllowedTargets(bitMask);
 							if(dep.isTargetAllowed(AnnotationNode.TYPE_TARGET)) {
 								node.getDeclaringClass().addAnnotation(dep);
 								compilerContext.put("annotations", true);
-								log.debug("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());
+								log.info("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());
 							}
 						}
 						super.visitAnnotations(node);

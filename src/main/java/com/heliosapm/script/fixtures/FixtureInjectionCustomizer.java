@@ -24,18 +24,20 @@
  */
 package com.heliosapm.script.fixtures;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.codehaus.groovy.ast.AnnotatedNode;
 import org.codehaus.groovy.ast.AnnotationNode;
 import org.codehaus.groovy.ast.ClassCodeVisitorSupport;
 import org.codehaus.groovy.ast.ClassHelper;
 import org.codehaus.groovy.ast.ClassNode;
+import org.codehaus.groovy.ast.FieldNode;
+import org.codehaus.groovy.ast.PropertyNode;
 import org.codehaus.groovy.ast.expr.ClassExpression;
 import org.codehaus.groovy.ast.expr.ConstantExpression;
+import org.codehaus.groovy.ast.expr.MethodCallExpression;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilePhase;
@@ -62,6 +64,10 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 	protected static final ClassNode INJ_FIXTURE_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixture.class);
 	/** The fixture param annotation class node */
 	protected static final ClassNode INJ_FIXTURE_ARG_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixture.class);
+	/** The fixture result annotation class node */
+	protected static final ClassNode INJ_FIXTURE_RES_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixtureResult.class);
+	/** The fixture result param annotation class node */
+	protected static final ClassNode INJ_FIXTURE_ARG_RES_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixture.class);
 	
 	/** The fixture annotation node */
 	protected static final AnnotationNode INJ_FIXTURE_ANNOTATION = new AnnotationNode(INJ_FIXTURE_CLASS_NODE);
@@ -70,33 +76,6 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 	
 	
 	
-	protected final ClassCodeVisitorSupport getAnnotationVisitor(final SourceUnit source, final Map<AnnotatedNode, List<AnnotationNode>> results, final ClassNode...seekAnnotations) {
-		return new ClassCodeVisitorSupport() {
-			
-			@Override
-			protected SourceUnit getSourceUnit() {
-				return source;
-			}
-			/**
-			 * {@inheritDoc}
-			 * @see org.codehaus.groovy.ast.ClassCodeVisitorSupport#visitAnnotations(org.codehaus.groovy.ast.AnnotatedNode)
-			 */
-			@Override
-			public void visitAnnotations(final AnnotatedNode node) {
-				for(AnnotationNode dep: node.getAnnotations()) {
-					if(dep.isTargetAllowed(AnnotationNode.TYPE_TARGET)) {
-						List<AnnotationNode> list = results.get(node);
-						
-						results.put(key, value)
-						node.getDeclaringClass().addAnnotation(dep);
-						compilerContext.put("annotations", true);
-						log.debug("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());
-					}
-				}
-				super.visitAnnotations(node);
-			}
-		};		
-	}
 	
 	
 
@@ -117,23 +96,70 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 	 */
 	@Override
 	public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
+		if(compilerContext.containsKey("fixtures")) return;
+		final AtomicInteger annotationsProcessed = new AtomicInteger(0);
 		try {
-			final Map<AnnotatedNode, List<AnnotationNode>> results = new HashMap<AnnotatedNode, List<AnnotationNode>>();
-			classNode.visitContents(getAnnotationVisitor(source, results, INJ_FIXTURE_CLASS_NODE));
-			final List<AnnotationNode> fixAnns = classNode.getAnnotations(INJ_FIXTURE_CLASS_NODE);
-			if(!fixAnns.isEmpty()) {
-				final AnnotationNode fix = fixAnns.get(0);
-				String name = ((ConstantExpression)fix.getMember("name")).getText();
-				ClassExpression ce = (ClassExpression)fix.getMember("type");
-				if(ce==null) {
-					ce = new ClassExpression(ClassHelper.make(Object.class));
+			final int targetNodesBitMask =  AnnotationNode.FIELD_TARGET | AnnotationNode.LOCAL_VARIABLE_TARGET; 
+			classNode.visitContents(new ClassCodeVisitorSupport() {
+				@Override
+				protected SourceUnit getSourceUnit() {
+					return source;
 				}
-				Class<?> clazz = ce.getType().getTypeClass();
-				log.info("Processing @InjectFixture for [{}]/[{}]", name, clazz.getName());
-			}
-			
+				@Override
+				public void visitAnnotations(final AnnotatedNode node) {
+					
+					for(AnnotationNode dep: node.getAnnotations()) {
+						if(dep.isTargetAllowed(targetNodesBitMask)) {
+							final List<AnnotationNode> fixAnns = node.getAnnotations(INJ_FIXTURE_CLASS_NODE);
+							if(!fixAnns.isEmpty()) {
+								final AnnotationNode fix = fixAnns.get(0);
+								String name = ((ConstantExpression)fix.getMember("name")).getText();
+								ClassExpression ce = (ClassExpression)fix.getMember("type");
+								if(ce==null) {
+									ce = new ClassExpression(ClassHelper.make(Object.class));
+								}
+								Class<?> clazz = ce.getType().getTypeClass();
+								log.info("Processing @InjectFixture for [{}]/[{}] on [{}].[{}]", name, clazz.getName(), classNode.getName(), node.getText());
+								if(node instanceof PropertyNode) {
+									PropertyNode pnode = (PropertyNode)node;
+									
+								} else if(node instanceof FieldNode) {
+									FieldNode fnode = (FieldNode)node;
+									FixtureAccessor<?> fa = FixtureCache.getInstance().get(name);
+									if(fa==null) {
+										log.warn("No fixture accessor found for Fixture Name [{}] while compiling [{}].[{}]", name, classNode.getName(), node.getText());
+									} else {
+										fnode.setType(ClassHelper.make(Object.class));
+										//fnode.setInitialValueExpression(new ConstantExpression(fa));
+										fnode.setInitialValueExpression(new MethodCallExpression());
+										//fnode.setInitialValueExpression(new ConstantExpression("Hello World !"));
+									}
+									
+								}
+								annotationsProcessed.incrementAndGet();
+							}
+							fixAnns.clear();
+							fixAnns.addAll(node.getAnnotations(INJ_FIXTURE_RES_CLASS_NODE));
+							if(!fixAnns.isEmpty()) {
+								final AnnotationNode fix = fixAnns.get(0);
+								String name = ((ConstantExpression)fix.getMember("name")).getText();
+								ClassExpression ce = (ClassExpression)fix.getMember("type");
+								if(ce==null) {
+									ce = new ClassExpression(ClassHelper.make(Object.class));
+								}
+								Class<?> clazz = ce.getType().getTypeClass();
+								log.info("Processing @InjectFixtureResult for [{}]/[{}]", name, clazz.getName());
+								annotationsProcessed.incrementAndGet();
+							}
+							
+						}
+					}
+					super.visitAnnotations(node);
+				}
+			});		
+			compilerContext.putIfAbsent("fixtures", annotationsProcessed.get() > 0);
 		} finally {
-			compilerContext.putIfAbsent("annotations", true);
+			compilerContext.putIfAbsent("fixtures", false);
 		}
 		
 	}

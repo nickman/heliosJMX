@@ -27,6 +27,8 @@ package com.heliosapm.script.fixtures;
 import java.util.Map;
 import java.util.Set;
 
+import javax.management.ObjectName;
+
 
 /**
  * <p>Title: FixtureAccessorMBean</p>
@@ -49,4 +51,36 @@ public interface FixtureAccessorMBean<T> extends Fixture<T> {
 	 * @return a map of the parameter types keyed by the parameter name
 	 */
 	public Map<String, Class<?>> getParamTypes();
+	
+	/**
+	 * Returns the fixture accessor's ObjectName
+	 * @return the fixture accessor's ObjectName
+	 */
+	public ObjectName getObjectName();
+	
+	/**
+	 * Returns the fixture's ObjectName
+	 * @return the fixture's ObjectName
+	 */
+	public ObjectName getFixtureObjectName();
+	
+	
+	/**
+	 * Returns the fixture's name
+	 * @return the fixture's name
+	 */
+	public String getFixtureName();
+	
+	/**
+	 * Returns the fixutre's return type
+	 * @return the fixutre's return type
+	 */
+	public Class<T> getFixtureType();
+	
+	/**
+	 * Returns the fixutre's return type name
+	 * @return the fixutre's return type name
+	 */
+	public String getFixtureTypeName();
+	
 }

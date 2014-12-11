@@ -696,24 +696,37 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 	}
 	
 	private void loadJavaScriptHelpers() {
-		final boolean inJar = areWeJarred();
-		final ScriptEngine se = getEngineForExtension("js");
-		for(String fileName: JS_HELPERS) {
-			log.info("Loading JS Helper [{}]", fileName);
-			try {
-				loadJavaScriptFrom(se, inJar, "/javascript/" + fileName, "./src/main/resources/javascript/" + fileName);
-			} catch (Exception ex) {
-				log.error("Failed to load JS Helper [{}]", fileName, ex);
+		final Thread jsLoader = new Thread("JSLoaderThread") {
+			public void run() {
+				try {
+					final long start = System.currentTimeMillis();
+					final boolean inJar = areWeJarred();
+					final ScriptEngine se = getEngineForExtension("js");
+					for(String fileName: JS_HELPERS) {
+						log.info("Loading JS Helper [{}]", fileName);
+						try {
+							loadJavaScriptFrom(se, inJar, "/javascript/" + fileName, "./src/main/resources/javascript/" + fileName);
+						} catch (Exception ex) {
+							log.error("Failed to load JS Helper [{}]", fileName, ex);
+						}
+					}
+					final String expected = "{\"foo\":123}";
+					boolean jsonSupport = testScript(se, "var a = {\"foo\": 123}; JSON.stringify(a);", expected);
+					if(!jsonSupport) {
+						log.info("JSON.stringify not implemented. Loading backup");
+						loadJavaScriptFrom(se, inJar, "/javascript/json/json2.js", "./src/main/resources/javascript/json/json2.js");
+						jsonSupport = testScript(se, "var a = {'\"foo\": 123}; JSON.stringify(a);", expected);			
+					}
+					log.info("JSON.stringify supported after backup: {}", jsonSupport);
+					final long elapsed = System.currentTimeMillis() - start;
+					log.info("\n\t=====================================\n\tJSHelpers loaded in [{}] ms.\n\t=====================================\n", elapsed);
+				} catch (Exception ex) {
+					log.error("JavaScript Loader Failed !", ex);
+				}
 			}
-		}
-		final String expected = "{\"foo\":123}";
-		boolean jsonSupport = testScript(se, "var a = {\"foo\": 123}; JSON.stringify(a);", expected);
-		if(!jsonSupport) {
-			log.info("JSON.stringify not implemented. Loading backup");
-			loadJavaScriptFrom(se, inJar, "/javascript/json/json2.js", "./src/main/resources/javascript/json/json2.js");
-			jsonSupport = testScript(se, "var a = {'\"foo\": 123}; JSON.stringify(a);", expected);			
-		}
-		log.info("JSON.stringify supported after backup: {}", jsonSupport);
+		};
+		jsLoader.setDaemon(true);
+		jsLoader.start();
 	}
 		
 	
