@@ -37,7 +37,8 @@ import org.codehaus.groovy.ast.FieldNode;
 import org.codehaus.groovy.ast.PropertyNode;
 import org.codehaus.groovy.ast.expr.ClassExpression;
 import org.codehaus.groovy.ast.expr.ConstantExpression;
-import org.codehaus.groovy.ast.expr.MethodCallExpression;
+import org.codehaus.groovy.ast.expr.DeclarationExpression;
+import org.codehaus.groovy.ast.expr.Expression;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilePhase;
@@ -110,6 +111,7 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 					
 					for(AnnotationNode dep: node.getAnnotations()) {
 						if(dep.isTargetAllowed(targetNodesBitMask)) {
+							log.info("Examining Annotation [{}] on [{}].[{}]", dep.getClassNode(), classNode.getName(), node.getText());
 							final List<AnnotationNode> fixAnns = node.getAnnotations(INJ_FIXTURE_CLASS_NODE);
 							if(!fixAnns.isEmpty()) {
 								final AnnotationNode fix = fixAnns.get(0);
@@ -119,22 +121,24 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 									ce = new ClassExpression(ClassHelper.make(Object.class));
 								}
 								Class<?> clazz = ce.getType().getTypeClass();
-								log.info("Processing @InjectFixture for [{}]/[{}] on [{}].[{}]", name, clazz.getName(), classNode.getName(), node.getText());
-								if(node instanceof PropertyNode) {
+								log.info("Processing @InjectFixture for [{}]/[{}] on [{}].[{}], type: [{}]", name, clazz.getName(), classNode.getName(), node.getText(), node.getClass().getName());
+								if(node instanceof DeclarationExpression) {
+									DeclarationExpression de = (DeclarationExpression)node;
+									if(((ConstantExpression)de.getRightExpression()).getValue()==null) {
+										de.setRightExpression(FixtureCache.getMethodCallExpression(name));
+									}
+								} else if(node instanceof PropertyNode) {
 									PropertyNode pnode = (PropertyNode)node;
-									
+									log.info("Processing Property: [{}]", pnode);
 								} else if(node instanceof FieldNode) {
 									FieldNode fnode = (FieldNode)node;
 									FixtureAccessor<?> fa = FixtureCache.getInstance().get(name);
 									if(fa==null) {
 										log.warn("No fixture accessor found for Fixture Name [{}] while compiling [{}].[{}]", name, classNode.getName(), node.getText());
 									} else {
-										fnode.setType(ClassHelper.make(Object.class));
-										//fnode.setInitialValueExpression(new ConstantExpression(fa));
-										fnode.setInitialValueExpression(new MethodCallExpression());
+										fnode.setInitialValueExpression(FixtureCache.getMethodCallExpression(name));
 										//fnode.setInitialValueExpression(new ConstantExpression("Hello World !"));
-									}
-									
+									}									
 								}
 								annotationsProcessed.incrementAndGet();
 							}
@@ -148,7 +152,14 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 									ce = new ClassExpression(ClassHelper.make(Object.class));
 								}
 								Class<?> clazz = ce.getType().getTypeClass();
-								log.info("Processing @InjectFixtureResult for [{}]/[{}]", name, clazz.getName());
+								Expression argsExpr = fix.getMember("args");
+								log.info("Processing @InjectFixtureResult for [{}]/[{}] : [{}}", name, clazz.getName(), argsExpr);
+								if(node instanceof DeclarationExpression) {
+									DeclarationExpression de = (DeclarationExpression)node;
+									if(((ConstantExpression)de.getRightExpression()).getValue()==null) {
+										de.setRightExpression(FixtureCache.getParamMethodCallExpression(name, fix));
+									}
+								}								
 								annotationsProcessed.incrementAndGet();
 							}
 							

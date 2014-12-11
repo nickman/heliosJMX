@@ -29,12 +29,24 @@ import java.lang.management.ManagementFactory;
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 
+import org.codehaus.groovy.ast.AnnotationNode;
+import org.codehaus.groovy.ast.ClassHelper;
+import org.codehaus.groovy.ast.ClassNode;
+import org.codehaus.groovy.ast.expr.AnnotationConstantExpression;
+import org.codehaus.groovy.ast.expr.ArgumentListExpression;
+import org.codehaus.groovy.ast.expr.ClassExpression;
+import org.codehaus.groovy.ast.expr.ConstantExpression;
+import org.codehaus.groovy.ast.expr.Expression;
+import org.codehaus.groovy.ast.expr.ListExpression;
+import org.codehaus.groovy.ast.expr.MethodCallExpression;
+
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.heliosapm.jmx.cache.CacheStatistics;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper.MBeanEventHandler;
+import com.heliosapm.script.annotations.InjectFixtureResult;
 
 /**
  * <p>Title: FixtureCache</p>
@@ -65,6 +77,57 @@ public class FixtureCache {
 	/** The fixture cache  */
 	private final Cache<String, FixtureAccessor<?>> fixtureCache = CacheStatistics.getJMXStatisticsEnableCache(CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)), "fixtures"); 
 
+	/** The groovy ast class node for the @InjectFixtureResult annotation */
+	private static final ClassNode FIXTURE_ARGS_ANNOTATION = ClassHelper.make(InjectFixtureResult.class); 
+	
+	/**
+	 * Generates and returns a Groovy AST MethodCallExpression for accessing the named fixture invoker
+	 * @param name The name of the fixture invoker to retrieve
+	 * @return the named MethodCallExpression
+	 */
+	public static MethodCallExpression getMethodCallExpression(final String name) {
+		return new MethodCallExpression(
+				new MethodCallExpression(new ClassExpression(ClassHelper.make(FixtureCache.class)), new ConstantExpression("getInstance"), new ArgumentListExpression()),
+				new ConstantExpression("get"),
+				new ArgumentListExpression(new ConstantExpression(name)));
+	}
+	
+	/**
+	 * Generates and returns a Groovy AST MethodCallExpression for accessing the named fixture invoker
+	 * @param name The name of the fixture invoker to retrieve
+	 * @param fixtureArg The fixture arg annotation so we can extract the values
+	 * @return the named MethodCallExpression
+	 * <p>Note:  will call:  <b><code>FixutreCache.getInstance().get(name).get(Map<key, value>)</code></b> or if there are
+	 * no args, then <b><code>FixutreCache.getInstance().get(name).get()</code></b>
+	 */
+	public static MethodCallExpression getParamMethodCallExpression(final String name, final AnnotationNode fixtureArg) {
+		ArgumentListExpression fixutreArgs = new ArgumentListExpression();
+		if(fixtureArg != null) {
+			Expression ex = fixtureArg.getMember("args");   // array of FixtureArg
+			if(ex != null) {
+				for(Expression argEx: ((ListExpression)ex).getExpressions()) {
+					AnnotationConstantExpression ace = (AnnotationConstantExpression)argEx;
+					AnnotationNode an = (AnnotationNode)ace.getValue();  // One FixtureArg
+					Expression nameEx = an.getMember("name");
+					Expression valueEx = an.getMember("value");
+					Expression typeEx = an.getMember("type");
+				}				
+			}			
+		}
+		
+		/*
+		 * org.codehaus.groovy.ast.expr.ListExpression@64e21101[
+		 * 		AnnotationConstantExpression[org.codehaus.groovy.ast.AnnotationNode@32d04ffb], 
+		 * 		AnnotationConstantExpression[org.codehaus.groovy.ast.AnnotationNode@720b6da7]
+		 * ]
+		 */
+		
+		return new MethodCallExpression(
+				getMethodCallExpression(name),
+				new ConstantExpression("get"),
+				fixutreArgs);
+	}
+	
 	
 	/**
 	 * Acquires and returns the FixtureCache singleton instance
@@ -111,6 +174,7 @@ public class FixtureCache {
 	public <T> FixtureAccessor<T> get(final String fixtureName) {
 		return (FixtureAccessor<T>) fixtureCache.getIfPresent(fixtureName);
 	}
+	
 	
 
 }

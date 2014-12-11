@@ -34,6 +34,7 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -426,14 +427,17 @@ public class GroovyCompilationCustomizer {
 					 */
 					@Override
 					public void visitAnnotations(final AnnotatedNode node) {
-						for(AnnotationNode dep: node.getAnnotations()) {	
+						final Iterator<AnnotationNode> annotationIterator = node.getAnnotations().iterator();
+						while(annotationIterator.hasNext()) {
+							AnnotationNode dep = annotationIterator.next();
 							int bitMask = ElementTypeMapping.getMaskFor(dep);
 							dep.setAllowedTargets(bitMask);
 							if(dep.isTargetAllowed(AnnotationNode.TYPE_TARGET)) {
 								node.getDeclaringClass().addAnnotation(dep);
 								compilerContext.put("annotations", true);
-								log.info("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());
-							}
+								log.info("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());								
+								annotationIterator.remove();
+							}							
 						}
 						super.visitAnnotations(node);
 					}

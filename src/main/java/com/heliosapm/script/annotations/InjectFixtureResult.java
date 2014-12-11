@@ -51,6 +51,11 @@ public @interface InjectFixtureResult {
 	 * The fixture type
 	 */
 	Class<?> type() default Object.class;
+	
+	/**
+	 * The arguments to invoke a parameterized fixture
+	 */
+	FixtureArg[] args() default {};
 
 }
 

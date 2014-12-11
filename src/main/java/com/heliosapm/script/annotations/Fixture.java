@@ -37,7 +37,7 @@ import java.lang.annotation.Target;
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.script.annotations.Fixture</code></p>
  */
-@Target({ElementType.LOCAL_VARIABLE, ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
+@Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface Fixture {

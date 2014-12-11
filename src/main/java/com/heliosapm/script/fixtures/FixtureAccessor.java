@@ -167,6 +167,20 @@ public class FixtureAccessor<T>  implements FixtureAccessorMBean<T> {
 	public ObjectName getFixtureObjectName() {		
 		return fixture.getObjectName();
 	}
+
+
+	/**
+	 * {@inheritDoc}
+	 * @see java.lang.Object#toString()
+	 */
+	@Override
+	public String toString() {
+		StringBuilder builder = new StringBuilder();
+		builder.append("FixtureAccessor [");
+		builder.append("name:").append(getFixtureName()).append(", type:").append(getFixtureTypeName());
+		builder.append("]");
+		return builder.toString();
+	}
 	
 	 
 

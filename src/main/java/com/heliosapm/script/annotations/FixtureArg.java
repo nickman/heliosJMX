@@ -48,6 +48,11 @@ public @interface FixtureArg {
 	String name();
 	
 	/**
+	 * The value of the argument when used to invoke a parameterized fixture
+	 */
+	String value() default "";
+	
+	/**
 	 * The type of the argument
 	 */
 	Class<?> type() default Object.class;
