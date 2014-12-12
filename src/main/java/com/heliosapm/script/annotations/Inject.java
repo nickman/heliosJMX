@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2007, Helios Development Group and individual contributors
+ * Copyright 2014, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -31,24 +31,28 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * <p>Title: InjectFixtureResult</p>
- * <p>Description: </p> 
+ * <p>Title: Inject</p>
+ * <p>Description: Defines a resource injection into an executable script</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.annotations.InjectFixtureResult</code></p>
+ * <p><code>com.heliosapm.script.annotations.Inject</code></p>
  */
-
-@Target({ElementType.LOCAL_VARIABLE, ElementType.FIELD})
+@Target({ElementType.LOCAL_VARIABLE, ElementType.FIELD, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface InjectFixtureResult {
+public @interface Inject {
 	/**
-	 * The name of the fixture
+	 * The type of the resource injected
+	 */
+	InjectionType injectionType();
+	
+	/**
+	 * The name of the node the injection will be bound into
 	 */
 	String name();
 	
 	/**
-	 * The fixture type
+	 * The data type of the fixture invocation return value
 	 */
 	Class<?> type() default Object.class;
 	
@@ -56,6 +60,5 @@ public @interface InjectFixtureResult {
 	 * The arguments to invoke a parameterized fixture
 	 */
 	FixtureArg[] args() default {};
-
+	
 }
-

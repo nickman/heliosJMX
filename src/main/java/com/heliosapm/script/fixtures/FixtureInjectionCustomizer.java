@@ -61,19 +61,19 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 	/** A map to track what's been done during the compilation phase */
 	protected final ConcurrentHashMap<String, Object> compilerContext;
 	
-	/** The fixture annotation class node */
-	protected static final ClassNode INJ_FIXTURE_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixture.class);
-	/** The fixture param annotation class node */
-	protected static final ClassNode INJ_FIXTURE_ARG_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixture.class);
-	/** The fixture result annotation class node */
-	protected static final ClassNode INJ_FIXTURE_RES_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixtureResult.class);
-	/** The fixture result param annotation class node */
-	protected static final ClassNode INJ_FIXTURE_ARG_RES_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixture.class);
-	
-	/** The fixture annotation node */
-	protected static final AnnotationNode INJ_FIXTURE_ANNOTATION = new AnnotationNode(INJ_FIXTURE_CLASS_NODE);
-	/** The fixture param annotation node */
-	protected static final AnnotationNode INJ_FIXTURE_ARG_ANNOTATION = new AnnotationNode(INJ_FIXTURE_ARG_CLASS_NODE);
+//	/** The fixture annotation class node */
+//	protected static final ClassNode INJ_FIXTURE_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixture.class);
+//	/** The fixture param annotation class node */
+//	protected static final ClassNode INJ_FIXTURE_ARG_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixture.class);
+//	/** The fixture result annotation class node */
+//	protected static final ClassNode INJ_FIXTURE_RES_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixtureResult.class);
+//	/** The fixture result param annotation class node */
+//	protected static final ClassNode INJ_FIXTURE_ARG_RES_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixture.class);
+//	
+//	/** The fixture annotation node */
+//	protected static final AnnotationNode INJ_FIXTURE_ANNOTATION = new AnnotationNode(INJ_FIXTURE_CLASS_NODE);
+//	/** The fixture param annotation node */
+//	protected static final AnnotationNode INJ_FIXTURE_ARG_ANNOTATION = new AnnotationNode(INJ_FIXTURE_ARG_CLASS_NODE);
 	
 	
 	
@@ -112,7 +112,7 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 					for(AnnotationNode dep: node.getAnnotations()) {
 						if(dep.isTargetAllowed(targetNodesBitMask)) {
 							log.info("Examining Annotation [{}] on [{}].[{}]", dep.getClassNode(), classNode.getName(), node.getText());
-							final List<AnnotationNode> fixAnns = node.getAnnotations(INJ_FIXTURE_CLASS_NODE);
+							final List<AnnotationNode> fixAnns = node.getAnnotations(); //INJ_FIXTURE_CLASS_NODE
 							if(!fixAnns.isEmpty()) {
 								final AnnotationNode fix = fixAnns.get(0);
 								String name = ((ConstantExpression)fix.getMember("name")).getText();
@@ -143,7 +143,7 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 								annotationsProcessed.incrementAndGet();
 							}
 							fixAnns.clear();
-							fixAnns.addAll(node.getAnnotations(INJ_FIXTURE_RES_CLASS_NODE));
+							fixAnns.addAll(node.getAnnotations()); //INJ_FIXTURE_RES_CLASS_NODE
 							if(!fixAnns.isEmpty()) {
 								final AnnotationNode fix = fixAnns.get(0);
 								String name = ((ConstantExpression)fix.getMember("name")).getText();

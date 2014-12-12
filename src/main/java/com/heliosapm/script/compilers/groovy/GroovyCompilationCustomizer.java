@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 import org.codehaus.groovy.ast.AnnotatedNode;
@@ -46,8 +47,7 @@ import org.codehaus.groovy.ast.AnnotationNode;
 import org.codehaus.groovy.ast.ClassCodeVisitorSupport;
 import org.codehaus.groovy.ast.ClassHelper;
 import org.codehaus.groovy.ast.ClassNode;
-import org.codehaus.groovy.ast.expr.ClassExpression;
-import org.codehaus.groovy.ast.expr.ConstantExpression;
+import org.codehaus.groovy.ast.expr.ListExpression;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilePhase;
@@ -108,10 +108,13 @@ public class GroovyCompilationCustomizer {
 	
 	/** An import customizer added to all compiler configs */
 	protected final ImportCustomizer importCustomizer = new ImportCustomizer();
-	/** Annotation finder to find script level annotations and promote them to the class level */
-	protected final AnnotationFinder annotationFinder = new AnnotationFinder(CompilePhase.OUTPUT);  //CompilePhase.CANONICALIZATION);
-	/** Fixture processor to add the fixture fields */
-	protected final FixtureProcessor fixtureProcessor = new FixtureProcessor(CompilePhase.CANONICALIZATION);
+//	/** Annotation finder to find script level annotations and promote them to the class level */
+//	protected final AnnotationFinder annotationFinder = new AnnotationFinder(CompilePhase.OUTPUT);  //CompilePhase.CANONICALIZATION);
+//	/** Fixture processor to add the fixture fields */
+//	protected final FixtureProcessor fixtureProcessor = new FixtureProcessor(CompilePhase.CANONICALIZATION);
+	
+	/** The injection processor */
+	protected final InjectionProcessor injectionProcessor = new InjectionProcessor(CompilePhase.CANONICALIZATION);
 	
 	/** The compilation customizers to apply to the groovy compiler */
 	protected final CompilationCustomizer[] all;
@@ -127,15 +130,12 @@ public class GroovyCompilationCustomizer {
 	protected static final Pattern EOL_SPLITTER = Pattern.compile("\n");
 	/** Pattern to clean up the header line to convert into properties */
 	protected static final Pattern CLEAN_HEADER = Pattern.compile("(?:,|$)");
-	/** The fixture annotation class node */
-	protected static final ClassNode FIXTURE_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.Fixture.class);
-	/** The fixture param annotation class node */
-	protected static final ClassNode FIXTURE_ARG_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.FixtureArg.class);
-	
-	/** The fixture annotation node */
-	protected static final AnnotationNode FIXTURE_ANNOTATION = new AnnotationNode(FIXTURE_CLASS_NODE);
-	/** The fixture param annotation node */
-	protected static final AnnotationNode FIXTURE_ARG_ANNOTATION = new AnnotationNode(FIXTURE_ARG_CLASS_NODE);
+	/** The inject annotation class node */
+	protected static final ClassNode INJECT_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.Inject.class);
+	/** The inject info annotation class node */
+	protected static final ClassNode INJECT_INFO_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectInfo.class);
+	/** The groovy @Field transform class node */
+	protected static final ClassNode FIELD_CLASS_NODE = ClassHelper.make(groovy.transform.Field.class);
 	
 	
 	/** The platform EOL string */
@@ -150,7 +150,7 @@ public class GroovyCompilationCustomizer {
 		this.defaultConfig.setTolerance(0);				
 		try {
 			applyImports(imports);
-			all = new CompilationCustomizer[] {importCustomizer, annotationFinder, fixtureProcessor};
+			all = new CompilationCustomizer[] {importCustomizer, injectionProcessor};
 			this.defaultConfig.addCompilationCustomizers(all);
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
@@ -372,15 +372,24 @@ public class GroovyCompilationCustomizer {
 		defaultConfig.addCompilationCustomizers(cc);
 	}
 	
-	
-	
-	private class FixtureProcessor extends CompilationCustomizer {
+	/*
+	 * InjectInfo
+	 * 		Inject
+	 * 			InjectionType
+	 * 			name
+	 * 			type
+	 * 			args
+	 * 				name
+	 * 				value
+	 * 				type
+	 */
 
+	private class InjectionProcessor extends CompilationCustomizer {
 		/**
-		 * Creates a new FixtureProcessor
-		 * @param phase
+		 * Creates a new InjectionProcessor
+		 * @param phase the compile phase to execute in
 		 */
-		public FixtureProcessor(final CompilePhase phase) {
+		public InjectionProcessor(final CompilePhase phase) {
 			super(phase);
 		}
 
@@ -389,20 +398,54 @@ public class GroovyCompilationCustomizer {
 		 * @see org.codehaus.groovy.control.CompilationUnit.PrimaryClassNodeOperation#call(org.codehaus.groovy.control.SourceUnit, org.codehaus.groovy.classgen.GeneratorContext, org.codehaus.groovy.ast.ClassNode)
 		 */
 		@Override
-		public void call(SourceUnit source, GeneratorContext context, ClassNode classNode) throws CompilationFailedException {
-			if(!compilerContext.containsKey("annotations")) {
-				annotationFinder.call(source, context, classNode);
+		public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
+			if(compilerContext.containsKey("injections")) {
+				return;
 			}
-			if((boolean)compilerContext.get("annotations")) {
-				final List<AnnotationNode> fixAnns = classNode.getAnnotations(FIXTURE_CLASS_NODE);
-				if(!fixAnns.isEmpty()) {
-					final AnnotationNode fix = fixAnns.get(0);
-					String name = ((ConstantExpression)fix.getMember("name")).getText();
-					Class<?> clazz = ((ClassExpression)fix.getMember("type")).getType().getTypeClass();
+			try {
+				final AnnotationNode injectInfoNode = new AnnotationNode(INJECT_INFO_CLASS_NODE);
+				final ListExpression injectMembers = new ListExpression();
+				injectInfoNode.addMember("injections", injectMembers);
+				final AtomicInteger addedInjects = new AtomicInteger(0);
+				
+				final ClassCodeVisitorSupport visitor = new ClassCodeVisitorSupport() {
+					@Override
+					protected SourceUnit getSourceUnit() {
+						return source;
+					}
+					/**
+					 * {@inheritDoc}
+					 * @see org.codehaus.groovy.ast.ClassCodeVisitorSupport#visitAnnotations(org.codehaus.groovy.ast.AnnotatedNode)
+					 */
+					@Override
+					public void visitAnnotations(final AnnotatedNode node) {
+						 
+						final List<AnnotationNode> nodeAnnotations = classNode.getAnnotations();  //INJECT_CLASS_NODE
+						final Iterator<AnnotationNode> annotationIterator = nodeAnnotations.iterator();
+						if(!nodeAnnotations.isEmpty()) {
+							while(annotationIterator.hasNext()) {
+								AnnotationNode nodeAnnotation = annotationIterator.next();
+								
+							}
+//							final AnnotationNode fix = fixAnns.get(0);
+//							injectMembers.addAnnotation(fix);
+//							addedInjects.incrementAndGet();
+//							node.addAnnotation(new AnnotationNode(FIELD_CLASS_NODE));							
+						}
+						
+					}
+				};			
+				classNode.visitContents(visitor);
+				if(addedInjects.get()>0) {
+					classNode.addAnnotation(injectInfoNode);
 				}
+				
+			} finally {
+				compilerContext.putIfAbsent("injections", true);
 			}
-		}
+		}		
 	}
+	
 	
 	private class AnnotationFinder extends CompilationCustomizer {
 

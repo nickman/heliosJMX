@@ -31,24 +31,20 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * <p>Title: InjectFixture</p>
- * <p>Description: Injects a fixture into an exe script or service</p> 
+ * <p>Title: InjectInfo</p>
+<p>Description: A container annotation to hold all the injection runtime information collected
+ * by the compiler's AST transforms so that the script, or more likely, the deployment, can reflect out the data
+ * and act on it.</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.annotations.InjectFixture</code></p>
+ * <p><code>com.heliosapm.script.annotations.InjectInfo</code></p>
  */
-@Target({ElementType.LOCAL_VARIABLE, ElementType.FIELD, ElementType.METHOD})
+@Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface InjectFixture {
+public @interface InjectInfo {
 	/**
-	 * The name of the fixture
+	 * The AST transform generated injections
 	 */
-	String name();
-	
-	/**
-	 * The fixture type
-	 */
-	Class<?> type() default Object.class;
-
+	Inject[] injections() default {};
 }

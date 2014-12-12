@@ -31,7 +31,6 @@ import javax.management.ObjectName;
 
 import org.codehaus.groovy.ast.AnnotationNode;
 import org.codehaus.groovy.ast.ClassHelper;
-import org.codehaus.groovy.ast.ClassNode;
 import org.codehaus.groovy.ast.expr.AnnotationConstantExpression;
 import org.codehaus.groovy.ast.expr.ArgumentListExpression;
 import org.codehaus.groovy.ast.expr.ClassExpression;
@@ -46,7 +45,6 @@ import com.heliosapm.jmx.cache.CacheStatistics;
 import com.heliosapm.jmx.util.helpers.ConfigurationHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.jmx.util.helpers.JMXHelper.MBeanEventHandler;
-import com.heliosapm.script.annotations.InjectFixtureResult;
 
 /**
  * <p>Title: FixtureCache</p>
@@ -77,8 +75,8 @@ public class FixtureCache {
 	/** The fixture cache  */
 	private final Cache<String, FixtureAccessor<?>> fixtureCache = CacheStatistics.getJMXStatisticsEnableCache(CacheBuilder.from(ConfigurationHelper.getSystemThenEnvProperty(STATE_CACHE_PROP, STATE_CACHE_DEFAULT_SPEC)), "fixtures"); 
 
-	/** The groovy ast class node for the @InjectFixtureResult annotation */
-	private static final ClassNode FIXTURE_ARGS_ANNOTATION = ClassHelper.make(InjectFixtureResult.class); 
+//	/** The groovy ast class node for the @InjectFixtureResult annotation */
+//	private static final ClassNode FIXTURE_ARGS_ANNOTATION = ClassHelper.make(InjectFixtureResult.class); 
 	
 	/**
 	 * Generates and returns a Groovy AST MethodCallExpression for accessing the named fixture invoker

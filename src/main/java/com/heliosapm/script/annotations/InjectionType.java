@@ -24,28 +24,21 @@
  */
 package com.heliosapm.script.annotations;
 
-import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-
 /**
- * <p>Title: Scheduled</p>
- * <p>Description: Annotation to define a scheduling period on deployable scripts</p> 
+ * <p>Title: InjectionType</p>
+ * <p>Description: Defines the resource types that may be injected into a script</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.annotations.Scheduled</code></p>
+ * <p><code>com.heliosapm.script.annotations.InjectionType</code></p>
  */
 
-@Target({ElementType.TYPE, ElementType.METHOD})
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-public @interface Scheduled {
-
-	/**
-	 * The type of scheduler to be setup
-	 */
-	String value() default "d15";  // fixed delay, 15s
-	
+public enum InjectionType {
+	/** A factory that creates objects of a specific type */
+	FIXTURE,
+	/** The result of invoking against a named fixture */
+	FIXTURE_INVOCATION,
+	/** A JDBC data source */
+	DATASOURCE,
+	/** A deployed service */
+	SERVICE;
 }
