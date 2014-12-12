@@ -68,9 +68,9 @@ public class DeployedFixture<T> extends AbstractDeployedScript<Fixture<T>> imple
 		if(fixtureAnnotation!=null) {
 			fixtureName = fixtureAnnotation.name();
 			fixtureType = (Class<T>) fixtureAnnotation.type();
-			for(FixtureArg farg: fixtureAnnotation.params()) {
-				paramNameTypes.put(farg.name(), farg.type());
-			}
+//			for(FixtureArg farg: fixtureAnnotation) {
+//				paramNameTypes.put(farg.name(), farg.type());
+//			}
 		} else {
 			fixtureName = shortName;
 			fixtureType = (Class<T>) getFixtureType();

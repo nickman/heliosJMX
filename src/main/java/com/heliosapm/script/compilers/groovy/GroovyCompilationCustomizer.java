@@ -47,6 +47,9 @@ import org.codehaus.groovy.ast.AnnotationNode;
 import org.codehaus.groovy.ast.ClassCodeVisitorSupport;
 import org.codehaus.groovy.ast.ClassHelper;
 import org.codehaus.groovy.ast.ClassNode;
+import org.codehaus.groovy.ast.FieldNode;
+import org.codehaus.groovy.ast.PropertyNode;
+import org.codehaus.groovy.ast.expr.Expression;
 import org.codehaus.groovy.ast.expr.ListExpression;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
@@ -59,6 +62,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.heliosapm.jmx.util.helpers.URLHelper;
+import com.heliosapm.script.annotations.Inject;
 
 
 
@@ -106,6 +110,7 @@ public class GroovyCompilationCustomizer {
 			"import groovy.transform.*"							// Groovy AST transforms
 	};
 	
+	
 	/** An import customizer added to all compiler configs */
 	protected final ImportCustomizer importCustomizer = new ImportCustomizer();
 //	/** Annotation finder to find script level annotations and promote them to the class level */
@@ -137,6 +142,9 @@ public class GroovyCompilationCustomizer {
 	/** The groovy @Field transform class node */
 	protected static final ClassNode FIELD_CLASS_NODE = ClassHelper.make(groovy.transform.Field.class);
 	
+	/** The package name of our supported annotations */
+	public static final String ANN_PACKAGE_NAME = Inject.class.getPackage().getName();
+	
 	
 	/** The platform EOL string */
 	public static final String EOL = System.getProperty("line.separator", "\n");
@@ -157,13 +165,6 @@ public class GroovyCompilationCustomizer {
 			throw new RuntimeException(ex);
 		}
 		defaultGroovyClassLoader = new GroovyClassLoader(getClass().getClassLoader(), defaultConfig);
-	}
-	
-	/**
-	 * Clears the compiler context
-	 */
-	public void clearCompilerContext() {
-		compilerContext.clear();
 	}
 	
 	/**
@@ -420,12 +421,30 @@ public class GroovyCompilationCustomizer {
 					@Override
 					public void visitAnnotations(final AnnotatedNode node) {
 						 
-						final List<AnnotationNode> nodeAnnotations = classNode.getAnnotations();  //INJECT_CLASS_NODE
+						final List<AnnotationNode> nodeAnnotations = node.getAnnotations();  //INJECT_CLASS_NODE
 						final Iterator<AnnotationNode> annotationIterator = nodeAnnotations.iterator();
 						if(!nodeAnnotations.isEmpty()) {
 							while(annotationIterator.hasNext()) {
 								AnnotationNode nodeAnnotation = annotationIterator.next();
-								
+								if(ANN_PACKAGE_NAME.equals(nodeAnnotation.getClassNode().getPackageName())) {
+									ElementTypeMapping.setMaskFor(nodeAnnotation);
+									if(nodeAnnotation.isTargetAllowed(AnnotationNode.TYPE_TARGET)) {
+										if(classNode.getAnnotations(nodeAnnotation.getClassNode()).isEmpty()) {
+											classNode.addAnnotation(nodeAnnotation);
+											annotationIterator.remove();
+											try {
+												log.info("Applying Annotation [{}] to class level in [{}]", nodeAnnotation.getClassNode(), classNode.getDeclaringClass()); //nodeAnnotation.getClassNode().getName(), classNode.getDeclaringClass().getName());
+											} catch (Exception ex) {
+												log.info("Error Applying Annotation", ex);
+											}
+										}
+									} else {
+										if(node instanceof FieldNode || node instanceof PropertyNode || node instanceof Expression) {
+											injectMembers.addAnnotation(nodeAnnotation);											
+											log.info("Tracking InjectionInfo for annotation [{}] on {}:[{}]", nodeAnnotation.getClassNode().getName(), node.getText(), node.getClass().getSimpleName());
+										}
+									}
+								}
 							}
 //							final AnnotationNode fix = fixAnns.get(0);
 //							injectMembers.addAnnotation(fix);
@@ -505,10 +524,18 @@ public class GroovyCompilationCustomizer {
 	}
 
 	/**
-	 * Returns the 
+	 * Returns the compiler context map
 	 * @return the compilerContext
 	 */
 	public ConcurrentHashMap<String, Object> getCompilerContext() {
 		return compilerContext;
 	}
+	
+	/**
+	 * Clears the compiler context and re-adds an empty code buffer
+	 */
+	public void clearCompilerContext() {
+		compilerContext.clear();
+	}
+	
 }

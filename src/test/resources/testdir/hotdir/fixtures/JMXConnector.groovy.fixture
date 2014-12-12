@@ -1,6 +1,4 @@
-@Fixture(name="JMXConnector", type=javax.management.remote.JMXConnector.class, params=[
-	@FixtureArg(name="jmxUrl", type=java.lang.String.class)
-])
+@Fixture(name="JMXConnector", type=javax.management.remote.JMXConnector.class)
 a = 1;
 try {
 	String serviceURL = jmxConnectorServiceURL;

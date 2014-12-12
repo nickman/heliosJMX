@@ -107,6 +107,10 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 		super.initExcutable();
 	}
 	
+	protected void processAnnotations() {
+		
+	}
+	
 	/**
 	 * Updates the groovy binding from the config
 	 */

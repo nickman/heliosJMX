@@ -51,8 +51,4 @@ public @interface Fixture {
 	 */
 	Class<?> type() default Object.class;
 	
-	/**
-	 * An array of fixture argument definitions
-	 */
-	FixtureArg[] params() default {};
 }

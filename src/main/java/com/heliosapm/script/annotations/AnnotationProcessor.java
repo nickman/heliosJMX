@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2014, Helios Development Group and individual contributors
+ * Copyright 2007, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -24,41 +24,24 @@
  */
 package com.heliosapm.script.annotations;
 
-import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.Annotation;
+
+import com.heliosapm.script.DeployedScript;
 
 /**
- * <p>Title: Inject</p>
- * <p>Description: Defines a resource injection into an executable script</p> 
+ * <p>Title: AnnotationProcessor</p>
+ * <p>Description: Defines an annotation processor executed on a deployed script after executable initialization</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.annotations.Inject</code></p>
+ * <p><code>com.heliosapm.script.annotations.AnnotationProcessor</code></p>
+ * @param <T> The type of the annotation
  */
-@Target({ElementType.LOCAL_VARIABLE, ElementType.FIELD, ElementType.ANNOTATION_TYPE})
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-public @interface Inject {
+
+public interface AnnotationProcessor<T extends Annotation> {
 	/**
-	 * The type of the resource injected
+	 * Processes the passed annotation found on the executable of the pass deployed script
+	 * @param annotation The annotation instance
+	 * @param deployedScript The deployed script
 	 */
-	InjectionType injectionType();
-	
-	/**
-	 * The name of the node the injection will be bound into
-	 */
-	String name();
-	
-	/**
-	 * The data type of the fixture invocation return value
-	 */
-	Class<?> type() default Object.class;
-	
-	/**
-	 * The arguments to invoke a parameterized fixture
-	 */
-	FixtureArg[] args() default {};
-	
+	public void processAnnotation(T annotation, DeployedScript<?> deployedScript);
 }

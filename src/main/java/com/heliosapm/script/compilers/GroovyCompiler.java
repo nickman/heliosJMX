@@ -76,7 +76,6 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 	 */
 	public GroovyCompiler() {		
 		groovyShell = new GroovyShell(compilationCustomizer.getDefaultConfig());
-		compilationCustomizer.addCompilationCustomizer(new FixtureInjectionCustomizer(CompilePhase.CANONICALIZATION, compilationCustomizer.getCompilerContext()));
 	}
 	
 
@@ -123,6 +122,8 @@ public class GroovyCompiler implements DeploymentCompiler<Script> {
 			throw new CompilerException("Failed to compile source [" + source + "]", getDiagnostic(cfe),  cfe);
 		}
 	}
+	
+	
 	
 	/**
 	 * {@inheritDoc}

@@ -1,17 +1,13 @@
 /* groovy.errors.tolerance=0, groovy.output.verbose=true, groovy.output.debug=true */ 
 @Scheduled("d5")
 @Dependency(keys=["thost", "foobar"])
-@InjectFixtureResult(name="JMXConnector", args=[
-	@com.heliosapm.script.annotations.FixtureArg(name="${thost}", value="localhost"),
+@Inject(injectionType=com.heliosapm.script.annotations.InjectionType.FIXTURE, name="JMXConnector", args=[
+	@com.heliosapm.script.annotations.FixtureArg(name="thost", value="localhost"),
 	@com.heliosapm.script.annotations.FixtureArg(name="port", value="8006") 
 ])
-def connector = null;
-@InjectFixture(name="JMXConnector")
-@Field
-connectorFactory = null; //com.heliosapm.script.fixtures.FixtureCache.getInstance().get("JMXConnector");
-a = 2;
+b;
 try {
-	println "connectorFactory: $connectorFactory"; 
+	//println "connectorFactory: $connectorFactory"; 
 	tmpDir = System.getProperty("java.io.tmpdir");
 	//println "TMP: ${tmpDir}";
 	tmpl = new File(tmpDir).listFiles().length 	

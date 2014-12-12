@@ -547,6 +547,15 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		}		
 	}
 	
+	
+	/**
+	 * Executable initialization hook to process any class level annotations that
+	 * may not have been materialized during compilation
+	 */
+	protected void processAnnotations() {
+		
+	}
+	
 	/**
 	 * {@inheritDoc}
 	 * @see com.heliosapm.script.DeployedScriptMXBean#getDeploymentClassName()
