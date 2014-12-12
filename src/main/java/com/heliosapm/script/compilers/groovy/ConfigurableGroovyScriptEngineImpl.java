@@ -67,6 +67,7 @@ public class ConfigurableGroovyScriptEngineImpl extends GroovyScriptEngineImpl {
 	public CompiledScript compile(final Reader source) throws ScriptException {
 		GroovyClassLoader gcl = compilationCustomizer.getGroovyClassLoader(source); 
 		final String src = readFully(source);
+		compilationCustomizer.clearCompilerContext();
 		Class<?> clazz = gcl.parseClass(src);		
 		return new ConfigurableGroovyCompiledScript(this, clazz);
 	}

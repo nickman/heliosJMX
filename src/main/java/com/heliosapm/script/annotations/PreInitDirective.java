@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2014, Helios Development Group and individual contributors
+ * Copyright 2007, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -31,24 +31,29 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * <p>Title: InjectFixture</p>
- * <p>Description: Injects a fixture into an exe script or service</p> 
+ * <p>Title: PreInitDirective</p>
+ * <p>Description: Programmatically applied annotation that aggregates all the executable initialization
+ * directives that should be executed when the executable is prepared after compilation.</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.annotations.InjectFixture</code></p>
+ * <p><code>com.heliosapm.script.annotations.PreInitDirective</code></p>
  */
-@Target({ElementType.LOCAL_VARIABLE, ElementType.FIELD, ElementType.METHOD, ElementType.ANNOTATION_TYPE})
+@Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface InjectFixture {
+public @interface PreInitDirective {
 	/**
-	 * The name of the fixture
+	 * An array of applied @InjectFixtureResult annotations 
+	 * representing fixture executions that should be invoked
+	 * to initialize a script.
 	 */
-	String name();
-	
-	/**
-	 * The fixture type
-	 */
-	Class<?> type() default Object.class;
+	InjectFixtureResult[] fixtureResults() default {};
 
+	/**
+	 * An array of applied @InjectFixture annotations 
+	 * representing fixtures that should be acquired
+	 * to initialize a script.
+	 */
+	InjectFixture[] fixtures() default {};
+	
 }

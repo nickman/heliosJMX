@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2014, Helios Development Group and individual contributors
+ * Copyright 2007, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -24,31 +24,24 @@
  */
 package com.heliosapm.script.annotations;
 
-import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.Annotation;
+
+import com.heliosapm.script.DeployedScript;
 
 /**
- * <p>Title: InjectFixture</p>
- * <p>Description: Injects a fixture into an exe script or service</p> 
+ * <p>Title: AnnotationProcessor</p>
+ * <p>Description: Defines an annotation processor executed on a deployed script after executable initialization</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.annotations.InjectFixture</code></p>
+ * <p><code>com.heliosapm.script.annotations.AnnotationProcessor</code></p>
+ * @param <T> The type of the annotation
  */
-@Target({ElementType.LOCAL_VARIABLE, ElementType.FIELD, ElementType.METHOD, ElementType.ANNOTATION_TYPE})
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-public @interface InjectFixture {
-	/**
-	 * The name of the fixture
-	 */
-	String name();
-	
-	/**
-	 * The fixture type
-	 */
-	Class<?> type() default Object.class;
 
+public interface AnnotationProcessor<T extends Annotation> {
+	/**
+	 * Processes the passed annotation found on the executable of the pass deployed script
+	 * @param annotation The annotation instance
+	 * @param deployedScript The deployed script
+	 */
+	public void processAnnotation(T annotation, DeployedScript<?> deployedScript);
 }

@@ -38,7 +38,7 @@ import java.lang.annotation.Target;
  * <p><code>com.heliosapm.script.annotations.InjectFixtureResult</code></p>
  */
 
-@Target({ElementType.LOCAL_VARIABLE, ElementType.FIELD})
+@Target({ElementType.LOCAL_VARIABLE, ElementType.FIELD, ElementType.ANNOTATION_TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface InjectFixtureResult {

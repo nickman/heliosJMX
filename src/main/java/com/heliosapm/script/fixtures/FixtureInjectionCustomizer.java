@@ -39,6 +39,7 @@ import org.codehaus.groovy.ast.expr.ClassExpression;
 import org.codehaus.groovy.ast.expr.ConstantExpression;
 import org.codehaus.groovy.ast.expr.DeclarationExpression;
 import org.codehaus.groovy.ast.expr.Expression;
+import org.codehaus.groovy.ast.expr.MethodCallExpression;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilePhase;
@@ -46,6 +47,9 @@ import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.control.customizers.CompilationCustomizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.heliosapm.script.compilers.groovy.ElementTypeMapping;
+import com.heliosapm.script.compilers.groovy.GroovyCompilationCustomizer;
 
 /**
  * <p>Title: FixtureInjectionCustomizer</p>
@@ -58,8 +62,8 @@ import org.slf4j.LoggerFactory;
 public class FixtureInjectionCustomizer extends CompilationCustomizer {
 	/** Instance logger */
 	private final Logger log = LoggerFactory.getLogger(getClass());
-	/** A map to track what's been done during the compilation phase */
-	protected final ConcurrentHashMap<String, Object> compilerContext;
+	/** The compilation customizer */
+	protected final GroovyCompilationCustomizer gcustomizer;
 	
 	/** The fixture annotation class node */
 	protected static final ClassNode INJ_FIXTURE_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectFixture.class);
@@ -84,11 +88,11 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 	/**
 	 * Creates a new FixtureInjectionCustomizer
 	 * @param phase The compilation phase
-	 * @param compilerContext The compiler context
+	 * @param gcustomizer The compiler customizer
 	 */
-	public FixtureInjectionCustomizer(final CompilePhase phase, final ConcurrentHashMap<String, Object> compilerContext) {
+	public FixtureInjectionCustomizer(final CompilePhase phase, final GroovyCompilationCustomizer gcustomizer) {
 		super(phase);
-		this.compilerContext = compilerContext;
+		this.gcustomizer = gcustomizer;
 	}
 
 	/**
@@ -97,7 +101,7 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 	 */
 	@Override
 	public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
-		if(compilerContext.containsKey("fixtures")) return;
+		if(gcustomizer.getCompilerContext().containsKey("fixtures")) return;
 		final AtomicInteger annotationsProcessed = new AtomicInteger(0);
 		try {
 			final int targetNodesBitMask =  AnnotationNode.FIELD_TARGET | AnnotationNode.LOCAL_VARIABLE_TARGET; 
@@ -110,6 +114,7 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 				public void visitAnnotations(final AnnotatedNode node) {
 					
 					for(AnnotationNode dep: node.getAnnotations()) {
+						ElementTypeMapping.setMaskFor(dep);
 						if(dep.isTargetAllowed(targetNodesBitMask)) {
 							log.info("Examining Annotation [{}] on [{}].[{}]", dep.getClassNode(), classNode.getName(), node.getText());
 							final List<AnnotationNode> fixAnns = node.getAnnotations(INJ_FIXTURE_CLASS_NODE);
@@ -122,23 +127,17 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 								}
 								Class<?> clazz = ce.getType().getTypeClass();
 								log.info("Processing @InjectFixture for [{}]/[{}] on [{}].[{}], type: [{}]", name, clazz.getName(), classNode.getName(), node.getText(), node.getClass().getName());
-								if(node instanceof DeclarationExpression) {
-									DeclarationExpression de = (DeclarationExpression)node;
-									if(((ConstantExpression)de.getRightExpression()).getValue()==null) {
-										de.setRightExpression(FixtureCache.getMethodCallExpression(name));
+								if(node instanceof DeclarationExpression  || node instanceof FieldNode) {
+									final MethodCallExpression methodCall = FixtureCache.getMethodCallExpression(name);
+									if(node instanceof DeclarationExpression) {
+										((DeclarationExpression)node).setRightExpression(methodCall);
+									} else {
+										((FieldNode)node).setInitialValueExpression(methodCall);
 									}
 								} else if(node instanceof PropertyNode) {
 									PropertyNode pnode = (PropertyNode)node;
 									log.info("Processing Property: [{}]", pnode);
-								} else if(node instanceof FieldNode) {
-									FieldNode fnode = (FieldNode)node;
-									FixtureAccessor<?> fa = FixtureCache.getInstance().get(name);
-									if(fa==null) {
-										log.warn("No fixture accessor found for Fixture Name [{}] while compiling [{}].[{}]", name, classNode.getName(), node.getText());
-									} else {
-										fnode.setInitialValueExpression(FixtureCache.getMethodCallExpression(name));
-										//fnode.setInitialValueExpression(new ConstantExpression("Hello World !"));
-									}									
+									// FIXME:  do we need this ?
 								}
 								annotationsProcessed.incrementAndGet();
 							}
@@ -154,6 +153,24 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 								Class<?> clazz = ce.getType().getTypeClass();
 								Expression argsExpr = fix.getMember("args");
 								log.info("Processing @InjectFixtureResult for [{}]/[{}] : [{}}", name, clazz.getName(), argsExpr);
+								//=====================================================================================================
+								//=====================================================================================================
+//								Fixture Name / Type
+//								FixtureArgs
+//									Name / Value / Type
+								
+//								compilerContext.put(POSTINIT_CODE_BUFFER , new StringBuilder());
+//								compilerContext.put(POSTINIT_FIXTURES, new HashSet<AnnotationNode>());
+//								compilerContext.put(POSTINIT_FIXTURE_RESULTS, new HashSet<AnnotationNode>());		
+								
+								
+								/* Handling a fixture result injection:
+								 * 1. Add dependency key for each fixture arg
+								 * 2. If dependencies are closed, invoke the fixture and assign the value to the annotated field
+								 * 
+								 */
+								//=====================================================================================================
+								//=====================================================================================================
 								if(node instanceof DeclarationExpression) {
 									DeclarationExpression de = (DeclarationExpression)node;
 									if(((ConstantExpression)de.getRightExpression()).getValue()==null) {
@@ -168,9 +185,9 @@ public class FixtureInjectionCustomizer extends CompilationCustomizer {
 					super.visitAnnotations(node);
 				}
 			});		
-			compilerContext.putIfAbsent("fixtures", annotationsProcessed.get() > 0);
+			gcustomizer.getCompilerContext().putIfAbsent("fixtures", annotationsProcessed.get() > 0);
 		} finally {
-			compilerContext.putIfAbsent("fixtures", false);
+			gcustomizer.getCompilerContext().putIfAbsent("fixtures", false);
 		}
 		
 	}

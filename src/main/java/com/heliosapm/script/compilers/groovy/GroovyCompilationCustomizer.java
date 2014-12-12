@@ -106,6 +106,13 @@ public class GroovyCompilationCustomizer {
 			"import groovy.transform.*"							// Groovy AST transforms
 	};
 	
+	/** The compiler context post-init code buffer key */
+	public static final String POSTINIT_CODE_BUFFER = "post-code-buffer";
+	/** The compiler context post-init fixture initializers key */
+	public static final String POSTINIT_FIXTURES = "post-fixtures";
+	/** The compiler context post-init fixture result initializers key */
+	public static final String POSTINIT_FIXTURE_RESULTS = "post-fixture-results";
+	
 	/** An import customizer added to all compiler configs */
 	protected final ImportCustomizer importCustomizer = new ImportCustomizer();
 	/** Annotation finder to find script level annotations and promote them to the class level */
@@ -146,6 +153,10 @@ public class GroovyCompilationCustomizer {
 	 * Creates a new GroovyCompilationCustomizer
 	 */
 	public GroovyCompilationCustomizer() {
+		compilerContext.put(POSTINIT_CODE_BUFFER , new StringBuilder());
+		compilerContext.put(POSTINIT_FIXTURES, new HashSet<AnnotationNode>());
+		compilerContext.put(POSTINIT_FIXTURE_RESULTS, new HashSet<AnnotationNode>());
+
 		this.defaultConfig = new CompilerConfiguration(CompilerConfiguration.DEFAULT);
 		this.defaultConfig.setTolerance(0);				
 		try {
@@ -160,10 +171,21 @@ public class GroovyCompilationCustomizer {
 	}
 	
 	/**
-	 * Clears the compiler context
+	 * Adds a post-init @InjectFixture annotation to the class level aggregator
+	 * @param annotation The annotation node to reference
+	 * @param node The node that was annotated
 	 */
-	public void clearCompilerContext() {
-		compilerContext.clear();
+	public void addFixture(final AnnotationNode annotation, final AnnotatedNode node) {
+		
+	}
+	
+	/**
+	 * Adds a post-init @InjectFixtureResult annotation to the class level aggregator
+	 * @param annotation The annotation node to reference
+	 * @param node The node that was annotated
+	 */
+	public void addFixtureResult(final AnnotationNode annotation, final AnnotatedNode node) {
+		
 	}
 	
 	/**
@@ -462,10 +484,21 @@ public class GroovyCompilationCustomizer {
 	}
 
 	/**
-	 * Returns the 
+	 * Returns the compiler context map
 	 * @return the compilerContext
 	 */
 	public ConcurrentHashMap<String, Object> getCompilerContext() {
 		return compilerContext;
 	}
+	
+	/**
+	 * Clears the compiler context and re-adds an empty code buffer
+	 */
+	public void clearCompilerContext() {
+		compilerContext.clear();
+		compilerContext.put(POSTINIT_CODE_BUFFER , new StringBuilder());
+		compilerContext.put(POSTINIT_FIXTURES, new HashSet<AnnotationNode>());
+		compilerContext.put(POSTINIT_FIXTURE_RESULTS, new HashSet<AnnotationNode>());		
+	}
+	
 }

@@ -10,6 +10,8 @@ def connector = null;
 @Field
 connectorFactory = null; //com.heliosapm.script.fixtures.FixtureCache.getInstance().get("JMXConnector");
 a = 2;
+@InjectFixture(name="JMXConnector")
+b;
 try {
 	println "connectorFactory: $connectorFactory"; 
 	tmpDir = System.getProperty("java.io.tmpdir");
