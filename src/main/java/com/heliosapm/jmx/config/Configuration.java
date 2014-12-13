@@ -342,7 +342,7 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 	 * @param key The key of the dependency
 	 * @param type The type that the dependency value must be of to satisfy the dependency
 	 */
-	private void addDependency(final String key, final Class<?> type) {
+	public void addDependency(final String key, final Class<?> type) {
 		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
 		final String _key = key.trim();		
 		dependencies.put(_key, type==null ? Object.class : type);
@@ -380,6 +380,7 @@ public class Configuration implements Bindings, NotificationListener, Notificati
 			addDependency(deps.value());
 		}
 	}
+
 	
 	/**
 	 * Returns a config map with the values types as closely as possible

@@ -24,6 +24,9 @@
  */
 package com.heliosapm.script.annotations;
 
+import groovy.transform.AnnotationCollector;
+import groovy.transform.Field;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -47,9 +50,15 @@ public @interface Inject {
 	InjectionType injectionType();
 	
 	/**
-	 * The name of the node the injection will be bound into
+	 * The name of the resource to be injected
 	 */
 	String name();
+	
+	/**
+	 * The name of the node the injection will be bound into
+	 */
+	String fieldName();
+	
 	
 	/**
 	 * The data type of the fixture invocation return value

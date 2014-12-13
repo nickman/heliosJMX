@@ -122,6 +122,20 @@ public class ArrayUtils {
 	}
 	
 	/**
+	 * Returns the base type of an array type
+	 * @param type The array type
+	 * @return The base type
+	 */
+	public static Class<?> getArrayTypeBaseType(final Class<?> type) {
+		if(!type.isArray()) return type;
+		Class<?> nextType = type.getComponentType();
+		while(nextType.isArray()) {
+			nextType = nextType.getComponentType();
+		}
+		return nextType;
+	}
+	
+	/**
 	 * Flattens a [possibly multi-dimensional] array into a one dimensional array.
 	 * If the object is not an array, will throw an {@link IllegalArgumentException}.
 	 * @param arr The array object to flatten

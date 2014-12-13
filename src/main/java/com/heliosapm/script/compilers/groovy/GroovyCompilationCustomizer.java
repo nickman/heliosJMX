@@ -31,6 +31,7 @@ import java.io.File;
 import java.io.Reader;
 import java.io.StringReader;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -42,14 +43,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
+import org.codehaus.groovy.ast.ASTNode;
 import org.codehaus.groovy.ast.AnnotatedNode;
 import org.codehaus.groovy.ast.AnnotationNode;
 import org.codehaus.groovy.ast.ClassCodeVisitorSupport;
 import org.codehaus.groovy.ast.ClassHelper;
 import org.codehaus.groovy.ast.ClassNode;
 import org.codehaus.groovy.ast.FieldNode;
-import org.codehaus.groovy.ast.PropertyNode;
-import org.codehaus.groovy.ast.expr.Expression;
+import org.codehaus.groovy.ast.Variable;
+import org.codehaus.groovy.ast.expr.AnnotationConstantExpression;
+import org.codehaus.groovy.ast.expr.ConstantExpression;
+import org.codehaus.groovy.ast.expr.DeclarationExpression;
 import org.codehaus.groovy.ast.expr.ListExpression;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
@@ -58,6 +62,7 @@ import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.control.customizers.CompilationCustomizer;
 import org.codehaus.groovy.control.customizers.ImportCustomizer;
+import org.codehaus.groovy.transform.FieldASTTransformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -119,13 +124,16 @@ public class GroovyCompilationCustomizer {
 //	protected final FixtureProcessor fixtureProcessor = new FixtureProcessor(CompilePhase.CANONICALIZATION);
 	
 	/** The injection processor */
-	protected final InjectionProcessor injectionProcessor = new InjectionProcessor(CompilePhase.CANONICALIZATION);
+	protected final InjectionProcessor injectionProcessor = new InjectionProcessor(CompilePhase.SEMANTIC_ANALYSIS); //CANONICALIZATION
+	//protected final FieldTransformer fieldTransformer = new FieldTransformer(CompilePhase.SEMANTIC_ANALYSIS);
+	protected final FieldASTTransformation fieldTransformer = new FieldASTTransformation();
 	
 	/** The compilation customizers to apply to the groovy compiler */
 	protected final CompilationCustomizer[] all;
 	
 	/** A map to track what's been done during the compilation phase */
 	protected final ConcurrentHashMap<String, Object> compilerContext = new ConcurrentHashMap<String, Object>();
+	
 	
 	
 	/** The default groovy class loader returned if no compilation customizations are found */
@@ -141,7 +149,8 @@ public class GroovyCompilationCustomizer {
 	protected static final ClassNode INJECT_INFO_CLASS_NODE = ClassHelper.make(com.heliosapm.script.annotations.InjectInfo.class);
 	/** The groovy @Field transform class node */
 	protected static final ClassNode FIELD_CLASS_NODE = ClassHelper.make(groovy.transform.Field.class);
-	
+	/** The groovy @Field transform annotation */
+	protected static final AnnotationNode FIELD_CLASS_ANNOTATION = new AnnotationNode(FIELD_CLASS_NODE);
 	/** The package name of our supported annotations */
 	public static final String ANN_PACKAGE_NAME = Inject.class.getPackage().getName();
 	
@@ -373,18 +382,35 @@ public class GroovyCompilationCustomizer {
 		defaultConfig.addCompilationCustomizers(cc);
 	}
 	
-	/*
-	 * InjectInfo
-	 * 		Inject
-	 * 			InjectionType
-	 * 			name
-	 * 			type
-	 * 			args
-	 * 				name
-	 * 				value
-	 * 				type
-	 */
 
+	private class FieldTransformer extends CompilationCustomizer {
+		/**
+		 * Creates a new FieldTransformer
+		 * @param phase The compile phase
+		 */
+		public FieldTransformer(final CompilePhase phase) {
+			super(phase);
+		}
+
+		@Override
+		public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
+			if(compilerContext.containsKey("fields")) {
+				return;
+			}
+			try {
+				final FieldASTTransformation visitor = new FieldASTTransformation() {
+					@Override
+					protected SourceUnit getSourceUnit() {
+						return source;
+					}
+
+				};
+			} finally {
+				compilerContext.putIfAbsent("fields", true);
+			}
+		}
+	}
+	
 	private class InjectionProcessor extends CompilationCustomizer {
 		/**
 		 * Creates a new InjectionProcessor
@@ -420,10 +446,11 @@ public class GroovyCompilationCustomizer {
 					 */
 					@Override
 					public void visitAnnotations(final AnnotatedNode node) {
-						 
+						List<AnnotationNode> annotationsToAddToNode = new ArrayList<AnnotationNode>();
 						final List<AnnotationNode> nodeAnnotations = node.getAnnotations();  //INJECT_CLASS_NODE
 						final Iterator<AnnotationNode> annotationIterator = nodeAnnotations.iterator();
 						if(!nodeAnnotations.isEmpty()) {
+							
 							while(annotationIterator.hasNext()) {
 								AnnotationNode nodeAnnotation = annotationIterator.next();
 								if(ANN_PACKAGE_NAME.equals(nodeAnnotation.getClassNode().getPackageName())) {
@@ -439,19 +466,24 @@ public class GroovyCompilationCustomizer {
 											}
 										}
 									} else {
-										if(node instanceof FieldNode || node instanceof PropertyNode || node instanceof Expression) {
-											injectMembers.addAnnotation(nodeAnnotation);											
+										if(node instanceof Variable || node instanceof DeclarationExpression) {
+											final Variable var = (node instanceof Variable) ? (Variable)node : ((DeclarationExpression)node).getVariableExpression().getAccessedVariable(); 
+											final String nodeName = var.getName();
+											nodeAnnotation.setMember("fieldName", new ConstantExpression(nodeName));
+											fieldTransformer.visit(new ASTNode[] {FIELD_CLASS_ANNOTATION, node}, source);
+											injectMembers.addExpression(new AnnotationConstantExpression(nodeAnnotation));
+											addedInjects.incrementAndGet();
 											log.info("Tracking InjectionInfo for annotation [{}] on {}:[{}]", nodeAnnotation.getClassNode().getName(), node.getText(), node.getClass().getSimpleName());
 										}
 									}
 								}
 							}
+							node.getAnnotations().addAll(annotationsToAddToNode);
 //							final AnnotationNode fix = fixAnns.get(0);
 //							injectMembers.addAnnotation(fix);
 //							addedInjects.incrementAndGet();
 //							node.addAnnotation(new AnnotationNode(FIELD_CLASS_NODE));							
 						}
-						
 					}
 				};			
 				classNode.visitContents(visitor);
@@ -466,51 +498,51 @@ public class GroovyCompilationCustomizer {
 	}
 	
 	
-	private class AnnotationFinder extends CompilationCustomizer {
-
-		public AnnotationFinder(final CompilePhase cp) {
-			super(cp);
-		}
-
-		@Override
-		public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
-			try {
-				if(compilerContext.containsKey("annotations")) {
-					return;
-				}
-				final ClassCodeVisitorSupport visitor = new ClassCodeVisitorSupport() {
-					@Override
-					protected SourceUnit getSourceUnit() {
-						return source;
-					}
-					/**
-					 * {@inheritDoc}
-					 * @see org.codehaus.groovy.ast.ClassCodeVisitorSupport#visitAnnotations(org.codehaus.groovy.ast.AnnotatedNode)
-					 */
-					@Override
-					public void visitAnnotations(final AnnotatedNode node) {
-						final Iterator<AnnotationNode> annotationIterator = node.getAnnotations().iterator();
-						while(annotationIterator.hasNext()) {
-							AnnotationNode dep = annotationIterator.next();
-							int bitMask = ElementTypeMapping.getMaskFor(dep);
-							dep.setAllowedTargets(bitMask);
-							if(dep.isTargetAllowed(AnnotationNode.TYPE_TARGET)) {
-								node.getDeclaringClass().addAnnotation(dep);
-								compilerContext.put("annotations", true);
-								log.info("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());								
-								annotationIterator.remove();
-							}							
-						}
-						super.visitAnnotations(node);
-					}
-				};
-				classNode.visitContents(visitor);
-			} finally {
-				compilerContext.putIfAbsent("annotations", true);
-			}
-		}
-		
-	}
+//	private class AnnotationFinder extends CompilationCustomizer {
+//
+//		public AnnotationFinder(final CompilePhase cp) {
+//			super(cp);
+//		}
+//
+//		@Override
+//		public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
+//			try {
+//				if(compilerContext.containsKey("annotations")) {
+//					return;
+//				}
+//				final ClassCodeVisitorSupport visitor = new ClassCodeVisitorSupport() {
+//					@Override
+//					protected SourceUnit getSourceUnit() {
+//						return source;
+//					}
+//					/**
+//					 * {@inheritDoc}
+//					 * @see org.codehaus.groovy.ast.ClassCodeVisitorSupport#visitAnnotations(org.codehaus.groovy.ast.AnnotatedNode)
+//					 */
+//					@Override
+//					public void visitAnnotations(final AnnotatedNode node) {
+//						final Iterator<AnnotationNode> annotationIterator = node.getAnnotations().iterator();
+//						while(annotationIterator.hasNext()) {
+//							AnnotationNode dep = annotationIterator.next();
+//							int bitMask = ElementTypeMapping.getMaskFor(dep);
+//							dep.setAllowedTargets(bitMask);
+//							if(dep.isTargetAllowed(AnnotationNode.TYPE_TARGET)) {
+//								node.getDeclaringClass().addAnnotation(dep);
+//								compilerContext.put("annotations", true);
+//								log.info("Applying Annotation [{}] to class level in [{}]", dep.getClassNode().getName(), node.getDeclaringClass().getName());								
+//								annotationIterator.remove();
+//							}							
+//						}
+//						super.visitAnnotations(node);
+//					}
+//				};
+//				classNode.visitContents(visitor);
+//			} finally {
+//				compilerContext.putIfAbsent("annotations", true);
+//			}
+//		}
+//		
+//	}
 
 
 

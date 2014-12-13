@@ -7,6 +7,8 @@
 ])
 b;
 try {
+	if(b!=null) println "Injected b: $b";
+	else println "b is still null";
 	//println "connectorFactory: $connectorFactory"; 
 	tmpDir = System.getProperty("java.io.tmpdir");
 	//println "TMP: ${tmpDir}";

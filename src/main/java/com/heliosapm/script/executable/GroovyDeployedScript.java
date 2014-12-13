@@ -29,7 +29,11 @@ import groovy.lang.MetaMethod;
 import groovy.lang.MetaProperty;
 import groovy.lang.Script;
 
+import java.beans.PropertyEditor;
+import java.beans.PropertyEditorManager;
 import java.io.File;
+import java.lang.annotation.Annotation;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -38,7 +42,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.heliosapm.script.AbstractDeployedScript;
 import com.heliosapm.script.annotations.Dependencies;
 import com.heliosapm.script.annotations.Dependency;
+import com.heliosapm.script.annotations.FixtureArg;
+import com.heliosapm.script.annotations.Inject;
+import com.heliosapm.script.annotations.InjectInfo;
 import com.heliosapm.script.annotations.Scheduled;
+import com.heliosapm.script.fixtures.Fixture;
+import com.heliosapm.script.fixtures.FixtureCache;
 
 /**
  * <p>Title: GroovyDeployedScript</p>
@@ -88,17 +97,7 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 				}
 				updateBindings();
 				executable.setBinding(binding);
-				config.addDependency(executable.getClass().getAnnotation(Dependencies.class));
-				config.addDependency(executable.getClass().getAnnotation(Dependency.class));
-				
-				final Scheduled scheduled = executable.getClass().getAnnotation(Scheduled.class);
-				if(scheduled!=null) {
-					this.setExecutionSchedule(scheduled.value());
-				}
-				final com.heliosapm.script.annotations.Fixture fixture = executable.getClass().getAnnotation(com.heliosapm.script.annotations.Fixture.class);
-				if(fixture!=null) {
-					
-				}
+				processAnnotations();
 				
 			} catch (Exception ex) {
 				ex.printStackTrace(System.err);
@@ -108,7 +107,86 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 	}
 	
 	protected void processAnnotations() {
+		for(Annotation ann: executable.getClass().getAnnotations()) {
+			log.info("Annotation Found: {}", ann.annotationType().getName());
+		}
+		config.addDependency(executable.getClass().getAnnotation(Dependencies.class));
+		config.addDependency(executable.getClass().getAnnotation(Dependency.class));
 		
+		final Scheduled scheduled = executable.getClass().getAnnotation(Scheduled.class);
+		if(scheduled!=null) {
+			this.setExecutionSchedule(scheduled.value());
+		}
+		/*
+		 * InjectInfo
+		 * 		Inject
+		 * 			InjectionType
+		 * 			name
+		 * 			type
+		 * 			args
+		 * 				name
+		 * 				value
+		 * 				type
+		 */
+		final InjectInfo injectInfo = executable.getClass().getAnnotation(InjectInfo.class);
+		Fixture<?> fixture = null;
+		if(injectInfo!=null) {
+			log.info("InjectInfo:\n{}", injectInfo);
+			for(Inject inject : injectInfo.injections()) {
+				log.info("Inject:\n{}", inject);
+				switch(inject.injectionType()) {
+				case DATASOURCE:
+					break;
+				case FIXTURE:
+					fixture = FixtureCache.getInstance().get(inject.name());
+					if(fixture!=null) {
+						log.info("Injecting Fixture [{}] into [{}]", inject.name(), inject.fieldName());
+						executable.getMetaClass().setAttribute(executable, inject.fieldName(), fixture);
+					}
+					break;
+				case FIXTURE_INVOCATION:
+					fixture = FixtureCache.getInstance().get(inject.name());
+					if(fixture!=null) {
+						Object fixtureResult = null;
+						final FixtureArg[] fParams = inject.args();
+						if(fParams.length==0) {
+							fixtureResult = fixture.get();
+						} else {
+							Map<String, Object> fargs = new HashMap<String, Object>();
+							for(FixtureArg f: fParams) {
+								String fname = f.name();								
+								Class<?> ftype = f.type();
+								config.addDependency(fname, ftype);
+								String fvalue = f.value();
+								Object fobj = null;
+								if(fvalue.trim().isEmpty()) {
+									// get from config
+									fobj = config.get(fname);
+									if(fobj==null) continue;
+								} else {
+									fvalue = fvalue.trim();
+									PropertyEditor pe = PropertyEditorManager.findEditor(ftype);
+									if(pe==null) throw new RuntimeException("No property editor found for class [" + ftype.getClass().getName() + "]");
+									pe.setAsText(fvalue.trim()); 
+									fobj = pe.getValue();									
+								}
+								
+								
+							}
+							fixtureResult = fixture.get(fargs);
+							executable.getMetaClass().setAttribute(executable, inject.fieldName(), fixtureResult);
+						}
+					}
+					break;
+				case SERVICE:
+					break;
+				default:
+					log.warn("Unrecognized InjectionType: {}", inject.injectionType());
+					break;
+				
+				}
+			}
+		}		
 	}
 	
 	/**

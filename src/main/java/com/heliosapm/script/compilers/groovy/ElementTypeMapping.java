@@ -27,11 +27,10 @@ package com.heliosapm.script.compilers.groovy;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Target;
-import java.lang.ref.WeakReference;
-import java.util.Map;
 
-import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.codehaus.groovy.ast.AnnotationNode;
+
+import com.heliosapm.jmx.util.helpers.AnnotationHelper;
 
 /**
  * <p>Title: ElementTypeMapping</p>
@@ -67,8 +66,6 @@ public enum ElementTypeMapping {
     /** The mapping mask */
     public final int mask;
     
-    /** A cache of annotation classes keyed by the classname */
-    private static final Map<String,WeakReference<Class<? extends Annotation>>> classMap = new NonBlockingHashMap<String,WeakReference<Class<? extends Annotation>>>();
     
     
     /**
@@ -98,7 +95,7 @@ public enum ElementTypeMapping {
     	String annotationClassName = node.getClassNode().getName();
     	Class<? extends Annotation> annClass = null;
     	try {
-    		annClass = classForName(annotationClassName);
+    		annClass = AnnotationHelper.classForName(annotationClassName);
     	} catch (Exception ex) {
     		throw new RuntimeException("Failed to class load [" + annotationClassName + "]", ex);
     	}
@@ -123,25 +120,4 @@ public enum ElementTypeMapping {
 	}
 	
     
-    /**
-     * Retrieves the annotation class for the passed class name
-     * @param className The name of the annotation class
-     * @return The annotation class
-     * @throws ClassNotFoundException thrown if the named class cannot be loaded
-     */
-	public static Class<? extends Annotation> classForName(final String className) throws ClassNotFoundException {
-    	if(className==null || className.trim().isEmpty()) throw new IllegalArgumentException("The passed classname was null or empty");
-    	WeakReference<Class<? extends Annotation>> annotationClass = classMap.get(className.trim());
-    	if(annotationClass == null || annotationClass.get()==null) {
-    		synchronized(classMap) {
-    			annotationClass = classMap.get(className.trim());
-    	    	if(annotationClass == null || annotationClass.get()==null) {
-    	    		Class<? extends Annotation> clazz = (Class<? extends Annotation>)Class.forName(className); 
-    	    		annotationClass = new WeakReference<Class<? extends Annotation>>(clazz); 
-    	    		classMap.put(className.trim(), annotationClass);
-    	    	}
-    		}
-    	}
-    	return annotationClass.get();
-    }
 }
