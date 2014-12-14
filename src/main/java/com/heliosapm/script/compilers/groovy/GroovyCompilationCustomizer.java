@@ -24,6 +24,7 @@
  */
 package com.heliosapm.script.compilers.groovy;
 
+import groovy.lang.Closure;
 import groovy.lang.GroovyClassLoader;
 
 import java.io.BufferedReader;
@@ -49,7 +50,6 @@ import org.codehaus.groovy.ast.AnnotationNode;
 import org.codehaus.groovy.ast.ClassCodeVisitorSupport;
 import org.codehaus.groovy.ast.ClassHelper;
 import org.codehaus.groovy.ast.ClassNode;
-import org.codehaus.groovy.ast.FieldNode;
 import org.codehaus.groovy.ast.Variable;
 import org.codehaus.groovy.ast.expr.AnnotationConstantExpression;
 import org.codehaus.groovy.ast.expr.ConstantExpression;
@@ -62,6 +62,7 @@ import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.control.customizers.CompilationCustomizer;
 import org.codehaus.groovy.control.customizers.ImportCustomizer;
+import org.codehaus.groovy.control.customizers.SourceAwareCustomizer;
 import org.codehaus.groovy.transform.FieldASTTransformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,7 +113,8 @@ public class GroovyCompilationCustomizer {
 			"import com.heliosapm.script.annotations.*",		// configuration annotations
 			"import javax.management.*", 						// JMX Core
 			"import javax.management.remote.*", 				// JMX Remoting
-			"import groovy.transform.*"							// Groovy AST transforms
+			"import groovy.transform.*",						// Groovy AST transforms
+			"import com.heliosapm.jmx.remote.tunnel.*"			// SSH Options
 	};
 	
 	
@@ -127,6 +129,8 @@ public class GroovyCompilationCustomizer {
 	protected final InjectionProcessor injectionProcessor = new InjectionProcessor(CompilePhase.SEMANTIC_ANALYSIS); //CANONICALIZATION
 	//protected final FieldTransformer fieldTransformer = new FieldTransformer(CompilePhase.SEMANTIC_ANALYSIS);
 	protected final FieldASTTransformation fieldTransformer = new FieldASTTransformation();
+	
+	protected final SourceAwareCustomizer importAwareSourceCustomizer = new SourceAwareCustomizer(importCustomizer); 
 	
 	/** The compilation customizers to apply to the groovy compiler */
 	protected final CompilationCustomizer[] all;
@@ -167,7 +171,28 @@ public class GroovyCompilationCustomizer {
 		this.defaultConfig.setTolerance(0);				
 		try {
 			applyImports(imports);
-			all = new CompilationCustomizer[] {importCustomizer, injectionProcessor};
+			final Closure<Boolean> allValidator = new Closure<Boolean>(this) {
+				@Override
+				public Boolean call() {					
+					return true;
+				}
+				
+				public Boolean doCall(SourceUnit su) {
+					return true;
+				}
+				public Boolean doCall(ClassNode clazz) {
+					return true;
+				}
+				public Boolean doCall(String baseName) {
+					return true;
+				}
+				
+				
+			}; 
+			importAwareSourceCustomizer.setSourceUnitValidator(allValidator);
+			importAwareSourceCustomizer.setClassValidator(allValidator);
+			importAwareSourceCustomizer.setBaseNameValidator(allValidator);
+			all = new CompilationCustomizer[] {importAwareSourceCustomizer, importCustomizer, injectionProcessor};
 			this.defaultConfig.addCompilationCustomizers(all);
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
@@ -426,6 +451,7 @@ public class GroovyCompilationCustomizer {
 		 */
 		@Override
 		public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
+			source.getConfiguration().addCompilationCustomizers(importCustomizer);
 			if(compilerContext.containsKey("injections")) {
 				return;
 			}

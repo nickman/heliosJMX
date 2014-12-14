@@ -53,7 +53,12 @@ public @interface FixtureArg {
 	String value() default "";
 	
 	/**
+	 * Indicates if this argument is optional for the fixture to attempt to generate an object for the caller
+	 */
+	boolean optional() default true;
+	
+	/**
 	 * The type of the argument
 	 */
-	Class<?> type() default Object.class;
+	Class<?> type() default String.class;
 }

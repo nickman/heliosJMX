@@ -1,11 +1,11 @@
-@Fixture(name="JMXConnector", type=javax.management.remote.JMXConnector.class, params=[
+@Fixture(name="JMXMP_JMXConnector", type=javax.management.remote.JMXConnector.class, params=[
 	@FixtureArg(name="HOST", optional=false),
 	@FixtureArg(name="PORT", optional=false)
 ])
 a = 1;
 try {
 	//b = new StringBuilder("service:jmx:jmxmp://$HOST:$PORT")
-	String serviceURL = "service:jmx:rmi://$HOST:$PORT";
+	String serviceURL = "service:jmx:jmxmp://$HOST:$PORT";
 	surl = new JMXServiceURL(serviceURL);
 	return JMXConnectorFactory.connect(surl);
 } catch (e) {

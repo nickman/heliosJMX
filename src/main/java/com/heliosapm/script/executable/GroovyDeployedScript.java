@@ -128,8 +128,7 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 		 * 				value
 		 * 				type
 		 */
-		final InjectInfo injectInfo = executable.getClass().getAnnotation(InjectInfo.class);
-		Fixture<?> fixture = null;
+		final InjectInfo injectInfo = executable.getClass().getAnnotation(InjectInfo.class);		
 		if(injectInfo!=null) {
 			log.info("InjectInfo:\n{}", injectInfo);
 			for(Inject inject : injectInfo.injections()) {
@@ -138,45 +137,10 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 				case DATASOURCE:
 					break;
 				case FIXTURE:
-					fixture = FixtureCache.getInstance().get(inject.name());
-					if(fixture!=null) {
-						log.info("Injecting Fixture [{}] into [{}]", inject.name(), inject.fieldName());
-						executable.getMetaClass().setAttribute(executable, inject.fieldName(), fixture);
-					}
+					processFixture(inject);
 					break;
 				case FIXTURE_INVOCATION:
-					fixture = FixtureCache.getInstance().get(inject.name());
-					if(fixture!=null) {
-						Object fixtureResult = null;
-						final FixtureArg[] fParams = inject.args();
-						if(fParams.length==0) {
-							fixtureResult = fixture.get();
-						} else {
-							Map<String, Object> fargs = new HashMap<String, Object>();
-							for(FixtureArg f: fParams) {
-								String fname = f.name();								
-								Class<?> ftype = f.type();
-								config.addDependency(fname, ftype);
-								String fvalue = f.value();
-								Object fobj = null;
-								if(fvalue.trim().isEmpty()) {
-									// get from config
-									fobj = config.get(fname);
-									if(fobj==null) continue;
-								} else {
-									fvalue = fvalue.trim();
-									PropertyEditor pe = PropertyEditorManager.findEditor(ftype);
-									if(pe==null) throw new RuntimeException("No property editor found for class [" + ftype.getClass().getName() + "]");
-									pe.setAsText(fvalue.trim()); 
-									fobj = pe.getValue();									
-								}
-								
-								
-							}
-							fixtureResult = fixture.get(fargs);
-							executable.getMetaClass().setAttribute(executable, inject.fieldName(), fixtureResult);
-						}
-					}
+					processFixtureInvocation(inject);
 					break;
 				case SERVICE:
 					break;
@@ -187,6 +151,80 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 				}
 			}
 		}		
+	}
+
+
+	/**
+	 * Processes a fixture
+
+
+	 * @param inject The injection annotation
+	 */
+	protected void processFixture(final Inject inject) {
+		Fixture<?> fixture;
+		fixture = FixtureCache.getInstance().get(inject.name());
+		if(fixture!=null) {
+			log.info("Injecting Fixture [{}] into [{}]", inject.name(), inject.fieldName());
+			executable.getMetaClass().setAttribute(executable, inject.fieldName(), fixture);
+		}
+	}
+
+
+	/**
+	 * Processes a fixture invocation
+	 * @param inject The injection annotation
+	 */
+	protected void processFixtureInvocation(Inject inject) {
+		Fixture<?> fixture;
+		fixture = FixtureCache.getInstance().get(inject.name());
+		if(fixture!=null) {
+			Object fixtureResult = null;
+			final FixtureArg[] fParams = inject.args();
+			if(fParams.length==0) {
+				fixtureResult = fixture.get();
+			} else {
+				Map<String, Object> fargs = new HashMap<String, Object>();
+				for(FixtureArg f: fParams) {
+					String fname = f.name();		// The parameter key	
+					String fvalue = f.value();		// The parameter value
+					Class<?> ftype = f.type();		// The parameter type
+					if(!f.optional()) {
+						config.addDependency(fname, ftype);
+					}
+					Object fobj = null;				// The resolved value
+					/*
+					 * If value is non-empty, use it as the arg value
+					 * 	if type is CharSequence, use as is,
+					 *  otherwise use property edior
+					 * 
+					 * If value is empty, get the value from config using the parameter key
+					 */
+					if(fvalue.isEmpty()) {
+						// =========================================
+						// get from config
+						// =========================================
+						fobj = config.get(fname);
+						if(fobj==null) {
+							fobj = "";
+						}
+					} else {
+						fvalue = fvalue.trim();
+						if(CharSequence.class.isAssignableFrom(ftype)) {
+							fobj = fvalue;
+						} else {
+							PropertyEditor pe = PropertyEditorManager.findEditor(ftype);
+							if(pe==null) throw new RuntimeException("No property editor found for class [" + ftype.getClass().getName() + "]");
+							pe.setAsText(fvalue.trim()); 
+							fobj = pe.getValue();									
+						}
+						fargs.put(fname, fobj);
+
+					}
+					fixtureResult = fixture.get(fargs);
+					executable.getMetaClass().setAttribute(executable, inject.fieldName(), fixtureResult);
+				}
+			}
+		}
 	}
 	
 	/**
@@ -222,7 +260,7 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.script.DeployedScript#getInvocables()
+	 * @see com.heliosapm.script.executable.DeployedExecutableMXBean#getInvocables()
 	 */
 	@Override
 	public Set<String> getInvocables() {		

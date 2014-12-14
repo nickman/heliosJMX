@@ -1,0 +1,38 @@
+@Fixture(name="JMXTunnel_JMXConnector", type=javax.management.remote.JMXConnector.class, params=[
+	@FixtureArg(name="HOST", optional=false),
+	@FixtureArg(name="PORT", optional=false),
+	@FixtureArg(name="USER", optional=true),
+	@FixtureArg(name="KEY", optional=true),	
+	@FixtureArg(name="LOCAL_PORT", optional=true),
+	@FixtureArg(name="SVRKEY", optional=true),
+	@FixtureArg(name="HOSTFILE", optional=true),
+	@FixtureArg(name="SSHPROPS", optional=true),
+	@FixtureArg(name="PROPSPREF", optional=true),
+	@FixtureArg(name="SUBPROTO", optional=true),
+	@FixtureArg(name="DELPROTO", optional=true),
+	@FixtureArg(name="SSHTO", optional=true),
+	@FixtureArg(name="SSHKTO", optional=true),
+	@FixtureArg(name="READTO", optional=true),
+	@FixtureArg(name="RECON", optional=true),
+	@FixtureArg(name="PASS", optional=true),
+	@FixtureArg(name="JMXUSER", optional=true),
+	@FixtureArg(name="JMXPASS", optional=true),
+	@FixtureArg(name="KEYPHR", optional=true)	
+])
+a = 1;
+try {
+	b = new StringBuilder("service:jmx:tunnel://$HOST:$PORT/ssh/jmxmp:");
+	SSHOption.values().each() {
+		if(hasProperty(it.name())) {
+			b.append(it.shortName).append("=").append(getProperty(it.name())).append(",")
+		}
+	}
+	//"service:jmx:tunnel://localhost:8006/ssh/jmxmp:u=nwhitehead,h=pdk-pt-ceas-03,pt=22,k=c,jmxu=admin,kp=helios"),
+	String serviceURL = b.toString();
+	surl = new JMXServiceURL(serviceURL);
+	return JMXConnectorFactory.connect(surl);
+} catch (e) {
+	System.err.println("Failed to connect to [$surl]");
+	e.printStackTrace(System.err);
+	throw e;
+}

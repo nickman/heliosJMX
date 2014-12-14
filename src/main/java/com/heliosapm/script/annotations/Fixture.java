@@ -51,4 +51,9 @@ public @interface Fixture {
 	 */
 	Class<?> type() default Object.class;
 	
+	/**
+	 * Defines the recognized parameter names and types for a parametersized fixture call
+	 */
+	FixtureArg[] params() default {};
+	
 }
