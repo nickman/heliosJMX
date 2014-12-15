@@ -218,6 +218,7 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 							fobj = pe.getValue();									
 						}
 						fargs.put(fname, fobj);
+						log.info("Adding fixture arg: [{}]:[{}]", fname, fobj);
 
 					}
 					fixtureResult = fixture.get(fargs);

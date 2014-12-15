@@ -2,8 +2,9 @@
 @Scheduled("d5")
 @Dependency(keys=["thost", "foobar"])
 @Inject(injectionType=com.heliosapm.script.annotations.InjectionType.FIXTURE, name="JMXTunnel_JMXConnector", args=[
-	@com.heliosapm.script.annotations.FixtureArg(name="HOST", value="hserval"),
-	@com.heliosapm.script.annotations.FixtureArg(name="PORT", value="8006") 
+	@FixtureArg(name="HOST", value="hserval"),
+	@FixtureArg(name="PORT", value="8006"),
+	@FixtureArg(name="KEYPHR", value="helios")
 ])
 b;
 try {

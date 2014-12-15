@@ -20,15 +20,20 @@
 	@FixtureArg(name="KEYPHR", optional=true)	
 ])
 a = 1;
+surl = null;
 try {
 	b = new StringBuilder("service:jmx:tunnel://$HOST:$PORT/ssh/jmxmp:");
 	SSHOption.values().each() {
-		if(hasProperty(it.name())) {
-			b.append(it.shortName).append("=").append(getProperty(it.name())).append(",")
+		if(binding.hasVariable(it.name())) {
+			b.append(it.shortCode).append("=").append(binding.getProperty(it.name())).append(",");
+			println "Added SSHOption: $it: ${getProperty(it.name())}"
+		} else {
+			println "No definition for SSHOption: $it";
 		}
 	}
 	//"service:jmx:tunnel://localhost:8006/ssh/jmxmp:u=nwhitehead,h=pdk-pt-ceas-03,pt=22,k=c,jmxu=admin,kp=helios"),
 	String serviceURL = b.toString();
+	println "Tunnel JMXServiceURL [$serviceURL]"
 	surl = new JMXServiceURL(serviceURL);
 	return JMXConnectorFactory.connect(surl);
 } catch (e) {

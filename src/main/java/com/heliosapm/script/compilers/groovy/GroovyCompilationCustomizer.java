@@ -55,6 +55,7 @@ import org.codehaus.groovy.ast.expr.AnnotationConstantExpression;
 import org.codehaus.groovy.ast.expr.ConstantExpression;
 import org.codehaus.groovy.ast.expr.DeclarationExpression;
 import org.codehaus.groovy.ast.expr.ListExpression;
+import org.codehaus.groovy.ast.stmt.Statement;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilePhase;
@@ -130,6 +131,9 @@ public class GroovyCompilationCustomizer {
 	//protected final FieldTransformer fieldTransformer = new FieldTransformer(CompilePhase.SEMANTIC_ANALYSIS);
 	protected final FieldASTTransformation fieldTransformer = new FieldASTTransformation();
 	
+	protected final ClassResolverProcessor classResolver = new ClassResolverProcessor(CompilePhase.SEMANTIC_ANALYSIS);
+	
+	
 	protected final SourceAwareCustomizer importAwareSourceCustomizer = new SourceAwareCustomizer(importCustomizer); 
 	
 	/** The compilation customizers to apply to the groovy compiler */
@@ -192,7 +196,7 @@ public class GroovyCompilationCustomizer {
 			importAwareSourceCustomizer.setSourceUnitValidator(allValidator);
 			importAwareSourceCustomizer.setClassValidator(allValidator);
 			importAwareSourceCustomizer.setBaseNameValidator(allValidator);
-			all = new CompilationCustomizer[] {importAwareSourceCustomizer, importCustomizer, injectionProcessor};
+			all = new CompilationCustomizer[] {classResolver, importAwareSourceCustomizer, importCustomizer, injectionProcessor};
 			this.defaultConfig.addCompilationCustomizers(all);
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);
@@ -407,32 +411,44 @@ public class GroovyCompilationCustomizer {
 		defaultConfig.addCompilationCustomizers(cc);
 	}
 	
-
-	private class FieldTransformer extends CompilationCustomizer {
+	private class ClassResolverProcessor extends CompilationCustomizer {
 		/**
-		 * Creates a new FieldTransformer
-		 * @param phase The compile phase
+		 * Creates a new ClassResolverProcessor
+		 * @param phase the compile phase to execute in
 		 */
-		public FieldTransformer(final CompilePhase phase) {
+		public ClassResolverProcessor(final CompilePhase phase) {
 			super(phase);
 		}
 
+		/**
+		 * {@inheritDoc}
+		 * @see org.codehaus.groovy.control.CompilationUnit.PrimaryClassNodeOperation#call(org.codehaus.groovy.control.SourceUnit, org.codehaus.groovy.classgen.GeneratorContext, org.codehaus.groovy.ast.ClassNode)
+		 */
 		@Override
 		public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
-			if(compilerContext.containsKey("fields")) {
-				return;
-			}
-			try {
-				final FieldASTTransformation visitor = new FieldASTTransformation() {
-					@Override
-					protected SourceUnit getSourceUnit() {
-						return source;
-					}
-
-				};
-			} finally {
-				compilerContext.putIfAbsent("fields", true);
-			}
+			final ClassCodeVisitorSupport visitor = new ClassCodeVisitorSupport() {
+				@Override
+				protected SourceUnit getSourceUnit() {
+					return source;
+				}
+				@Override
+				protected void visitClassCodeContainer(final Statement code) {
+					super.visitClassCodeContainer(code);
+				}
+				@Override
+				public void visitConstantExpression(final ConstantExpression expression) {
+					super.visitConstantExpression(expression);
+				}
+				@Override
+				public void visitClass(final ClassNode node) {					
+					super.visitClass(node);
+				}
+				public void visitAnnotations(final AnnotatedNode node) {
+					List<AnnotationNode> annotationsToAddToNode = new ArrayList<AnnotationNode>();
+					final List<AnnotationNode> nodeAnnotations = node.getAnnotations();  
+					log.info("Pre-Processing Annotations");
+				}
+			};
 		}
 	}
 	
@@ -452,6 +468,7 @@ public class GroovyCompilationCustomizer {
 		@Override
 		public void call(final SourceUnit source, final GeneratorContext context, final ClassNode classNode) throws CompilationFailedException {
 			source.getConfiguration().addCompilationCustomizers(importCustomizer);
+			
 			if(compilerContext.containsKey("injections")) {
 				return;
 			}
@@ -473,7 +490,7 @@ public class GroovyCompilationCustomizer {
 					@Override
 					public void visitAnnotations(final AnnotatedNode node) {
 						List<AnnotationNode> annotationsToAddToNode = new ArrayList<AnnotationNode>();
-						final List<AnnotationNode> nodeAnnotations = node.getAnnotations();  //INJECT_CLASS_NODE
+						final List<AnnotationNode> nodeAnnotations = node.getAnnotations();  
 						final Iterator<AnnotationNode> annotationIterator = nodeAnnotations.iterator();
 						if(!nodeAnnotations.isEmpty()) {
 							
