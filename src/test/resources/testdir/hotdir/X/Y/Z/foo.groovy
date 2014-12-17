@@ -1,15 +1,11 @@
 /* groovy.errors.tolerance=0, groovy.output.verbose=true, groovy.output.debug=true */ 
 @Scheduled("d5")
 @Dependency(keys=["thost", "foobar"])
-@Inject(injectionType=com.heliosapm.script.annotations.InjectionType.FIXTURE, name="JMXTunnel_JMXConnector", args=[
-	@FixtureArg(name="HOST", value="hserval"),
-	@FixtureArg(name="PORT", value="8006"),
-	@FixtureArg(name="KEYPHR", value="helios")
-])
-b;
+@Inject(injectionType=com.heliosapm.script.annotations.InjectionType.FIXTURE, name="JMXTunnel_JMXConnector")
+jmxConnector;
 try {
-	if(b!=null) println "Injected b: $b  -->  ${b.get(['HOST' : 'localhost', 'PORT' : 8006])}   -  ${System.identityHashCode(b)}";
-	else println "b is still null";
+	if(jmxConnector!=null) println "Injected jmxConnector: $jmxConnector  -->  ${jmxConnector.get(['HOST' : 'localhost', 'PORT' : 8006, 'KEYPHR' : 'helios'])}   -  ${System.identityHashCode(jmxConnector)}";
+	else println "jmxConnector is still null";
 	//println "connectorFactory: $connectorFactory"; 
 	tmpDir = System.getProperty("java.io.tmpdir");
 	//println "TMP: ${tmpDir}";
