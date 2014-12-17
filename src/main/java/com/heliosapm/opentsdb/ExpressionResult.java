@@ -172,8 +172,13 @@ public class ExpressionResult {
 		} else {
 			String valStr = value.toString().trim();
 			if(valStr.isEmpty()) throw new IllegalArgumentException("The passed value evaluated to an empty string");
-			if(valStr.indexOf('.')!=-1) {
-				value(Double.parseDouble(valStr));
+			final int index = valStr.indexOf('.'); 
+			if(index != -1) {
+				if(valStr.substring(index+1).replace("0", "").isEmpty()) {
+					value(Long.parseLong(valStr.substring(0, index)));
+				} else {
+					value(Double.parseDouble(valStr));
+				}							
 			} else {
 				value(Long.parseLong(valStr));
 			}
@@ -272,8 +277,13 @@ public class ExpressionResult {
 		StringBuilder b = getSB()
 				.append("put ")
 				.append(clean(metricName)).append(" ")
-				.append(TimeUnit.SECONDS.convert(timestamp, TimeUnit.MILLISECONDS)).append(" ")
-				.append(doubleValue ? dValue : lValue).append(" ");
+				.append(TimeUnit.SECONDS.convert(timestamp, TimeUnit.MILLISECONDS)).append(" ");
+		if(doubleValue) {
+			b.append(dValue);
+		} else {
+			b.append(lValue);
+		}
+		b.append(" ");
 		for(final Map.Entry<String, String> tag: rootTags.entrySet()) {
 			b.append(clean(tag.getKey())).append("=").append(clean(tag.getValue())).append(" ");
 		}		

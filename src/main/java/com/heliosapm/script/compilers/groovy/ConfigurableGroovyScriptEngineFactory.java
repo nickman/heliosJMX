@@ -26,9 +26,12 @@ package com.heliosapm.script.compilers.groovy;
 
 import groovy.lang.GroovyClassLoader;
 
+import javax.script.ScriptContext;
 import javax.script.ScriptEngine;
 
 import org.codehaus.groovy.jsr223.GroovyScriptEngineFactory;
+
+import com.heliosapm.jmx.config.Configuration;
 
 /**
  * <p>Title: ConfigurableGroovyScriptEngineFactory</p>
@@ -66,7 +69,10 @@ public class ConfigurableGroovyScriptEngineFactory extends GroovyScriptEngineFac
 	 */
 	@Override
 	public ScriptEngine getScriptEngine() {
-		return new ConfigurableGroovyScriptEngineImpl(groovyClassLoader);
+		final ScriptEngine se = new ConfigurableGroovyScriptEngineImpl(groovyClassLoader);
+		Configuration cfg = new Configuration();
+		se.setBindings(cfg, ScriptContext.ENGINE_SCOPE);
+		return se;
 	}
 
 }

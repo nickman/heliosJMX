@@ -63,6 +63,7 @@ import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.opentsdb.ExpressionResult;
 import com.heliosapm.opentsdb.TSDBSubmitter;
+import com.heliosapm.script.StateService;
 
 /**
  * <p>Title: ExpressionCompiler</p>
@@ -225,7 +226,10 @@ public class ExpressionCompiler {
 		cp.appendSystemPath();
 		cp.appendClassPath(new LoaderClassPath(ExpressionResult.class.getClassLoader()));
 		cp.importPackage(JMXHelper.class.getPackage().getName());
+		cp.importPackage(StateService.class.getPackage().getName());
 		cp.importPackage("javax.script");
+		cp.importPackage("com.heliosapm.jmx.util.helpers");
+		
 		
 
 //		===================================================================
@@ -282,6 +286,7 @@ public class ExpressionCompiler {
 			
 			// CodeBuilder for naming and value
 			final CodeBuilder codeBuffer = new CodeBuilder().append("{\n\tfinal StringBuilder nBuff = new StringBuilder();");
+			codeBuffer.push();
 			// =======================================================================
 			// Collect name directives
 			// =======================================================================
@@ -424,7 +429,11 @@ public class ExpressionCompiler {
 				log.log("ER: %s", er);
 			}
 			
-			
+			// java.lang:type=OperatingSystem
+			ObjectName on = JMXHelper.objectName("java.lang:type=OperatingSystem");
+			Map<String, Object> attrValues = JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on));
+			ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}", er); 
+			String rez = ep.process(agentId, attrValues, on).toString();
 			
 			
 			
@@ -472,7 +481,8 @@ public class ExpressionCompiler {
 	 * 			ObjectName objectName, 
 	 * 			ExpressionResult result)
 	 *  </pre> 
-	 *  @param nameSegment The name portion of the raw expression
+	 * @param nameSegment The name portion of the raw expression
+	 * @param nameCode The code builder 
 	 */
 	protected void build(final String nameSegment, final CodeBuilder nameCode) {
 		//localVar nBuff builds the metric name

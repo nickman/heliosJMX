@@ -25,7 +25,6 @@
 package com.heliosapm.jmx.expr;
 
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.Map;
 
 import javax.management.ObjectName;
@@ -33,7 +32,9 @@ import javax.script.Bindings;
 import javax.script.CompiledScript;
 
 import com.heliosapm.jmx.util.helpers.ArrayUtils;
+import com.heliosapm.jmx.util.helpers.CacheService;
 import com.heliosapm.opentsdb.ExpressionResult;
+import com.heliosapm.script.StateService;
 
 /**
  * <p>Title: AbstractExpressionProcessor</p>
@@ -44,6 +45,11 @@ import com.heliosapm.opentsdb.ExpressionResult;
  */
 
 public abstract class AbstractExpressionProcessor implements ExpressionProcessor {
+	/** A reference to the script compiler service */
+	protected final StateService state = StateService.getInstance();
+	/** A reference to the cache service */
+	protected final CacheService cache = CacheService.getInstance();
+	
 	/** The expression result that handles the expression processing and result buffering */
 	protected final ExpressionResult er;
 	/**

@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 
 import javax.script.CompiledScript;
 
+import com.heliosapm.jmx.util.helpers.CacheService;
 import com.heliosapm.script.StateService;
 
 /**
@@ -63,17 +64,63 @@ public class Directives {
 			new ArrayDirective()
 	)));	
 	
+//	Directives:
+//		===========
+//		elapsed
+//		elapsed(time)
+//		delta(value)
+//		rdelta(value)
+
+	/** The directive matching expression for an ElapsedTimeDirective */
+	public static final Pattern ELAPSED_EXPR = Pattern.compile("\\{elapsed(?:\\((.*?)\\))?\\}");
+
+
+	/**
+	 * <p>Title: ElapsedTimeDirective</p>
+	 * <p>Description: Directive processor that computes the elapsed time since the prior call for the same sourceId and key, or the passed timestamp.</p>
+	 * <p>Company: Helios Development Group LLC</p>
+	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
+	 * <p><b><code>com.heliosapm.jmx.expr.Directives.ElapsedTimeDirective</code></b>
+	 */
+	public static class ElapsedTimeDirective implements DirectiveCodeProvider {
+		/** The cache service to store elapsed time starters */
+		final CacheService cache = CacheService.getInstance();
+
+		@Override
+		public void generate(final String directive, final CodeBuilder code) {
+			Matcher m = ELAPSED_EXPR.matcher(directive);
+			m.matches();
+			final String ext = m.group(1);
+			
+			code.append("\n\tb.put(\"sourceId\", $1);");
+			code.append("\n\tb.put(\"attrValues\", $2);");
+			code.append("\n\tb.put(\"objectName\", $3);");
+			code.append("\n\tb.put(\"exResult\", er);");
+			code.append("\n\tlong cs = StateService.getInstance().get(\"").append(evalKey).append("\");");
+			if(defaultValue!=null && !defaultValue.trim().isEmpty()) {
+				code.append("\n\tnBuff.append(invokeEval(cs, b, \"").append(defaultValue).append("\"));");
+			} else {
+				code.append("\n\tnBuff.append(invokeEval(cs, b));");
+			}			
+		}
+		
+		public boolean match(final String directive) {
+			return patternMatch(directive, ELAPSED_EXPR);
+		}		
+		
+	}
+	
 	
 	/**
 	 * <p>Title: EvalDirective</p>
-	 * <p>Description: Directive processor that exeecutes the embedded JavaScript in the directive</p>
+	 * <p>Description: Directive processor that executes the embedded JavaScript in the directive</p>
 	 * <p>Company: Helios Development Group LLC</p>
 	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
 	 * <p><b><code>com.heliosapm.jmx.expr.Directives.EvalDirective</code></b>
 	 */
 	public static class EvalDirective implements DirectiveCodeProvider {
 		/** The state service which compiles and caches the JS fragments */
-		static final StateService state = StateService.getInstance();
+		final StateService state = StateService.getInstance();
 		
 		@Override
 		public void generate(final String directive, final CodeBuilder code) {
