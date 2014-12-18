@@ -96,12 +96,13 @@ public class Directives {
 			code.append("\n\tb.put(\"attrValues\", $2);");
 			code.append("\n\tb.put(\"objectName\", $3);");
 			code.append("\n\tb.put(\"exResult\", er);");
-			code.append("\n\tlong cs = StateService.getInstance().get(\"").append(evalKey).append("\");");
-			if(defaultValue!=null && !defaultValue.trim().isEmpty()) {
-				code.append("\n\tnBuff.append(invokeEval(cs, b, \"").append(defaultValue).append("\"));");
-			} else {
-				code.append("\n\tnBuff.append(invokeEval(cs, b));");
-			}			
+			// FIXME
+//			code.append("\n\tlong cs = StateService.getInstance().get(\"").append(evalKey).append("\");");
+//			if(defaultValue!=null && !defaultValue.trim().isEmpty()) {
+//				code.append("\n\tnBuff.append(invokeEval(cs, b, \"").append(defaultValue).append("\"));");
+//			} else {
+//				code.append("\n\tnBuff.append(invokeEval(cs, b));");
+//			}			
 		}
 		
 		public boolean match(final String directive) {

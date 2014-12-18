@@ -365,9 +365,8 @@ public class MQMonitorService implements Closeable {
 	    	it.byStr().put("MQIACH_CHANNEL_TYPE", channelType(chType));
 	    	CHANNEL_META.put(chName, it);
 	    	TCHANNEL_META.put(chName.trim(), it);
-	    	println(it);
-	    	println "==================";
 	    }
+	    println "Cached ${TCHANNEL_META.size()} Channel Metadata Entries"
 	    
 	}	
 
@@ -459,35 +458,19 @@ public class MQMonitorService implements Closeable {
 
 }
 
-MQMonitorService mq = null;
-try {
-	mq = new MQMonitorService("mqserver", 1430, "JBOSS.SVRCONN");
-	mq.connect();
-	mq.getQueueManagerStats().byStr().each() { k, v ->
-		println "\t[$k] : [$v]";
+for(i in 0..30) {
+	MQMonitorService mq = null;
+	try {
+		mq = new MQMonitorService("localhost", 1430, "JBOSS.SVRCONN");
+		mq.connect();
+		// QMGR_STATUS -> MQIACF_CONNECTION_COUNT
+		// QMGR_META -> MQCA_DEAD_LETTER_Q_NAME, MQCA_Q_MGR_DESC, MQCA_Q_MGR_IDENTIFIER, MQCA_REPOSITORY_NAME
+	} catch  (e) {
+		e.printStackTrace(System.err);
+	} finally {
+		if(mq!=null) try { mq.close(); println "MQConn Closed" } catch (e) {}	
 	}
-	println "===========================";
-	mq.QMGR_META.each() {k,v ->
-		//println "\t[$k] : [$v]";
-	}
-	println "===========================";
-	mq.getListenerStats().each() {k,v ->
-		println "\t[$k] : [$v]";
-	}
-	println "===========================";
-	println mq.TCHANNEL_META.keySet();
-
-	mq.TCHANNEL_META.get("JBOSS.SVRCONN").each() {k,v ->
-		println "\t[$k] : [$v]";
-	}
-
-	//  MQCA_DEAD_LETTER_Q_NAME, MQCA_Q_MGR_DESC, MQCA_Q_MGR_IDENTIFIER, MQCA_REPOSITORY_NAME
-} catch  (e) {
-	e.printStackTrace(System.err);
-} finally {
-	if(mq!=null) try { mq.close(); println "MQConn Closed" } catch (e) {}	
 }
-
 
 
 /*
