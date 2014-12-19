@@ -93,13 +93,26 @@ public class J9GCGenconLogParser implements ContentHandler {
 	}
 	
 	public static class GCEvent {
+		final String hostName;
+		final String appName;
 		final Map<GCPhase, Map<Space, MemorySpace>> phaseAllocations = new EnumMap<GCPhase, Map<Space, MemorySpace>>(GCPhase.class);		
 		GCType gcType = null;
 		GCTrigger gcTrigger = null;
 		long id = -1L; 
 		long timestamp = -1L;
+		double elapsed = -1D;
 		
-		public GCEvent() {
+		void reset() {
+			gcType = null;
+			gcTrigger = null;
+			id = -1L;
+			timestamp = -1L;
+			elapsed = -1D;
+		}
+		
+		public GCEvent(final String hostName, final String appName) {
+			this.hostName = hostName;
+			this.appName = appName;
 			for(final GCPhase phase: GCPhase.values()) {
 				final Map<Space, MemorySpace> map = new EnumMap<Space, MemorySpace>(Space.class);
 				for(final Space space: Space.values()) {
@@ -107,6 +120,72 @@ public class J9GCGenconLogParser implements ContentHandler {
 				}
 				phaseAllocations.put(phase, map);
 			}
+		}
+		
+		public String toString() {
+			final StringBuilder b = new StringBuilder();
+			b.append("put java.gc")
+			.append(" ").append(timestamp/1000)
+			.append(" ").append(elapsed)
+			.append(" host=").append(hostName)
+			.append(" app=").append(appName)
+			.append(" gctype=").append(gcType.name().toLowerCase())
+			.append(" trigger=").append(gcTrigger.name().toLowerCase())
+			.append(" metric=gcElapsed")
+			.append("\n");
+			
+			Map<Space, MemorySpace> postAllocSpaces = phaseAllocations.get(GCPhase.POSTALLOC);
+			if(postAllocSpaces!=null) {
+				Space space = null;
+				MemorySpace ms = null;
+				for(Map.Entry<Space, MemorySpace> entry: postAllocSpaces.entrySet()) {
+					space = entry.getKey();
+					ms = entry.getValue();
+					// "put $metric $now $value dc=$DC host=$HOST "
+					b.append("put java.mem")
+					.append(" ").append(timestamp/1000)
+					.append(" ").append(ms.percentFree)
+					.append(" host=").append(hostName)
+					.append(" app=").append(appName)
+					.append(" space=").append(space.name().toLowerCase())
+					.append(" gctype=").append(gcType.name().toLowerCase())
+					.append(" trigger=").append(gcTrigger.name().toLowerCase())
+					.append(" metric=percentFree")
+					.append("\n");
+					b.append("put java.mem")
+					.append(" ").append(timestamp/1000)
+					.append(" ").append(ms.totalbytes - ms.freebytes)
+					.append(" host=").append(hostName)
+					.append(" app=").append(appName)
+					.append(" space=").append(space.name().toLowerCase())
+					.append(" gctype=").append(gcType.name().toLowerCase())
+					.append(" trigger=").append(gcTrigger.name().toLowerCase())
+					.append(" metric=bytesUsed")
+					.append("\n");
+					b.append("put java.mem")
+					.append(" ").append(timestamp/1000)
+					.append(" ").append(ms.totalbytes)
+					.append(" host=").append(hostName)
+					.append(" app=").append(appName)
+					.append(" space=").append(space.name().toLowerCase())
+					.append(" gctype=").append(gcType.name().toLowerCase())
+					.append(" trigger=").append(gcTrigger.name().toLowerCase())
+					.append(" metric=bytesTotal")
+					.append("\n");
+					b.append("put java.mem")
+					.append(" ").append(timestamp/1000)
+					.append(" ").append(ms.freebytes)
+					.append(" host=").append(hostName)
+					.append(" app=").append(appName)
+					.append(" space=").append(space.name().toLowerCase())
+					.append(" gctype=").append(gcType.name().toLowerCase())
+					.append(" trigger=").append(gcTrigger.name().toLowerCase())
+					.append(" metric=bytesFree")
+					.append("\n");
+					
+				}
+			}
+			return b.toString();
 		}
 		
 	}
@@ -158,7 +237,8 @@ public class J9GCGenconLogParser implements ContentHandler {
 		},
 		GC {
 			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
-				
+				final Map<String, String> attrMap = attributeMap(atts);
+				gcEvent.gcType = GCType.gcTypeFor(attrMap.get("type"));
 			}
 			public boolean isElement(final String localName) {
 				return "gc".equals(localName);
@@ -199,7 +279,8 @@ public class J9GCGenconLogParser implements ContentHandler {
 		},
 		TIME {
 			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
-
+				final Map<String, String> attrMap = attributeMap(atts);
+				gcEvent.elapsed = Double.parseDouble(attrMap.get("totalms"));
 			}
 			public boolean isElement(final String localName) {
 				return "time".equals(localName);
@@ -341,13 +422,14 @@ public class J9GCGenconLogParser implements ContentHandler {
 	protected final XMLReader parser;
 	protected final AtomicReference<GCPhase> gcPhase = new AtomicReference<GCPhase>(GCPhase.POSTALLOC);
 	protected final AtomicReference<Location> location = new AtomicReference<Location>(Location.values()[0]); 
-	protected final GCEvent gcEvent = new GCEvent();
+	protected final GCEvent gcEvent;
 	protected final AtomicBoolean skipEnabled = new AtomicBoolean(false);
 	
 	/**
 	 * Creates a new J9GCGenconLogParser
 	 */
-	public J9GCGenconLogParser() {
+	public J9GCGenconLogParser(final String hostName, final String appName) {
+		gcEvent = new GCEvent(hostName, appName);
 		try {
 			parser = org.xml.sax.helpers.XMLReaderFactory.createXMLReader();
 			parser.setContentHandler(this);
@@ -357,11 +439,13 @@ public class J9GCGenconLogParser implements ContentHandler {
 		}
 	}
 	
-	public void parseContent(final String content) {
+	public GCEvent parseContent(final String content) {
 		try {
 			parser.parse(new InputSource(new StringReader(content)));
+			return gcEvent;
+//			LOG.info("\n{}", gcEvent.toString());
 		} catch (Exception ex) {
-			LOG.error("Failed to parse content", ex);
+			LOG.error("Failed to parse content\n=========\n{}\n=========\n", content, ex);
 			throw new RuntimeException("Failed to parse content", ex);			
 		}
 	}
@@ -372,8 +456,8 @@ public class J9GCGenconLogParser implements ContentHandler {
 	public static void main(String[] args) {
 		LOG.info("J9GCGenconLogParser Test");
 		// c:\temp\gclog-sample.xml
-		final String content = URLHelper.getTextFromURL(URLHelper.toURL(new File("c:\\temp\\gclog-sample.xml")));
-		new J9GCGenconLogParser().parseContent(content);
+		final String content = URLHelper.getTextFromURL(URLHelper.toURL(new File(System.getProperty("java.io.tmpdir") + File.separator + "gclog-sample.xml")));
+		new J9GCGenconLogParser("mfthost", "MFT").parseContent(content);
 		
 	}
 	
@@ -471,7 +555,7 @@ public class J9GCGenconLogParser implements ContentHandler {
 	 */
 	@Override
 	public void startDocument() throws SAXException {
-		LOG.info("Segment Started");
+		//LOG.info("Segment Started");
 		
 	}
 
@@ -481,7 +565,7 @@ public class J9GCGenconLogParser implements ContentHandler {
 	 */
 	@Override
 	public void endDocument() throws SAXException {
-		LOG.info("Segment Ended");
+		//LOG.info("Segment Ended");
 		
 	}
 

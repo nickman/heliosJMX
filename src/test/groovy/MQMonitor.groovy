@@ -20,6 +20,17 @@ public class IntOrStringMap {
     final Map<String, Object> byStr;
     final SimpleDateFormat SDF = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");    
     
+	IntOrStringMap() {
+        byInt = new LinkedHashMap<Integer, Object>();
+        byStr = new LinkedHashMap<String, Object>();
+	}
+
+	IntOrStringMap(int size) {
+        byInt = new LinkedHashMap<Integer, Object>(size);
+        byStr = new LinkedHashMap<String, Object>(size);
+	}
+
+
     IntOrStringMap(Enumeration<PCFParameter> result) {
     	this(result, false);
     }
@@ -69,13 +80,14 @@ public class IntOrStringMap {
             }
         }
     }
-    
+
+
     public Object put(key, value) {
-        if(key!=null) {
+        if(key!=null && value!=null) {
             if(key instanceof Number) {
-                return byInt.put(((Number)key).intValue(), value);
+                return byInt.put(((Number)key).intValue(), (value instanceof CharSequence) ? value.toString().trim() : value);
             } else {
-                return byStr.put(key.toString(), value);
+                return byStr.put(key.toString().trim(), (value instanceof CharSequence) ? value.toString().trim() : value);
             }
         }
         return null;
@@ -137,6 +149,9 @@ public class MQMonitorService implements Closeable {
 	static final Map SERVICE_STATUSES = [0:"Stopped", 1:"Starting", 2:"Running", 3:"Stopping", 4:"Retrying"];
 	/** QM Status Decodes */
 	static final Map MQ_STATUSES = [1:"Starting", 2:"Running", 3:"Quiescing"];
+	/** QM Status Key Decodes */
+	static final Map MQ_STATUS_KEYS = ["MQQMSTA_STARTING":"Starting", "MQQMSTA_RUNNING":"Running", "MQQMSTA_QUIESCING":"Quiescing"];
+
 	/** Queue Name Patterns to Skip */
 	static final Pattern SKIP_QUEUE = Pattern.compile("SYSTEM\\..*||AMQ\\..*");
 	
@@ -156,6 +171,10 @@ public class MQMonitorService implements Closeable {
 	public static String mqStatus(int id){
 	    return MQ_STATUSES.get(id);
 	}
+	public static String mqStatus(String id){
+	    return MQ_STATUS_KEYS.get(id);
+	}
+
 	public static int retries = 0;
 
 
@@ -441,28 +460,114 @@ public class MQMonitorService implements Closeable {
 	    println "Cached ${TOPIC_META.size()} Topic Metas and $cnt Topic Subscription Metas";	    
 	}
 
+
 	public IntOrStringMap getQueueManagerStats() {
-		return request(pcf, CMQCFC.MQCMD_INQUIRE_Q_MGR_STATUS, null, true).iterator().next();
+		final result = request(pcf, CMQCFC.MQCMD_INQUIRE_Q_MGR_STATUS, null, true).iterator().next();
+		final IntOrStringMap stats = new IntOrStringMap();
+		stats.put("Connections", result.get(MQConstants.MQIACF_CONNECTION_COUNT));
+		int stat = result.get(MQConstants.MQIACF_Q_MGR_STATUS);
+		stats.put("Status", stat);
+		stats.put("StatusName", mqStatus(stat));
+		stats.put("QueueManager", result.get(MQConstants.MQCA_Q_MGR_NAME));		
+		return stats;
 	}
 
 	public getChannelInitiatorStats() {
-		return request(pcf, CMQCFC.MQCMD_INQUIRE_CHANNEL_INIT, [(MQConstants.MQCACF_COMMAND_SCOPE):"*"], true).iterator().next();
+		return request(pcf, CMQCFC.MQCMD_INQUIRE_CHANNEL_INIT, [], true);
 	}
 
 	public getListenerStats() { 
-		return request(pcf, CMQCFC.MQCMD_INQUIRE_LISTENER, [(MQConstants.MQCACH_LISTENER_NAME):"*"], true).iterator().next();
+		return request(pcf, CMQCFC.MQCMD_INQUIRE_LISTENER, [(MQConstants.MQCACH_LISTENER_NAME):"*"], true);
 	}
+
+	public Map<String, IntOrStringMap> getChannelStats() {
+		final Map<String, IntOrStringMap> stats = new HashMap<String, IntOrStringMap>();
+		request(pcf, CMQCFC.MQCMD_INQUIRE_CHANNEL_STATUS, [(MQConstants.MQCACH_CHANNEL_NAME):"*"], true).each() { ch ->			
+			IntOrStringMap entry = new IntOrStringMap();
+			String chName = ch.get(MQConstants.MQCACH_CHANNEL_NAME).trim();
+			stats.put(chName, entry);
+			entry.put("ChannelType", channelType(ch.get(MQConstants.MQIACH_CHANNEL_TYPE)));
+			entry.put("Batches", ch.get(MQConstants.MQIACH_BATCHES));
+			entry.put("BatchSize", ch.get(MQConstants.MQIACH_BATCH_SIZE));
+			entry.put("BytesSent", ch.get(MQConstants.MQIACH_BYTES_SENT));
+			entry.put("BuffersSent", ch.get(MQConstants.MQIACH_BUFFERS_SENT));
+			entry.put("BytesReceived", ch.get(MQConstants.MQIACH_BYTES_RECEIVED));
+			entry.put("BuffersReceived", ch.get(MQConstants.MQIACH_BUFFERS_RECEIVED));
+		}
+		return stats;
+	}
+
+/*
+	[MQCACH_CHANNEL_NAME] : [TO.HERCULESQMGR]
+	[MQIACH_CHANNEL_TYPE] : [9]
+	[MQIACH_BATCHES] : [0]
+	[MQIACH_BATCH_SIZE] : [500]
+	[MQIACH_BUFFERS_RCVD/MQIACH_BUFFERS_RECEIVED] : [0]
+	[MQIACH_BUFFERS_SENT] : [0]
+	[MQIACH_BYTES_RCVD/MQIACH_BYTES_RECEIVED] : [0]
+	[MQIACH_BYTES_SENT] : [0]
+	[MQCACH_CHANNEL_START_DATE] : [2014-12-18]
+	[MQCACH_CHANNEL_START_TIME] : [18.35.27]
+	[MQIACH_HDR_COMPRESSION] : [[0, 0]]
+	[MQIACH_MSG_COMPRESSION] : [[0, 0]]
+	[MQIACH_COMPRESSION_RATE] : [[0, 0]]
+	[MQIACH_COMPRESSION_TIME] : [[0, 0]]
+	[MQCACH_CONNECTION_NAME] : [10.5.200.17(1480)]
+	[MQCACH_CURRENT_LUWID] : [0000000000000000]
+	[MQIACH_CURRENT_MSGS] : [0]
+	[MQIACH_CHANNEL_INSTANCE_TYPE] : [1011]
+	[MQIACH_CURRENT_SEQ_NUMBER/MQIACH_CURRENT_SEQUENCE_NUMBER] : [0]
+	[MQIACH_EXIT_TIME_INDICATOR] : [[0, 0]]
+	[MQIACH_HB_INTERVAL] : [300]
+	[MQIACH_INDOUBT_STATUS] : [0]
+	[MQCACH_MCA_JOB_NAME] : [0000072100000078]
+	[MQCACH_LOCAL_ADDRESS] : []
+	[MQIACH_LONG_RETRIES_LEFT] : [999999973]
+	[MQCACH_LAST_LUWID] : [0000000000000000]
+	[MQCACH_LAST_MSG_DATE] : []
+	[MQCACH_LAST_MSG_TIME] : []
+	[MQIACH_LAST_SEQ_NUMBER/MQIACH_LAST_SEQUENCE_NUMBER] : [0]
+	[MQIACH_MCA_STATUS] : [0]
+	[MQIA_MONITORING_CHANNEL] : [0]
+	[MQIACH_MSGS] : [0]
+	[MQIACH_NETWORK_TIME_INDICATOR] : [[0, 0]]
+	[MQIACH_NPM_SPEED] : [2]
+	[MQCA_REMOTE_Q_MGR_NAME] : []
+	[MQIACH_SHORT_RETRIES_LEFT] : [0]
+	[MQCACH_SSL_CERT_ISSUER_NAME] : []
+	[MQCACH_SSL_KEY_RESET_DATE] : []
+	[MQCACH_SSL_KEY_RESET_TIME] : []
+	[MQCACH_SSL_SHORT_PEER_NAME] : []
+	[MQIACH_SSL_KEY_RESETS] : [0]
+	[MQIACH_CHANNEL_STATUS] : [5]
+	[MQIACH_STOP_REQUESTED] : [0]
+	[MQIACH_CHANNEL_SUBSTATE] : [0]
+	[MQIACH_BATCH_SIZE_INDICATOR] : [[0, 0]]
+	[MQCACH_XMIT_Q_NAME] : [SYSTEM.CLUSTER.TRANSMIT.QUEUE]
+	[MQIACH_XMITQ_MSGS_AVAILABLE] : [2]
+	[MQIACH_XMITQ_TIME_INDICATOR] : [[0, 0]]
+	[3560] : []
+	[3561] : []
+	[MQCACH_CHANNEL_START_TS] : [1418945727000], 
+*/	
 
 
 	
 
 }
 
-for(i in 0..30) {
+for(i in 0..0) {
 	MQMonitorService mq = null;
 	try {
-		mq = new MQMonitorService("localhost", 1430, "JBOSS.SVRCONN");
+		mq = new MQMonitorService("mqserver", 1430, "JBOSS.SVRCONN");
 		mq.connect();
+		//println "QMGR Stats:\n${mq.getQueueManagerStats()}"
+		//println mq.getChannelInitiatorStats();
+		//println mq.getListenerStats();
+		mq.getChannelStats().each() { k, v ->
+			println "Channel $k${v}";
+		}
+
 		// QMGR_STATUS -> MQIACF_CONNECTION_COUNT
 		// QMGR_META -> MQCA_DEAD_LETTER_Q_NAME, MQCA_Q_MGR_DESC, MQCA_Q_MGR_IDENTIFIER, MQCA_REPOSITORY_NAME
 	} catch  (e) {
