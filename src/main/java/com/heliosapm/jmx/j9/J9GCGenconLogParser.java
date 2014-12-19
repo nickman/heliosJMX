@@ -30,6 +30,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -62,7 +63,7 @@ public class J9GCGenconLogParser implements ContentHandler {
 	protected static final Logger LOG = LoggerFactory.getLogger(J9GCGenconLogParser.class);
 	
 	public static interface ElementHandler {
-		public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception;
+		public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception;
 		public boolean isElement(final String localName);
 //		public Stack<String> getSkips();
 		
@@ -76,7 +77,7 @@ public class J9GCGenconLogParser implements ContentHandler {
 	};
 	
 	public static final Set<String> ELEMENTS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
-			"af", "sys", "nursery", "tenured", "gc", "time"
+			"af", "sys", "nursery", "tenured", "gc", "time", "soa", "loa" , "failed"
 	)));
 
 	public static final Set<String> HEADERS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
@@ -101,6 +102,36 @@ public class J9GCGenconLogParser implements ContentHandler {
 		long id = -1L; 
 		long timestamp = -1L;
 		double elapsed = -1D;
+		long interval = -1L;
+		final EnumSet<GCPhase> phasesToTrace = EnumSet.allOf(GCPhase.class);
+		final EnumMap<GCFail, long[]> gcFails = new EnumMap<GCFail, long[]>(GCFail.class);
+		
+
+		/**
+		 * Adds a GC fail of the specified type
+		 * @param gcFail The type of fail
+		 * @param counts An array containing the object and byte counts that failed
+		 */
+		public void addGCFail(final GCFail gcFail, long...counts) {
+			gcFails.put(gcFail, counts);			
+		}
+		
+		/**
+		 * Returns the map of gc-fails for this event
+		 * @return the map of gc-fails for this event
+		 */
+		public EnumMap<GCFail, long[]> getGCFails() {
+			return gcFails;
+		}
+		
+		/**
+		 * Sets the GCPhases to trace. Phases not included are ignored.
+		 * @param phases The phases to trace
+		 */
+		public void setPhasesToTrace(final GCPhase...phases) {
+			phasesToTrace.clear();
+			Collections.addAll(phasesToTrace, phases);
+		}
 		
 		void reset() {
 			gcType = null;
@@ -108,6 +139,8 @@ public class J9GCGenconLogParser implements ContentHandler {
 			id = -1L;
 			timestamp = -1L;
 			elapsed = -1D;
+			interval = -1L;
+			gcFails.clear();
 		}
 		
 		public GCEvent(final String hostName, final String appName) {
@@ -116,11 +149,40 @@ public class J9GCGenconLogParser implements ContentHandler {
 			for(final GCPhase phase: GCPhase.values()) {
 				final Map<Space, MemorySpace> map = new EnumMap<Space, MemorySpace>(Space.class);
 				for(final Space space: Space.values()) {
-					map.put(space, null);
+					map.put(space, new MemorySpace());
 				}
 				phaseAllocations.put(phase, map);
 			}
 		}
+		
+		/**
+		 * Returns the GCEvent timestamp in ms.
+		 * @return the GCEvent timestamp in ms.
+		 */
+		public long getTimestamp() {
+			return timestamp + (interval%1000);
+		}
+
+		/**
+		 * Returns the GCEvent GC elapsed time in ms
+		 * @return the GCEvent GC elapsed time in ms
+		 */
+		public double getElapsed() {
+			return elapsed;
+		}
+		
+		/**
+		 * Returns the phase allocations for the configured phases to trace
+		 * @return a map of memory space allocations for each space for each GC phase configured to be traced
+		 */
+		public Map<GCPhase, Map<Space, MemorySpace>> getPhaseAllocations() {
+			Map<GCPhase, Map<Space, MemorySpace>> map = new HashMap<GCPhase, Map<Space, MemorySpace>>(phasesToTrace.size());
+			for(GCPhase phase: phasesToTrace) {
+				map.put(phase, phaseAllocations.get(phase));
+			}
+			return map;
+		}
+
 		
 		public String toString() {
 			final StringBuilder b = new StringBuilder();
@@ -133,60 +195,25 @@ public class J9GCGenconLogParser implements ContentHandler {
 			.append(" trigger=").append(gcTrigger.name().toLowerCase())
 			.append(" metric=gcElapsed")
 			.append("\n");
-			
-			Map<Space, MemorySpace> postAllocSpaces = phaseAllocations.get(GCPhase.POSTALLOC);
-			if(postAllocSpaces!=null) {
-				Space space = null;
-				MemorySpace ms = null;
-				for(Map.Entry<Space, MemorySpace> entry: postAllocSpaces.entrySet()) {
-					space = entry.getKey();
-					ms = entry.getValue();
-					// "put $metric $now $value dc=$DC host=$HOST "
-					b.append("put java.mem")
-					.append(" ").append(timestamp/1000)
-					.append(" ").append(ms.percentFree)
-					.append(" host=").append(hostName)
-					.append(" app=").append(appName)
-					.append(" space=").append(space.name().toLowerCase())
-					.append(" gctype=").append(gcType.name().toLowerCase())
-					.append(" trigger=").append(gcTrigger.name().toLowerCase())
-					.append(" metric=percentFree")
-					.append("\n");
-					b.append("put java.mem")
-					.append(" ").append(timestamp/1000)
-					.append(" ").append(ms.totalbytes - ms.freebytes)
-					.append(" host=").append(hostName)
-					.append(" app=").append(appName)
-					.append(" space=").append(space.name().toLowerCase())
-					.append(" gctype=").append(gcType.name().toLowerCase())
-					.append(" trigger=").append(gcTrigger.name().toLowerCase())
-					.append(" metric=bytesUsed")
-					.append("\n");
-					b.append("put java.mem")
-					.append(" ").append(timestamp/1000)
-					.append(" ").append(ms.totalbytes)
-					.append(" host=").append(hostName)
-					.append(" app=").append(appName)
-					.append(" space=").append(space.name().toLowerCase())
-					.append(" gctype=").append(gcType.name().toLowerCase())
-					.append(" trigger=").append(gcTrigger.name().toLowerCase())
-					.append(" metric=bytesTotal")
-					.append("\n");
-					b.append("put java.mem")
-					.append(" ").append(timestamp/1000)
-					.append(" ").append(ms.freebytes)
-					.append(" host=").append(hostName)
-					.append(" app=").append(appName)
-					.append(" space=").append(space.name().toLowerCase())
-					.append(" gctype=").append(gcType.name().toLowerCase())
-					.append(" trigger=").append(gcTrigger.name().toLowerCase())
-					.append(" metric=bytesFree")
-					.append("\n");
-					
-				}
-			}
 			return b.toString();
 		}
+
+		/**
+		 * Returns the GCType
+		 * @return the gcType
+		 */
+		public GCType getGcType() {
+			return gcType;
+		}
+
+		/**
+		 * Returns the GC trigger
+		 * @return the gcTrigger
+		 */
+		public GCTrigger getGcTrigger() {
+			return gcTrigger;
+		}
+
 		
 	}
 	
@@ -194,32 +221,35 @@ public class J9GCGenconLogParser implements ContentHandler {
 		long totalBytes = Long.parseLong(atMap.get("totalbytes"));
 		long freeBytes = Long.parseLong(atMap.get("freebytes"));
 		int percentFree = Integer.parseInt(atMap.get("percent"));
-		final MemorySpace ms = new MemorySpace(totalBytes, freeBytes, percentFree);
-		gcEvent.phaseAllocations.get(gcPhase).put(space, ms);				
+		gcEvent.phaseAllocations.get(gcPhase).get(space).load(totalBytes, freeBytes, percentFree);				
 
 	}
 	
 	public static enum Location implements ElementHandler {
 		HEADER {
-			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
 				try {
 					 final Map<String, String> atMap = attributeMap(atts);
 					 final long id = Long.parseLong(atMap.get("id"));
 					 final long time = SDF.get().parse(atMap.get("timestamp")).getTime();
+					 final long interval = new Double(atMap.get("intervalms")).longValue();
 					 gcEvent.id = id;
 					 gcEvent.timestamp = time;
 					 gcEvent.gcTrigger = GCTrigger.triggerFor(localName);
+					 gcEvent.interval = interval;
 				} catch (Exception ex) {
 					throw new RuntimeException("Failed to process opener", ex);
 				}
+				return next();
 			}
 			public boolean isElement(final String localName) {
 				return HEADERS.contains(localName);
 			}
 		},
 		PREN {
-			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
 				memSpace(gcEvent, attributeMap(atts), GCPhase.PREGC, Space.NURSERY);
+				return next();
 			}
 			public boolean isElement(final String localName) {
 				return "nursery".equals(localName);
@@ -227,42 +257,109 @@ public class J9GCGenconLogParser implements ContentHandler {
 
 		},
 		PRET {
-			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
 				memSpace(gcEvent, attributeMap(atts), GCPhase.PREGC, Space.TENURED);
+				return next();
 			}
 			public boolean isElement(final String localName) {
 				return "tenured".equals(localName);
 			}
 
 		},
+		PRESOA {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+				memSpace(gcEvent, attributeMap(atts), GCPhase.PREGC, Space.SOA);
+				return next();
+			}
+			public boolean isElement(final String localName) {
+				return "soa".equals(localName);
+			}
+
+		},
+		PRELOA {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+				memSpace(gcEvent, attributeMap(atts), GCPhase.PREGC, Space.LOA);
+				return next();
+			}
+			public boolean isElement(final String localName) {
+				return "loa".equals(localName);
+			}
+
+		},
+		
+		
 		GC {
-			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
 				final Map<String, String> attrMap = attributeMap(atts);
 				gcEvent.gcType = GCType.gcTypeFor(attrMap.get("type"));
+				return ELEMENTS.contains("failed") ? next() : next().next();
 			}
 			public boolean isElement(final String localName) {
 				return "gc".equals(localName);
 			}
 		},
+		
+//		//<failed type="tenured" objectcount="67607" bytes="3246048" /> <failed type="flipped" objectcount="4535632" bytes="253147992" />
+		GCFAIL {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+				if("failed".equals(localName)) {
+					final Map<String, String> attrMap = attributeMap(atts);
+					gcEvent.addGCFail(
+							GCFail.failureFor(attrMap.get("type")), 
+							Long.parseLong(attrMap.get("objectcount")),
+							Long.parseLong(attrMap.get("bytes"))
+					);
+					return GCFAIL;
+				} else if("nursery".equals(localName)) {
+					return next().startElement(localName, atts, gcEvent);
+				}
+				return next();
+			}
+			public boolean isElement(final String localName) {
+				return "failed".equals(localName) || "nursery".equals(localName);
+			}			
+		},
 		POSTGCN {
-			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
 				memSpace(gcEvent, attributeMap(atts), GCPhase.POSTGC, Space.NURSERY);
+				return next();
 			}
 			public boolean isElement(final String localName) {
 				return "nursery".equals(localName);
 			}
 		},
 		POSTGCT {
-			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
 				memSpace(gcEvent, attributeMap(atts), GCPhase.POSTGC, Space.TENURED);
+				return next();
 			}
 			public boolean isElement(final String localName) {
 				return "tenured".equals(localName);
 			}
 		},
+		POSTSOA {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+				memSpace(gcEvent, attributeMap(atts), GCPhase.POSTGC, Space.SOA);
+				return next();
+			}
+			public boolean isElement(final String localName) {
+				return "soa".equals(localName);
+			}
+
+		},
+		POSTLOA {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+				memSpace(gcEvent, attributeMap(atts), GCPhase.POSTGC, Space.LOA);
+				return next();
+			}
+			public boolean isElement(final String localName) {
+				return "loa".equals(localName);
+			}
+		},		
 		POSTALLOCN {
-			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
 				memSpace(gcEvent, attributeMap(atts), GCPhase.POSTALLOC, Space.NURSERY);
+				return next();
 			}
 			public boolean isElement(final String localName) {
 				return "nursery".equals(localName);
@@ -270,17 +367,39 @@ public class J9GCGenconLogParser implements ContentHandler {
 
 		},
 		POSTALLOCT {
-			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
 				memSpace(gcEvent, attributeMap(atts), GCPhase.POSTALLOC, Space.TENURED);
+				return next();
 			}
 			public boolean isElement(final String localName) {
 				return "tenured".equals(localName);
 			}
 		},
+		POSTALLOCSOA {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+				memSpace(gcEvent, attributeMap(atts), GCPhase.POSTALLOC, Space.SOA);
+				return next();
+			}
+			public boolean isElement(final String localName) {
+				return "soa".equals(localName);
+			}
+
+		},
+		POSTALLOCLOA {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+				memSpace(gcEvent, attributeMap(atts), GCPhase.POSTALLOC, Space.LOA);
+				return next();
+			}
+			public boolean isElement(final String localName) {
+				return "loa".equals(localName);
+			}
+		},
+		
 		TIME {
-			public void startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
+			public Location startElement(final String localName, final Attributes atts, final GCEvent gcEvent) throws Exception {
 				final Map<String, String> attrMap = attributeMap(atts);
 				gcEvent.elapsed = Double.parseDouble(attrMap.get("totalms"));
+				return next();
 			}
 			public boolean isElement(final String localName) {
 				return "time".equals(localName);
@@ -339,6 +458,23 @@ public class J9GCGenconLogParser implements ContentHandler {
 		}
 	}
 	
+	public static enum GCFail {
+		TENURED("tenured"),
+		FLIPPED("flipped");
+		
+		private GCFail(final String key) {
+			this.key = key;
+		}
+		public final String key;
+		
+		public static GCFail failureFor(final String localName) {
+			if(TENURED.key.equals(localName)) return TENURED;
+			if(FLIPPED.key.equals(localName)) return FLIPPED;
+			throw new RuntimeException("Unrecognized GCFail key: [" + localName + "]"); 
+		}
+	}
+	
+	
 	public static enum GCPhase {
 		/** The allocation state before the GC ran */
 		PREGC,
@@ -385,7 +521,10 @@ public class J9GCGenconLogParser implements ContentHandler {
 	
 	public static enum Space {
 		TENURED("tenured"),
-		NURSERY("nursery");
+		NURSERY("nursery"),
+		SOA("soa"),
+		LOA("loa");
+//		;
 		
 		private Space(final String key) {
 			this.key = key;
@@ -394,22 +533,43 @@ public class J9GCGenconLogParser implements ContentHandler {
 	}
 	
 	public static class MemorySpace {
-		final long totalbytes;
-		final long freebytes;
-		final int percentFree;
-		final int percentUsed;
+		
+		/** The total number of bytes */
+		long totalbytes = -1L;
+		/** The total number of free bytes */
+		long freebytes = -1L;
+		/** The percentage free bytes */
+		int percentFree = -1;
+		/** The percentage used bytes */
+		int percentUsed = -1;
 		
 		/**
 		 * Creates a new MemorySpace
-		 * @param totalbytes 
-		 * @param freebytes
-		 * @param percentFree
 		 */
-		public MemorySpace(final long totalbytes, final long freebytes, final int percentFree) {
+		public MemorySpace() {
+		}
+		
+		/**
+		 * Loads this memory space
+		 * @param totalbytes The total bytes allocated for the space
+		 * @param freebytes The total number of free bytes for the space
+		 * @param percentFree The percentage free
+		 */
+		public void load(final long totalbytes, final long freebytes, final int percentFree) {
 			this.totalbytes = totalbytes;
 			this.freebytes = freebytes;
 			this.percentFree = percentFree;
-			this.percentUsed = 100-percentFree;
+			this.percentUsed = 100-percentFree;			
+		}
+		
+		/**
+		 * Resets this memory space
+		 */
+		public void reset() {
+			totalbytes = -1L;
+			freebytes = -1L;
+			percentFree = -1;
+			percentUsed = -1;			 			
 		}
 		
 		
@@ -478,16 +638,18 @@ public class J9GCGenconLogParser implements ContentHandler {
 	 * @see org.xml.sax.ContentHandler#startElement(java.lang.String, java.lang.String, java.lang.String, org.xml.sax.Attributes)
 	 */
 	@Override
-	public void startElement(final String uri, final String localName, final String qName, final Attributes atts) throws SAXException {
-		if(ELEMENTS.contains(localName) && !skipEnabled.get()) {
+	public void startElement(final String uri, final String localName, final String qName, final Attributes atts) throws SAXException {		
+		if(ELEMENTS.contains(localName) && !skipEnabled.get()) {			
 			final Location currentLoc = location.get(); 
-			if(currentLoc.isElement(localName)) {	
+			if(currentLoc.isElement(localName)) {
+//				LOG.info("Starting [{}]", localName);
 				try {
-					currentLoc.startElement(localName, atts, gcEvent);
+					Location nextLoc = currentLoc.startElement(localName, atts, gcEvent);
+					location.set(nextLoc);
 				} catch (Exception ex) {
 					LOG.error("Failed parsing during [" + currentLoc.name() + "]", ex);
 				}
-				nextLocation();
+				//nextLocation();
 			}
 		}
 	}

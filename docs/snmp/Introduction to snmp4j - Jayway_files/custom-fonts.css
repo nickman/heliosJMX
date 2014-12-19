@@ -1,0 +1,103 @@
+
+
+/* Body Custom Fonts */
+
+body,
+input,
+button,
+select,
+textarea {
+	font-family: Open Sans;
+	font-size: 16px;
+	font-weight: 300;
+	line-height: 27px;
+}
+/* Header and Mobile Custom Fonts */
+
+header #logo a {
+	font-family: Source Sans Pro;
+	font-size: 42px;
+	font-weight: ;
+	letter-spacing: -2px;
+}
+#menu ul a {
+	font-family: Open Sans;
+	font-size: 14px;
+	font-weight: ;
+}
+#menu ul .sub-menu li a {
+	font-family: Open Sans;
+	font-size: 13px;
+	font-weight: ;
+}
+#navigation-mobile li a {
+	font-family: Open Sans;
+	font-size: 13px;
+	font-weight: ;
+}
+/* Headings Custom Fonts */
+
+h1 {
+	font-family: Open Sans;
+	font-size: 57px;
+	font-weight: 300;
+	line-height: 57px;
+	letter-spacing: -1px;
+}
+h2 {
+	font-family: Open Sans;
+	font-size: 33px;
+	font-weight: 300;
+	line-height: 49px;
+	letter-spacing: -1px;
+}
+h3 {
+	font-family: Open Sans;
+	font-size: 27px;
+	font-weight: 300;
+	line-height: 35px;
+	letter-spacing: -1px;
+}
+h4 {
+	font-family: Open Sans;
+	font-size: 21px;
+	font-weight: 300;
+	line-height: 29px;
+	letter-spacing: -1px;
+}
+h5 {
+	font-family: Open Sans;
+	font-size: 21px;
+	font-weight: 300;
+	line-height: 27px;
+	letter-spacing: -1px;
+}
+h6 {
+	font-family: Open Sans;
+	font-size: 17px;
+	font-weight: 600;
+	line-height: 23px;
+	letter-spacing: 0px;
+}
+/* Page Header Font */
+
+#image-static h2,
+#title-page h2 {
+	font-family: Source Sans Pro;
+	font-size: 42px;
+	font-weight: ;
+	line-height: 54px;
+	letter-spacing: -2px;
+}
+/* Page Header Caption Font */
+
+#image-static .page-caption,
+#image-static .entry-meta.entry-header,
+#title-page .page-caption,
+#title-page .entry-meta.entry-header {
+	font-family: Source Sans Pro;
+	font-size: 28px;
+	font-weight: ;
+	line-height: 39px;
+	letter-spacing: -1px;
+}

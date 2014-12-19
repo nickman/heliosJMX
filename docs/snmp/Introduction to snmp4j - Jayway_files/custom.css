@@ -1,0 +1,1352 @@
+/* ==========
+
+2014-01-01
+joakim.astbrant@jawway.com
+
+Project:
+www.jayway.com
+
+Swatch colors:
+#41b6e6 - Jayway Blue
+#0086bf - Dark Blue
+#d0df00 - Lime
+#7a9a01 - Dark Green
+#f0b323 - Orange
+#f3e500 - Yellow
+
+==========
+
+1.  DESIGN
+    1-1. General design
+    1-2. Overwrite design
+    1-3. Text/Background colors
+    1-4. Button
+    1-5. Forms
+    1-6. Helpers (denk)
+
+2.  HEADER
+    2-1. General
+3.  FOOTER
+    3-1. General
+4.  CASES
+    4-1. Filter
+    4-2. Case Start
+    4-3. Case Show
+5.  WHAT WE DO
+    5-1. General
+6.  BLOGG / EVENT
+    6-1. Blogg
+    6-2. Event
+7.  JOBS
+8.  HISTORY
+    8-1. General
+9.  CONTACT
+    9-1. General
+10. TESTIMONIAL
+    10-1. General
+11. JAYWAY PRODUCTS
+   11-1. General
+*/
+
+.post-type-navi .prev,
+.post-type-navi .next  {
+  display:none;
+}
+
+/*  1-1  */
+a:hover {
+  color: #0086bf;
+}
+
+.transp_logo {
+  opacity: 0.85;
+}
+
+.center {
+  text-align: center;
+}
+
+.txt-right {
+  text-align: right;
+}
+
+.right-25 {
+  margin-right: 25px;
+}
+
+.40left_pad {
+  padding-left: 40px;
+  padding-right: 40px;
+}
+    
+.cta { 
+  text-align: center; 
+  font-size: 2em; 
+  line-height: 1.2em;
+}
+    
+.nopadd .container-fluid {
+  padding-left:0px;
+  padding-right:0px;
+}
+    
+.font-icon-calendar,
+.font-icon-eye,
+.font-icon-clock,
+.font-icon-user {
+  color: #d0df00;
+  line-height: 0;
+}
+  
+.number-field {
+  font-size: 14px;
+  color: #fff;
+}
+  
+.number-value.timer {
+  font-size: 45px; 
+  color: #fff;
+  }
+  
+.page_header p {
+  margin: 0;
+}
+
+.page_header h2 {
+  color: #fff; 
+  line-height: 42px;
+}
+  
+/*.img75 {
+  width: 75%;
+  height:75%;
+}
+.img50 {
+  width:50%;
+  height:50%;
+}*/
+
+.blockhide {
+  display: none;
+}
+
+.leftpad30 {
+  padding-left: 30px;
+}
+
+.ibox-left {
+  text-align:left;
+}
+
+.img-circle {
+    width: 220px;
+    height: 220px;
+    -moz-border-radius: 0;
+    -webkit-border-radius: 0;
+    border-radius: 0;
+}
+
+/*  1-2  */
+.greyscale {
+  -webkit-filter: grayscale(100%);
+     -moz-filter: grayscale(100%);
+          filter: grayscale(100%);
+  }
+
+/*  1-3  */
+.text-blue {
+  color: #41b6e6;
+}
+
+.text-green {
+  color: #d0df00;
+}
+
+.text-white {
+  color: #fff;
+}
+
+.bg-blue {
+  background-color: #41b6e6;
+}
+
+.bg-lime {
+  background-color: #d0df00;
+}
+
+.bg-orange {
+  background-color: #f0b323;
+}
+
+/*  1-4  */
+.btn-row {
+  text-align: center;
+}
+
+.btn {
+  display: inline-block;
+  cursor: pointer;
+  border-radius: 1.1em;
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 18px 7px;
+  text-transform: uppercase;
+  -webkit-transition: background-color 0.2s ease-in-out 0s;
+          transition: background-color 0.2s ease-in-out 0s;
+}
+
+.firstcolor{
+  color: #fff;
+  background-color:#000;
+  border: 1px solid transparent;
+}
+.firstcolor:hover{
+  color: #fff;
+  background-color: #41b6e6;
+  border: 1px solid transparent;
+}
+.firstcolor:active{
+  color: #fff;
+  background-color: #41b6e6;
+  border: 1px solid #41b6e6;
+}
+
+.firstcolordark{
+  color:#fff;
+  background-color:#000;
+  border: 1px solid transparent;
+}
+.firstcolordark:hover {
+  color:#fff;
+  background-color:#0086bf;
+  border: 1px solid transparent;
+}
+.firstcolordark:active {
+  color: #fff;
+  background-color: #0086bf;
+  border: 1px solid #0086bf;
+}
+
+.secondcolor {
+  color: #fff;
+  background-color: #41b6e6;
+  border: 1px solid transparent;
+}
+.secondcolor:hover {
+  color: #fff;
+  background-color: #0086bf;
+  border: 1px solid transparent;
+}
+.secondcolor:active {
+  color: #fff;
+  background-color: #0086bf;
+  border: 1px solid #0086bf;
+}
+
+.ctacolor {
+  color: #fff;
+  background-color: #000;
+  border: 1px solid transparent;
+}
+.ctacolor:hover {
+  color: #000;
+  background-color: #fff;
+  border: 1px solid transparent;
+}
+.ctadcolor:active {
+  color:#000;
+  background-color:#fff;
+  border: 1px solid #fff;
+}
+
+.transp_blue {
+  color: #41b6e6;
+  background-color: #fff;
+  border: 1px solid #41b6e6;
+}
+.transp_blue:hover {
+  color:#fff;
+  background-color:#41b6e6;
+  border: 1px solid #41b6e6;
+}
+.transp_blue:active {
+  color: #fff;
+  background-color: #41b6e6;
+  border: 0px solid transparent;
+}
+
+/* 1-6 */
+.denk-fluid-image-wrapper {
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  max-height: 500px;
+}
+.denk-fluid-image-wrapper img.denk-fluid-image {
+  visibility: hidden;
+}
+
+
+
+/* 2. HEADER */
+/* 2-1 */
+
+.triangle { /* ??? */
+  width: 0;
+  height: 0;
+  border-top: 10px solid #FFF;
+  border-bottom: 0;
+  border-left: 10px solid transparent; 
+  border-right: 10px solid transparent;
+  -moz-transform: scaleY(1.5);
+  -moz-transform-origin: bottom;
+  position: absolute;
+  left:48%;
+}
+
+header.sticky-header {
+  background-color:rgba(34, 31, 31, 1.0);
+}
+header.sticky-header.nav-small {
+  box-shadow: rgba(0, 0, 0, 0.0980392) 0 0 0;
+ }
+.menu-nav .menu-icon {
+  background: url(http://jayway.wpengine.com/wp-content/uploads/2014/06/menu-mobile_white.png) 0 0 no-repeat; 
+  top: 35%; 
+  margin: 0; 
+  width: 16px;
+}
+  
+#navigation-mobile li a {
+  font-size: 13px; 
+  font-weight: 600; 
+  border-bottom: 1px solid #2d2929;
+}
+
+/* 3. FOOTER */
+/* 3-1 */
+#footer-credits {
+  background-color: #222;
+}
+
+#footer-credits p {
+  color: #666;
+  text-align: center;
+}
+
+#footer-credits .copyright {
+  display: none;
+}
+
+/* 4. CASES*/ 
+/* 4-1 */
+
+#portfolio-filter.desktop-filter {
+  background-color: #e6e7e8;
+  display: block;
+  margin: 0;
+  padding: 0 0 31px 0;
+  margin-bottom: 25px;
+ }
+#portfolio-filter .portfolio-left p {
+  visibility: hidden;
+}
+
+#portfolio-filter .portfolio-right {
+  float: left;
+}
+
+#portfolio-filter .portfolio-right ul li {
+  float: left;
+  list-style: none;
+  margin-left: 5px;
+  margin-top: 4px;
+  padding: 0;
+}
+
+#portfolio-filter .portfolio-right ul li .selected {
+  background-color: #0086bf;
+}
+
+#portfolio-filter .portfolio-right ul li a {
+  color: #fff;
+  font-weight: 300; 
+  padding: 9px 40px; 
+  background-color: #333; 
+  line-height: 2.5em;
+}
+
+#casespacingleft {
+  margin: 200px;
+}
+
+/* Tags bakgrund Tillfälligt bort 
+#cases
+ {
+  background-image:url('http://jayway.wpengine.com/wp-content/uploads/2014/05/bg_case.gif');
+  background-position:top left;
+  background-repeat:repeat-x;
+ }*/
+ 
+/* 4-2 */
+
+.item-project .project-name .va {
+  display: block; 
+  text-align: left;
+}
+
+.item-project .project-name .va-inner {
+  position: absolute; 
+  bottom: 20px; 
+  left: 30px; 
+  right: 30px;
+}
+
+.item-project .project-name .va .project-title {
+  text-align: left; 
+  margin-bottom: 3px;
+}
+
+.item-project a {
+  display: block;
+}
+
+.item-project .project-name {
+  opacity: 1;
+  background: rgba(0,0,0,0);
+}
+
+.item-project .project-name h3 { 
+  line-height: 1.6;
+  margin: 2px 0;
+}
+
+.item-project .project-name h3 span {
+  display: inline;
+  font-weight: 500;
+  color: #fff;
+  background-color: rgba(0,0,0,0.00);
+  line-height: 1;
+  padding: 4px 0;
+  box-shadow: 10px 0 0 rgba(0,0,0,0.00), -10px 0 0 rgba(0,0,0,0.00);
+}
+
+.item-project .project-name h4 {
+  line-height: 2;
+  display: inline;
+  opacity: 1;
+  color: #fff;
+  font-style: normal;
+  text-transform: none;
+  background-color: rgba(0,0,0,0.00);
+  padding: 3px 0;
+  box-shadow: 10px 0 0 rgba(0,0,0,0.00), -10px 0 0 rgba(0,0,0,0.00);
+}
+
+/* 4-3 */
+
+.case_inf {
+  padding-right: 100px;
+}
+
+.case_company {
+  padding: 20px 40px;
+  background-color: #000;
+  color: #fff;
+  margin-bottom: 15px;
+}
+
+.case_portfolio {
+  margin: 2px;
+}
+
+.case_contact img {
+  margin: 0 20px 40px 0;
+  text-align: center;
+  border: 0;
+  border-radius: 50%;
+  width: 100px;
+  height: 100px;
+  -webkit-filter: grayscale(100%);
+     -moz-filter: grayscale(100%);
+          filter: grayscale(100%);
+}
+.case_contact b {
+  font-size: 28px; 
+  font-weight: 100; 
+  font-style: normal; 
+  color: rgba(34,31,31,1.0); 
+  line-height: 28px;
+}
+  
+.case_contact i {
+  font-weight: 100;
+  font-style: normal;
+  line-height: 14px;
+}
+  
+.case_contact p {
+  line-height: 1.35;
+}
+
+.post-type-navi {
+  top: 40%;
+}
+
+.post-type-navi .prev a {
+  left: -245px; 
+  text-align: right;
+}
+
+.post-type-navi .prev a:hover,
+.post-type-navi .prev a:focus,
+.post-type-navi .prev a:active {
+  left: -225px;
+  text-align: right;
+}
+
+.post-type-navi .next a {
+  right: -245px;
+}
+
+.post-type-navi .next a:hover,
+.post-type-navi .next a:focus,
+.post-type-navi .next a:active{
+  right: -225px;
+}
+
+.post-type-navi .prev a:hover span,
+.post-type-navi .prev a:focus span,
+.post-type-navi .prev a:active span,
+.post-type-navi .next a:hover span,
+.post-type-navi .next a:focus span,
+.post-type-navi .next a:active span {
+  padding: 27px 32px;
+  color: #fff;
+  -webkit-transition: all 0.15s ease-in-out 0s;
+     -moz-transition: all 0.15s ease-in-out 0s;
+          transition: all 0.15s ease-in-out 0s;
+}
+
+.post-type-navi .prev a:hover,
+.post-type-navi .prev a:focus,
+.post-type-navi .prev a:active,
+.post-type-navi .next a:hover,
+.post-type-navi .next a:focus,
+.post-type-navi .next a:active{
+  background:rgba(65,182,230,0.85);
+  -webkit-transition: all 0.15s ease-in-out 0s;
+     -moz-transition: all 0.15s ease-in-out 0s;
+          transition: all 0.15s ease-in-out 0s;
+}
+
+.post-type-navi .prev a,
+.post-type-navi .next a{
+  background: rgba(34,31,31,0.85);
+  height: 110px;
+  width: 300px;
+  border-radius: 60px;
+}
+
+.post-type-navi
+.next a span, 
+.post-type-navi 
+.prev a span {
+  padding: 27px 14px;
+  -webkit-transition: all 0.15s ease-in-out 0s;
+     -moz-transition: all 0.15s ease-in-out 0s;
+          transition: all 0.15s ease-in-out 0s;
+}
+ 
+.circleFFF {
+  width: 240px;
+  height: 240px;
+  border-radius: 120px;
+  color:#fff;
+  line-height: 24px;
+  text-align: center;
+  background: #fff;
+  opacity: 0.95;
+  position: absolute;
+  z-index: 303;
+}
+
+.circle_textFFF {
+  color: #000;
+  position: absolute;
+  text-align: center;
+  line-height: 28px;
+  z-index: 304;
+}
+
+.circle000 {
+  width: 250px;
+  height: 250px;
+  border-radius: 125px;
+  color: #fff;
+  line-height: 24px;
+  background: #000;
+  opacity: 0.85;
+  position: absolute;
+  z-index: 301;
+}
+.circle_text000 {
+  color: #fff;
+  position: absolute;
+  text-align: center;
+  line-height: 28px;
+  z-index: 302;
+}
+
+.blogg_tag {
+  border: 2px solid #48b6e4;
+  padding: 8px;
+  background-color: #fff;
+  color: #48b6e4;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  margin: 3px 0;
+}
+
+.3cols_txt {
+  padding-top: 100px;
+}
+
+.tp-rightarrow.default,
+.tp-leftarrow.default {
+  background-color: rgba(34,31,31,0.85);
+  height: 3.4em;
+  width: 3.4em;
+  border-radius: 50px;
+  box-shadow: 0 0 10px rgba(250,250,250,0.25);
+}
+
+.tp-rightarrow.default:hover,
+.tp-leftarrow.default:hover {
+  background-color: rgba(65,182,230,0.85);
+}
+
+.tp-leftarrow.default:hover {
+  left: 240px;
+  -webkit-transition: all 0.15s ease-in-out 0s;
+     -moz-transition: all 0.15s ease-in-out 0s;
+          transition: all 0.15s ease-in-out 0s;
+}
+.tparrows:before {
+  margin-top: 14px;
+}
+.tp-leftarrow:before {
+  font-weight: bold;
+  margin-left: 2px;
+}
+.tp-rightarrow:before {
+  font-weight: bold;
+  margin-left: 5px;
+}
+.tparrows {
+  opacity: 0.8 !important;
+  filter: alpha(opacity=80);
+  -webkit-transition: opacity 0.15s ease-in-out 0s;
+     -moz-transition: opacity 0.15s ease-in-out 0s;
+          transition: opacity 0.15s ease-in-out 0s;
+}
+.tparrows:hover {
+  opacity: 0.8 !important;
+  filter: alpha(opacity=80) !important;
+}
+
+
+/* 5. WHAT WE DO
+   5-1 */
+.img-middle {
+  position: absolute;
+  top: 80px;
+  left: 50px;
+  width: 200px;
+  height: 200px;
+}
+/* center img vertically instead of aligning with header /Peter */
+.single-image img.alignleft.img-middle {
+    top:50%;
+    margin-top:-100px;
+}
+
+.txt-middle {
+  text-align: left; 
+  padding: 80px 0 70px 300px;
+}
+.page .box .box-text h4 {
+  font-size: 33px;
+  line-height: 42px;
+}
+
+/* 6. BLOGG / EVENT
+   6-1 */
+
+.tagcloud a {
+  border-radius: 1.1em;
+  border: 1px solid #41b6e6 !important;
+  padding: 6px 12px;
+  font-weight: 100;
+}
+.entry-content .entry-authors img {
+  display: inline;
+  margin: 20px 10px 20px 0;
+  text-align: center;
+  border: 0 solid black;  
+  width: 85px;
+  height: 85px;
+}
+.entry-content {
+  margin-bottom: 25px;
+}
+.entry-tags a {
+  margin: 7px 2px;
+}
+.meta {
+  color: #41b6e6;
+}
+.meta .entry-header a {
+  color: #41b6e6;
+  font-weight: 600;
+}
+.meta .entry-header a:hover {
+  text-decoration: underline;
+}
+.meta .entry-titles h2 {
+  color: #221f1f;
+  font-size: 33px;
+  line-height: 33px;
+}
+.standard-blog .post-name .entry-title {
+  font-size: 33px;
+  line-height: 33px;
+}
+.latest-post .post-name h2, .latest-post .post-name .entry-title a {
+  color: #221f1f;
+}
+#post-area {
+  padding-right: 75px;
+}
+/* Categories / Blog */
+#title-page .pagize {
+  padding-top: 25px;
+  padding-bottom: 25px;
+}
+#title-page h2 {
+  color: #FFF;
+  font-family: "Open Sans" !important;
+  font-size: 33px !important;
+  text-transform: none;
+  font-weight: 100;
+}
+.eventbrite-event .meta {
+  padding-bottom: 25px;
+}
+
+/* DENK: Fix comments with User Photo images (2014-09-08) */
+.comment-side .photo {
+  display: block;
+  width: 50px;
+  height: 50px;
+  border-radius: 100%; /* Was 999px (if I broke shit) */
+}
+
+/*
+.entry-tags a {
+  color: #41b6e6;
+  border: 1px solid #41b6e6;
+  margin: 7px 2px;
+  text-transform: uppercase;
+  font-weight: 100;
+  font-size: 12px;
+}
+
+.ent-tags a:hover {
+  color: #fff;
+  border: 1px solid #41b6e6;
+  background-color: #41b6e6;
+}
+  
+.standard-blog .post-name .entry-titles h2 {
+  color: #221f1f !important;
+  font-size: 33px;
+  line-height: 33px;
+}
+.standard-blog .post-name .entry-titles a {
+  color: #41b6e6 !important;
+  font-size: 33px;
+  line-height: 33px;
+}
+
+.category,
+.category a
+.authors-text,
+.published,
+.meta-sep,
+.comment-count,
+.edit-post {
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 10px;
+}
+
+#blog .entry-content img {
+  display: inline;
+  margin: 0 0 10px 0;
+  text-align: center;
+  border: 4px solid black;
+  border-radius: 50%;
+  width: 85px;
+  height: 85px;
+  position: absolute;
+  top: 0px;
+  left: 0px;
+}
+  
+
+.past-event-list {
+  background: #f6f7f8;
+}
+.post-name {
+  margin: -17px 0 0 100px;
+}
+
+.meta {
+  color: #41b6e6;
+}
+.meta a {
+  text-decoration: none;
+  color: #41b6e6;
+}
+#EventSection .meta {
+  padding-bottom: 25px;
+}
+.entry-title {
+  margin-bottom: 0;
+}
+.entry-title a {
+  color: #221f1f;
+}
+.entry-footer div {
+  margin-top: 25px;
+}
+#blog .entry-title {
+  margin-top: 20px;
+}
+#blog .entry-title h2,
+#archive .entry-title h2 {
+  color: #221F1F;
+  line-height: 1.0em;
+}
+#post-area {
+  padding-bottom: 20px;
+}
+*/
+
+
+/* 6-2 */
+
+
+
+/* 7. JOBS
+   7-1 */
+
+.jobs_circle {
+  width: 180px;
+  height: 180px;
+  border-radius: 90px;
+  line-height: 24px;
+  background: #48b6e4;
+  opacity: 1;
+  position: absolute;
+  left: 102%;
+  top: 60px;
+  line-height: 1.3em;
+}
+.jobs_date {
+  color: #cee000;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 100;
+  line-height: 1.3em;
+  padding-top: 37px;
+}
+.jobs_date b {
+  color: #fff;
+}
+.jobs_info {
+  line-height: 1.3em;
+}
+.jobs_info h2,
+.jobs_info h3 {
+  line-height: 2.3em;
+  margin-top: 1.2em;
+  color: #41b6e6;
+}
+.jobs_current {
+  margin-top: 400px;
+  margin-left: 40px;
+}
+.jobs_current h2 {
+  color: #41b6e6;
+  font-size: 1.2em;
+}
+.jobs_content {
+  padding-bottom: 30px;
+}
+.speaker_txt {
+  padding-left: 0px;
+  text-align: left;
+  font-size: 33px;
+  line-height: 50px;
+}
+
+/* 8. HISTORY */
+/* 8-1 */
+/*.bghistory {
+  background-image: url('http://jayway.wpengine.com/wp-content/uploads/2014/06/bg_history.gif');
+  background-position: 215px 0px;
+  background-repeat: repeat-y;
+}
+.historydot {
+  background-image: url('http://jayway.wpengine.com/wp-content/uploads/2014/06/bg_history.gif');
+  background-position: 7px 10px;
+  background-repeat: no-repeat;
+  background-size: 15px 4px;
+}
+.boxrow {
+  clear: both;
+  padding-top: 8px;
+  width: 50%;
+}
+.boxrow .left {
+  background-image: url('http://jayway.wpengine.com/wp-content/uploads/2014/06/bg_box-left.gif');
+  background-position: top left;
+  background-repeat: no-repeat;
+  padding-left: 60px;
+  margin-top: -80px;
+}
+.boxrow .right {
+  background-image: url('http://jayway.wpengine.com/wp-content/uploads/2014/06/bg_box-right.gif');
+  background-position: top right;
+  background-repeat: no-repeat;
+  padding-right: 60px;
+  margin-top: -80px;
+}
+.row.boxrow {
+  margin-left: 0px;
+  margin-right: 0px;
+}
+.box {
+  font-family: "Open sans", Verdana;
+  font-size: 14px;
+  line-height: 23px;
+  font-weight: 300;
+  max-width: 90%;
+}
+.box h2 {
+  font-family: "Open sans", Verdana;
+  font-size: 24px;
+  font-weight: bold;
+  color: #41b5e6;
+  margin-top: -7px;
+}
+.pbox {
+  background-color: #f6f7f8;
+  color: #333333;
+  padding: 25px 12px;
+  margin-bottom: 5px;
+}
+.pbox-dark {
+  background-color: #f1f2f3;
+  color: #333;
+  padding: 25px 12px;
+  margin-bottom: 5px;
+}
+.h2left {
+  text-align: left
+}
+.h2right {
+  text-align: right
+}
+.hi-green {
+}
+*/
+
+/* 9. CONTACT */
+/* 9-1 */
+.map-blue {
+  border-right: 35px solid #41b6e6;
+  width: 100%;
+}
+.map-green {
+  border-right: 35px solid #d0df00;
+  width: 100%;
+}
+.map-orange {
+  border-right: 35px solid #f0b323;
+  width: 100%;
+}
+.map-iframe {
+  border: 0;
+  margin-bottom: -6px;
+  height: 350px;
+}
+
+/* TESTIMONIAL*/
+/* 10-1 */
+
+.az-testimonial-quote {
+  font-size: 1.8em;
+  font-style: italic;
+  line-height: 1.3;
+  margin: 0 auto 30px;
+  text-align: center;
+  width: 90%;
+  color: #fff;
+}
+
+.az-testimonial-source {
+  font-size: 1.0em;
+  text-transform: none;
+  font-weight: 100;
+}
+
+.az-testimonial-source {
+  font-size: 1.0em;
+  font-weight: 100;
+  margin-bottom: 30px;
+  text-align: center;
+  text-transform: none;
+}
+
+.az-testimonials-container .flex-control-nav li a {
+  background-color: transparent;
+  background-position: initial initial;
+  background-repeat: initial initial;
+  -webkit-transition: background 0.15s ease-in-out 0s;
+     -moz-transition: background 0.15s ease-in-out 0s;
+          transition: background 0.15s ease-in-out 0s;
+  border: 2px solid #d0df00;
+  border-bottom-left-radius: 999px;
+  border-bottom-right-radius: 999px;
+  border-top-left-radius: 999px;
+  border-top-right-radius: 999px;
+  cursor: pointer;
+  display: block;
+  height: 16px;
+  text-indent: -999em;
+  width: 16px;
+}
+.az-testimonials-container .flex-control-nav li a.flex-active,
+.az-testimonials-container .flex-caption,
+.az-testimonials-container .flex-control-nav li a:hover {
+  background: #d0df00;
+}
+ 
+/* JAYWAY PRODUCT PAGES*/
+/*  11-1  */
+
+.jproducts b {
+  color:#41b6e6;
+}
+.jproducts .case_company {
+  background-color: #e1e2e2;
+  color: #1f1f22;
+}
+
+
+
+@media only screen and (max-device-width : 1024px) {
+  .bot15 {
+    margin-bottom: 15px !important;
+  }
+  /* 3. FOOTER */
+  .extfoot {
+    display: none;
+  }
+
+  /* 4. PORTFOLIO */
+  .desktop-filter #portfolio-filter {
+    display: none;
+  }
+  .dropmenu, .dropmenu-active {
+    background-color: #fff;
+  }
+  #portfolio-filter.desktop-filter, #portfolio-filter.mobile-filter {
+    padding-bottom: 10px;
+  }
+  /* Tags bakgrund Tillfälligt bort 
+  #cases {
+  background-image: url('http://jayway.wpengine.com/wp-content/uploads/2014/05/bg_case.gif');
+  background-position: 0px -45px;
+  background-repeat: repeat-x;
+  }
+  */
+}
+
+@media only screen and (max-device-width : 640px) {
+  /* 1. DESIGN GENERAL */
+  .menu-nav-mobile .menu-icon {
+    background: url(http://jayway.wpengine.com/wp-content/uploads/2014/06/menu-mobile_white.png) 0 0 no-repeat;
+  }
+
+  .toppad0 {
+    height: 0px !important;
+  }
+  .toppad10 {
+    height: 10px !important;
+  }
+  .toppad25 {
+    height: 25px !important;
+  }
+  .toppad35 {
+    height: 35px !important;
+  }
+  .toppad50 {
+    height: 50px !important;
+  }
+  .toppad75 {
+    height: 75px !important;
+  }
+
+  .speaker_txt, speaker h1 {
+    padding-left: 0px;
+    text-align: left;
+    font-size: 24px;
+    line-height: 28px;
+  }
+  .bot15 {
+    margin-bottom: 15px !important;
+  }
+  .mobblock {
+    display: none;
+    background-color: #ff0000;
+  }
+  .screamer h1 {
+    font-size: 24px;
+    line-height: 30px;
+  }
+  .case_inf {
+    padding-right: 0;
+  }
+  .case_contact img {
+    display: none;
+  }
+  .case_contact p {
+    line-height: 1.5;
+    margin: 0;
+  }
+
+
+  /* 2. HEADER */
+  .page_header p {
+    margin: 0 0;
+    background-color: #41b6e6;
+  }
+  .page_header h2 {
+    font-size: 24px;
+    color: #FFF;
+    line-height: 40px;
+  }
+  .jobs_header p {
+    margin: 0 0;
+    background-color: #FFF;
+  }
+  .jobs_header h2 {
+    font-size: 24px;
+    color: #221f1f;
+    line-height: 40px;
+  }
+  .cta-block {
+    margin-top: -15px;
+    margin-bottom: -5px;
+  }
+  .eventPanel {
+    padding-top: 50px !important;
+    padding-bottom: 50px !important;
+  }
+  .cta {
+    line-height: 1.2em;
+  }
+
+  .az-testimonial-quote {
+    font-size: 1.4em;
+  }
+  .az-testimonial-source {
+    font-size: 0.9em;
+    line-height: 1.2em;
+  }
+  .sectionhead h2 {
+    font-size: 1.2em;
+    font-weight: normal;
+    line-height: 1.5em;
+  }
+  .section-cta h2,
+  .section-cta p {
+    font-size: 28px;
+    line-height: 34px;
+  }
+
+  h1 {
+    font-size: 20px;
+    line-height: 54px;
+  }
+  .circleFFF {
+    display: none;
+  }
+  .circle_textFFF {
+    display: none;
+  }
+
+  /* 3. FOOTER */
+  .extfoot {
+    display: none;
+  }
+
+  /* 4. PORTFOLIO */
+  #portfolio-filter.desktop-filter {
+    display: none;
+  }
+  .dropmenu,
+  .dropmenu-active {
+    background-color: #ffffff;
+  }
+  #portfolio-filter.desktop-filter,
+  #portfolio-filter.mobile-filter {
+    padding-bottom: 10;
+  }
+  .circleFFF {
+    display: none;
+  }
+  .circle_textFFF {
+    display: none;
+  }
+  .circle000 {
+    display: none;
+  }
+  .circle_text000 {
+    display: none;
+  }
+  .txt-img {
+    display: none;
+  }
+  .case_citat h2 {
+    font-size: 27px;
+    line-height: 35px;
+  }
+  /*Tags bakgrund Tillfälligt bort
+  #cases {
+    background-image: url('http://jayway.wpengine.com/wp-content/uploads/2014/05/bg_case.gif');
+    background-position: 0px -45px;
+    background-repeat: repeat-x;
+  }
+  */
+  
+  /* 5. WHAT WE DO */
+  .img-middle {
+    position: inherit;
+    margin-left: auto;
+    margin-right: auto;
+    width: 140px;
+    height: 140px;
+  }
+  .single-image img.alignleft.img-middle { /* Reset the vertical fix for mobile /Peter */
+      margin-top:0;
+  }
+
+  .txt-middle {
+    text-align: left;
+    padding: 20px 0 20px 0;
+  }
+  
+  /* 7. BLOG AND EVENT*/
+  .entry-content img {
+    max-width: 100%;
+    height: auto;
+  }
+  #post-area {
+    padding-right: 15px;
+  }
+
+  /* 8. HISTORY */
+  .bghistory {
+    background-image: none;
+  }
+  .boxrow {
+    clear: both;
+    padding-top: 8px;
+    width: 100%;
+  }
+  .left,
+  .right {
+    float: left;
+    display: inline-block;
+  }
+  .boxrow .left,
+  .boxrow .right {
+    background-image: none;
+    padding-left: 0px;
+    padding-right: 0px;
+    margin-top: 0px;
+  }
+  .box {
+    max-width: 100%;
+    text-align: left !important;
+  }
+  .pbox {
+    background-color: #ffffff;
+    padding: 0px 0px;
+  }
+  .h2left,
+  .h2right {
+    text-align: left
+  }
+
+  /* 9. CONTACT */
+  .map-blue {
+    border-right: 0px;
+    border-right: 15px solid #41b6e6;
+    width: 90%;
+  }
+  .map-green {
+    border-right: 0px;
+    border-right: 15px solid #d0df00;
+    width: 90%;
+  }
+  .map-orange {
+    border-right: 0px;
+    border-right: 15px solid #f0b323;
+    width: 90%;
+  }
+  .map-iframe {
+    border: 0;
+    margin-bottom: -6px;
+    height: 250px;
+  }
+  .map-contact {
+    width: 85%;
+  }
+
+  .tparrows,
+  .JobsLimeFX {
+    display: none;
+  }
+  #rev_slider_6_1 .btn {
+    margin-top: 100px;
+  }
+  
+}
+.entry-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+.comment-body p {
+    -ms-text-overflow: ellipsis;
+    -o-text-overflow: ellipsis;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}

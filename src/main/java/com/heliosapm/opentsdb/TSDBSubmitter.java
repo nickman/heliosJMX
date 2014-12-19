@@ -452,6 +452,15 @@ public class TSDBSubmitter {
 	}
 	
 	/**
+	 * Converts the passed ms time.
+	 * @return the time converted to seconds if {@link #traceInSeconds} is true, otherwise in milliseconds (unchanged)
+	 */
+	public long time(final long time) {
+		return traceInSeconds ? TimeUnit.SECONDS.convert(time, TimeUnit.MILLISECONDS) : time; 
+	}
+
+	
+	/**
 	 * Traces a double metric
 	 * @param metric The metric name
 	 * @param value The value
@@ -767,13 +776,14 @@ public class TSDBSubmitter {
 	
 	/**
 	 * Traces a long metric
+	 * @param timestamp The provided time in ms.
 	 * @param metric The metric name
 	 * @param value The value
 	 * @param tags The metric tags
 	 */
-	public void trace(final String metric, final long value, final Map<String, String> tags) {
+	public void trace(final long timestamp, final String metric, final long value, final Map<String, String> tags) {
 		StringBuilder b = getSB();
-		b.append("put ").append(clean(metric)).append(" ").append(time()).append(" ").append(value).append(" ");
+		b.append("put ").append(clean(metric)).append(" ").append(time(timestamp)).append(" ").append(value).append(" ");
 		appendRootTags(b);
 		for(Map.Entry<String, String> entry: tags.entrySet()) {
 			b.append(clean(entry.getKey())).append("=").append(clean(entry.getValue())).append(" ");
@@ -786,6 +796,19 @@ public class TSDBSubmitter {
 			traceCount.incrementAndGet();
 		}
 	}
+	
+	/**
+	 * Traces a long metric
+	 * @param metric The metric name
+	 * @param value The value
+	 * @param tags The metric tags
+	 */
+	public void trace(final String metric, final long value, final Map<String, String> tags) {
+		trace(System.currentTimeMillis(), metric, value, tags);
+	}
+	
+	
+	
 	
 	/**
 	 * Traces a long metric
@@ -1246,6 +1269,13 @@ public class TSDBSubmitter {
 		return timeout;
 	}
 
+	/**
+	 * Creates and returns a new tag map
+	 * @return a tag map
+	 */
+	public FluentMap tagMap() {
+		return new FluentMap();
+	}
 
 	/**
 	 * Indicates if TSDB times are traced in seconds, or milliseconds
