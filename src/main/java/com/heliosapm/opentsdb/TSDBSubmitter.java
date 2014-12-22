@@ -538,8 +538,7 @@ public class TSDBSubmitter {
 		return traceInSeconds ? System.currentTimeMillis()/1000 : System.currentTimeMillis(); 
 	}
 	
-	/**
-	 * Converts the passed ms time.
+	/**	 * Converts the passed ms time.
 	 * @param time The time to convert
 	 * @return the time converted to seconds if {@link #traceInSeconds} is true, otherwise in milliseconds (unchanged)
 	 */
@@ -1648,6 +1647,613 @@ BASE_URL = "http://localhost:8070/";
 
 httpClient = new AsyncHttpClient(new AsyncHttpClientConfig.Builder().setAllowPoolingConnection(true).setConnectionTimeoutInMs(2000).build());
 httpClient.preparePost(BASE_URL + "api/put").setBody(body.toString()).execute();
+
+
+
+ES Annotations
+===============
+
+#Create an index
+curl -XPUT 'http://localhost:9200/events/'     <---  index name: events
+
+
+#add a mapping to make sure timestamp is automatically saved
+curl -XPUT 'http://localhost:9200/events/test/_mapping' -d '
+{
+    "test" : {
+        "_timestamp" : { "enabled" : true, "store": "yes" }
+    }
+}'
+
+#Post some data
+curl -XPOST 'http://localhost:9200/events/test' -d '{
+    "tags" : ["test","start"],
+    "message" : "Just a test of events for grafana. Test start. "
+}'
+
+
+Verify
+======
+$ curl -XGET 'http://localhost:9200/events/test/ZTQ7V-3uRCmb48hwJzPgJg?pretty&fields=_timestamp'
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=UTF-8
+Content-Length: 171
+
+{
+  "_index" : "events",
+  "_type" : "test",
+  "_id" : "ZTQ7V-3uRCmb48hwJzPgJg",
+  "_version" : 1,
+  "found" : true,
+  "fields" : {
+    "_timestamp" : 1410189580537
+  }
+}
+
+
+
+
+
+GC Dash
+=======
+{
+  "id": null,
+  "title": "MFT Java GC",
+  "originalTitle": "MFT Java GC",
+  "tags": [
+    "app=MFT"
+  ],
+  "style": "light",
+  "timezone": "browser",
+  "editable": true,
+  "hideControls": true,
+  "sharedCrosshair": false,
+  "rows": [
+    {
+      "title": "Row1",
+      "height": "120px",
+      "editable": true,
+      "collapse": false,
+      "panels": [
+        {
+          "title": "% Used: Tenured",
+          "error": false,
+          "span": 3,
+          "editable": true,
+          "type": "singlestat",
+          "id": 1,
+          "links": [],
+          "maxDataPoints": 100,
+          "interval": null,
+          "targets": [
+            {
+              "errors": {},
+              "aggregator": "max",
+              "downsampleAggregator": "sum",
+              "hide": false,
+              "metric": "java.mem",
+              "currentTagKey": "",
+              "currentTagValue": "",
+              "tags": {
+                "host": "mfthost",
+                "app": "MFT",
+                "phase": "postalloc",
+                "metric": "percentUsed",
+                "space": "tenured"
+              }
+            }
+          ],
+          "cacheTimeout": null,
+          "format": "percent",
+          "prefix": "",
+          "postfix": "",
+          "nullText": null,
+          "valueMaps": [
+            {
+              "value": "null",
+              "op": "=",
+              "text": "Offline"
+            }
+          ],
+          "nullPointMode": "connected",
+          "valueName": "current",
+          "prefixFontSize": "50%",
+          "valueFontSize": "80%",
+          "postfixFontSize": "50%",
+          "thresholds": "0,50,80",
+          "colorBackground": false,
+          "colorValue": true,
+          "colors": [
+            "rgba(50, 172, 45, 0.97)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(245, 54, 54, 0.9)"
+          ],
+          "sparkline": {
+            "show": true,
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "fillColor": "rgba(31, 118, 189, 0.18)"
+          }
+        },
+        {
+          "title": "% Allocated: Nursery",
+          "error": false,
+          "span": 3,
+          "editable": true,
+          "type": "singlestat",
+          "id": 2,
+          "links": [],
+          "maxDataPoints": 100,
+          "interval": null,
+          "targets": [
+            {
+              "errors": {},
+              "aggregator": "max",
+              "downsampleAggregator": "sum",
+              "hide": false,
+              "metric": "java.mem",
+              "currentTagKey": "",
+              "currentTagValue": "",
+              "tags": {
+                "host": "mfthost",
+                "app": "MFT",
+                "phase": "postalloc",
+                "metric": "percentUsed",
+                "space": "nursery"
+              }
+            }
+          ],
+          "cacheTimeout": null,
+          "format": "percent",
+          "prefix": "",
+          "postfix": "",
+          "nullText": null,
+          "valueMaps": [
+            {
+              "value": "null",
+              "op": "=",
+              "text": "Offline"
+            }
+          ],
+          "nullPointMode": "connected",
+          "valueName": "current",
+          "prefixFontSize": "50%",
+          "valueFontSize": "80%",
+          "postfixFontSize": "50%",
+          "thresholds": "0,50,80",
+          "colorBackground": false,
+          "colorValue": true,
+          "colors": [
+            "rgba(50, 172, 45, 0.97)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(245, 54, 54, 0.9)"
+          ],
+          "sparkline": {
+            "show": true,
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "fillColor": "rgba(31, 118, 189, 0.18)"
+          }
+        },
+        {
+          "title": "% Allocated: SOA",
+          "error": false,
+          "span": 3,
+          "editable": true,
+          "type": "singlestat",
+          "id": 3,
+          "links": [],
+          "maxDataPoints": 100,
+          "interval": null,
+          "targets": [
+            {
+              "errors": {},
+              "aggregator": "max",
+              "downsampleAggregator": "sum",
+              "hide": false,
+              "metric": "java.mem",
+              "currentTagKey": "",
+              "currentTagValue": "",
+              "tags": {
+                "host": "mfthost",
+                "app": "MFT",
+                "phase": "postalloc",
+                "metric": "percentUsed",
+                "space": "soa"
+              }
+            }
+          ],
+          "cacheTimeout": null,
+          "format": "percent",
+          "prefix": "",
+          "postfix": "",
+          "nullText": null,
+          "valueMaps": [
+            {
+              "value": "null",
+              "op": "=",
+              "text": "Offline"
+            }
+          ],
+          "nullPointMode": "connected",
+          "valueName": "current",
+          "prefixFontSize": "50%",
+          "valueFontSize": "80%",
+          "postfixFontSize": "50%",
+          "thresholds": "0,50,80",
+          "colorBackground": false,
+          "colorValue": true,
+          "colors": [
+            "rgba(50, 172, 45, 0.97)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(245, 54, 54, 0.9)"
+          ],
+          "sparkline": {
+            "show": true,
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "fillColor": "rgba(31, 118, 189, 0.18)"
+          }
+        },
+        {
+          "title": "% Allocated: LOA",
+          "error": false,
+          "span": 3,
+          "editable": true,
+          "type": "singlestat",
+          "id": 4,
+          "links": [],
+          "maxDataPoints": 100,
+          "interval": null,
+          "targets": [
+            {
+              "errors": {},
+              "aggregator": "max",
+              "downsampleAggregator": "sum",
+              "hide": false,
+              "metric": "java.mem",
+              "currentTagKey": "",
+              "currentTagValue": "",
+              "tags": {
+                "host": "mfthost",
+                "app": "MFT",
+                "phase": "postalloc",
+                "metric": "percentUsed",
+                "space": "loa"
+              }
+            }
+          ],
+          "cacheTimeout": null,
+          "format": "percent",
+          "prefix": "",
+          "postfix": "",
+          "nullText": null,
+          "valueMaps": [
+            {
+              "value": "null",
+              "op": "=",
+              "text": "Offline"
+            }
+          ],
+          "nullPointMode": "connected",
+          "valueName": "current",
+          "prefixFontSize": "50%",
+          "valueFontSize": "80%",
+          "postfixFontSize": "50%",
+          "thresholds": "0,50,80",
+          "colorBackground": false,
+          "colorValue": true,
+          "colors": [
+            "rgba(50, 172, 45, 0.97)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(245, 54, 54, 0.9)"
+          ],
+          "sparkline": {
+            "show": true,
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "fillColor": "rgba(31, 118, 189, 0.18)"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Row1",
+      "height": "250px",
+      "editable": true,
+      "collapse": false,
+      "panels": [
+        {
+          "title": "Space % Used: $space",
+          "error": false,
+          "span": 12,
+          "editable": true,
+          "type": "graph",
+          "id": 5,
+          "datasource": null,
+          "renderer": "flot",
+          "x-axis": true,
+          "y-axis": true,
+          "y_formats": [
+            "percent",
+            "short"
+          ],
+          "grid": {
+            "leftMax": 110,
+            "rightMax": null,
+            "leftMin": 0,
+            "rightMin": null,
+            "threshold1": 70,
+            "threshold2": 90,
+            "threshold1Color": "rgba(216, 200, 27, 0.09)",
+            "threshold2Color": "rgba(234, 112, 112, 0.07)",
+            "thresholdLine": false
+          },
+          "lines": true,
+          "fill": 2,
+          "linewidth": 1,
+          "points": true,
+          "pointradius": 1,
+          "bars": false,
+          "stack": false,
+          "percentage": false,
+          "legend": {
+            "show": true,
+            "values": true,
+            "min": true,
+            "max": true,
+            "current": true,
+            "total": false,
+            "avg": true,
+            "alignAsTable": true
+          },
+          "nullPointMode": "connected",
+          "steppedLine": false,
+          "tooltip": {
+            "value_type": "cumulative",
+            "shared": false
+          },
+          "targets": [
+            {
+              "errors": {},
+              "aggregator": "max",
+              "downsampleAggregator": "sum",
+              "metric": "java.mem",
+              "currentTagKey": "",
+              "currentTagValue": "",
+              "tags": {
+                "host": "mfthost",
+                "app": "MFT",
+                "space": "$space",
+                "metric": "percentUsed",
+                "phase": "$phase",
+                "gctype": "global"
+              }
+            }
+          ],
+          "aliasColors": {
+            "java.mem{app=MFT, gctype=global, host=mfthost, metric=percentUsed, space=tenured, phase=postalloc}": "#E24D42"
+          },
+          "seriesOverrides": [],
+          "links": [],
+          "leftYAxisLabel": "Percent Usage"
+        }
+      ]
+    },
+    {
+      "title": "Row1",
+      "height": "250px",
+      "editable": true,
+      "collapse": false,
+      "panels": [
+        {
+          "title": "Space % Used: $space",
+          "error": false,
+          "span": 12,
+          "editable": true,
+          "type": "graph",
+          "id": 6,
+          "datasource": null,
+          "renderer": "flot",
+          "x-axis": true,
+          "y-axis": true,
+          "y_formats": [
+            "ms",
+            "short"
+          ],
+          "grid": {
+            "leftMax": null,
+            "rightMax": null,
+            "leftMin": 0,
+            "rightMin": null,
+            "threshold1": 10000,
+            "threshold2": 15000,
+            "threshold1Color": "rgba(216, 200, 27, 0.09)",
+            "threshold2Color": "rgba(234, 112, 112, 0.07)",
+            "thresholdLine": false
+          },
+          "lines": true,
+          "fill": 2,
+          "linewidth": 1,
+          "points": true,
+          "pointradius": 1,
+          "bars": false,
+          "stack": false,
+          "percentage": false,
+          "legend": {
+            "show": true,
+            "values": true,
+            "min": true,
+            "max": true,
+            "current": true,
+            "total": false,
+            "avg": true,
+            "alignAsTable": true
+          },
+          "nullPointMode": "connected",
+          "steppedLine": false,
+          "tooltip": {
+            "value_type": "cumulative",
+            "shared": false
+          },
+          "targets": [
+            {
+              "errors": {},
+              "aggregator": "avg",
+              "downsampleAggregator": "sum",
+              "metric": "java.gc",
+              "currentTagKey": "",
+              "currentTagValue": "",
+              "tags": {
+                "host": "mfthost",
+                "app": "MFT",
+                "metric": "gcElapsed"
+              }
+            }
+          ],
+          "aliasColors": {
+            "java.gc{app=MFT, host=mfthost, metric=gcElapsed}": "#6ED0E0"
+          },
+          "seriesOverrides": [],
+          "links": [],
+          "leftYAxisLabel": "Elapsed Time (ms)"
+        }
+      ]
+    }
+  ],
+  "nav": [
+    {
+      "type": "timepicker",
+      "enable": true,
+      "status": "Stable",
+      "time_options": [
+        "5m",
+        "15m",
+        "1h",
+        "6h",
+        "12h",
+        "24h",
+        "2d",
+        "7d",
+        "30d"
+      ],
+      "refresh_intervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ],
+      "now": true,
+      "collapse": false,
+      "notice": false
+    }
+  ],
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "type": "custom",
+        "datasource": null,
+        "refresh_on_load": false,
+        "name": "space",
+        "options": [
+          {
+            "text": "tenured",
+            "value": "tenured"
+          },
+          {
+            "text": "nursery",
+            "value": "nursery"
+          },
+          {
+            "text": "soa",
+            "value": "soa"
+          },
+          {
+            "text": "load",
+            "value": "load"
+          }
+        ],
+        "includeAll": false,
+        "allFormat": "glob",
+        "refresh": true,
+        "query": "tenured,nursery,soa,load",
+        "current": {
+          "text": "tenured",
+          "value": "tenured"
+        }
+      },
+      {
+        "type": "custom",
+        "datasource": null,
+        "refresh_on_load": false,
+        "name": "gctype",
+        "options": [
+          {
+            "text": "scavenger",
+            "value": "scavenger"
+          },
+          {
+            "text": "global",
+            "value": "global"
+          }
+        ],
+        "includeAll": false,
+        "allFormat": "glob",
+        "query": "scavenger,global",
+        "current": {
+          "text": "global",
+          "value": "global"
+        }
+      },
+      {
+        "type": "custom",
+        "datasource": null,
+        "refresh_on_load": false,
+        "name": "phase",
+        "options": [
+          {
+            "text": "pregc",
+            "value": "pregc"
+          },
+          {
+            "text": "postgc",
+            "value": "postgc"
+          },
+          {
+            "text": "postalloc",
+            "value": "postalloc"
+          }
+        ],
+        "includeAll": false,
+        "allFormat": "glob",
+        "query": "pregc,postgc,postalloc",
+        "current": {
+          "text": "postalloc",
+          "value": "postalloc"
+        }
+      }
+    ],
+    "enable": true
+  },
+  "annotations": {
+    "list": [],
+    "enable": true
+  },
+  "refresh": "5s",
+  "version": 6,
+  "hideAllLegends": false
+}
+
 
 
 
