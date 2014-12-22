@@ -34,6 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
@@ -79,10 +80,12 @@ public class AsyncCommandTerminalImpl implements AsyncCommandTerminal, Connectio
 //	 * @param handler The handler for the async responses
 	 */
 	public AsyncCommandTerminalImpl(final WrappedSession wrappedSession, final ExecutorService executor) { //, final AsyncCommandResponseHandler handler) {
-		this.executor = executor!=null ? executor : Executors.newFixedThreadPool(1, new ThreadFactory() {
+		final String threadNameFormat = String.format("AsyncCommandTerminal[%s:%s]Thread#",  wrappedSession.conn.getHostname(), wrappedSession.conn.getPort());
+		this.executor = executor!=null ? executor : Executors.newFixedThreadPool(2, new ThreadFactory() {
+			final AtomicInteger serial = new AtomicInteger(0);
 			@Override
 			public Thread newThread(Runnable r) {				
-				Thread t = new Thread(r);
+				Thread t = new Thread(r, threadNameFormat + serial.incrementAndGet());
 				t.setDaemon(true);
 				return t;
 			}
@@ -90,6 +93,7 @@ public class AsyncCommandTerminalImpl implements AsyncCommandTerminal, Connectio
 		this.wrappedSession = wrappedSession;
 		this.session = wrappedSession.session;
 		this.wrappedSession.conn.addConnectionMonitor(this);
+		final ExecutorService errExec = this.executor;
 		try {
 			this.executor.submit(new Runnable() {
 				public void run() {
@@ -98,21 +102,21 @@ public class AsyncCommandTerminalImpl implements AsyncCommandTerminal, Connectio
 						session.requestDumbPTY();
 						session.startShell();
 						final InputStream errStream = session.getStderr();
-						final Thread t = new Thread() {
+						errExec.submit(new Runnable(){
 							public void run() {
 								InputStreamReader isr = null;
 								BufferedReader br = null;
 								try {
-//									 isr = new InputStreamReader(errStream);
-//									 br = new BufferedReader(isr);
-//									 String line = null;
-//									 while((line = br.readLine())!=null) {
-//										 System.err.println("ERRSTREAM:" + line);
-//									 }
-									while(true) {
-										log.info("\n\tSTATE:{}\n", session.getState());
-										Thread.sleep(3000);
-									}
+									 isr = new InputStreamReader(errStream);
+									 br = new BufferedReader(isr);
+									 String line = null;
+									 while((line = br.readLine())!=null) {
+										 System.err.println("ERRSTREAM:" + line);
+									 }
+//									while(true) {
+//										log.info("\n\tSTATE:{}\n", session.getState());
+//										Thread.sleep(3000);
+//									}
 								} catch (Exception ex) {
 									log.error("ErrStreamReader Error:", ex);
 								} finally {
@@ -121,11 +125,8 @@ public class AsyncCommandTerminalImpl implements AsyncCommandTerminal, Connectio
 									if(errStream!=null) try { errStream.close(); } catch (Exception x) {/* No Op */}
 									
 								}
-								
 							}
-						};
-						t.setDaemon(true);
-						t.start();
+						});
 						//pbis = new PushbackInputStream(new StreamGobbler(session.getStdout()));
 						pbis = new PushbackInputStream(session.getStdout());
 						writeCommand("PS1=" + WrappedSession.PROMPT);

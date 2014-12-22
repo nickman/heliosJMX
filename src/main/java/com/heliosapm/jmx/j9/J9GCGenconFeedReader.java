@@ -173,6 +173,7 @@ public class J9GCGenconFeedReader implements Runnable {
 							buff.append(line);
 						} else if(line.indexOf(EOF)!=-1) {
 							LOG.warn("GC Log Stream Ended");
+							eventListener.onGCEnd();
 						} else {
 							continue;
 						}

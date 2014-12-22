@@ -22,27 +22,16 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.jmx.j9;
-
-import com.heliosapm.jmx.j9.J9GCGenconLogParser.GCEvent;
+package com.heliosapm.jmx.alarm;
 
 /**
- * <p>Title: GCEventListener</p>
- * <p>Description: Defines a listener that will be notified of every processed GCEvent</p> 
+ * <p>Title: AlarmType</p>
+ * <p>Description: Enumerates the supported alarm window types</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.jmx.j9.GCEventListener</code></p>
+ * <p><code>com.heliosapm.jmx.alarm.AlarmType</code></p>
  */
 
-public interface GCEventListener {
-	/**
-	 * Callback on GCEvent processing completion for each event
-	 * @param event the GCEvent
-	 */
-	public void onGCEvent(final GCEvent event);
+public enum AlarmType {
 	
-	/**
-	 * Called when the GC log end tag <b><code>&lt;/verbosegc&gt;</code></b> tag is encountered in the stream
-	 */
-	public void onGCEnd();
 }

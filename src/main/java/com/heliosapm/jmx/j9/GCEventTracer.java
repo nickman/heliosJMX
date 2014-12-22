@@ -24,13 +24,16 @@
  */
 package com.heliosapm.jmx.j9;
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.heliosapm.jmx.j9.J9GCGenconLogParser.GCEvent;
 import com.heliosapm.jmx.j9.J9GCGenconLogParser.GCFail;
 import com.heliosapm.jmx.j9.J9GCGenconLogParser.GCPhase;
 import com.heliosapm.jmx.j9.J9GCGenconLogParser.MemorySpace;
 import com.heliosapm.jmx.j9.J9GCGenconLogParser.Space;
+import com.heliosapm.opentsdb.AnnotationBuilder;
 import com.heliosapm.opentsdb.FluentMap;
 import com.heliosapm.opentsdb.TSDBSubmitter;
 
@@ -47,6 +50,9 @@ public class GCEventTracer implements GCEventListener {
 	final TSDBSubmitter submitter;
 	final FluentMap tags;
 	
+	final AtomicBoolean gcRunning = new AtomicBoolean(false);
+	final AtomicBoolean atStartup = new AtomicBoolean(true);
+	
 	/**
 	 * Creates a new GCEventTracer
 	 * @param submitter The TSDB event tracer
@@ -55,6 +61,19 @@ public class GCEventTracer implements GCEventListener {
 		this.submitter = submitter;
 		tags = this.submitter.tagMap();
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.jmx.j9.GCEventListener#onGCEnd()
+	 */
+	@Override
+	public void onGCEnd() {
+		if(gcRunning.compareAndSet(true, false) || atStartup.compareAndSet(true, false)) {
+			tags.aclear();
+			submitter.trace(System.currentTimeMillis(), "java.gc", 0, Collections.singletonMap("metric", "GCRunning")); 	
+			//submitter.trace(new AnnotationBuilder().);
+		}
+	}
 
 	/**
 	 * {@inheritDoc}
@@ -62,6 +81,10 @@ public class GCEventTracer implements GCEventListener {
 	 */
 	@Override
 	public void onGCEvent(final GCEvent event) {  // public void trace(final long timestamp, final String metric, final long value, final Map<String, String> tags) {
+		if(gcRunning.compareAndSet(false, true)) {
+			tags.aclear();
+			submitter.trace(System.currentTimeMillis(), "java.gc", 1, Collections.singletonMap("metric", "GCRunning"));
+		}
 		tags.aclear()
 			.append("gctype", event.getGcType().name().toLowerCase())
 			.append("trigger", event.getGcTrigger().name().toLowerCase());
@@ -81,7 +104,7 @@ public class GCEventTracer implements GCEventListener {
 		tags.pop();
 		final Map<GCPhase, Map<Space, MemorySpace>> allocs = event.getPhaseAllocations();
 		
-		for(Map.Entry<GCPhase, Map<Space, MemorySpace>> entry: event.getPhaseAllocations().entrySet()) {
+		for(Map.Entry<GCPhase, Map<Space, MemorySpace>> entry: allocs.entrySet()) {
 			final GCPhase phase = entry.getKey();
 			final Map<Space, MemorySpace> spaces = entry.getValue();
 			tags.append("phase", phase.name().toLowerCase());

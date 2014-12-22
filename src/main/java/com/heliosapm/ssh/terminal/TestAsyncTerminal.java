@@ -24,7 +24,9 @@
  */
 package com.heliosapm.ssh.terminal;
 
+import java.io.BufferedReader;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URL;
 
 import org.slf4j.Logger;
@@ -55,10 +57,11 @@ public class TestAsyncTerminal {
 		try {
 			//URL url = new URL("ssh://nwhitehead@localhost:22?kp=helios");
 			// http://localhost:4242/#start=5m-ago&m=zimsum:1m-avg:java.mem{trigger=alloc_failure,gctype=global,metric=percentUsed,space=*,phase=postalloc}&o=&yrange=[0:]&key=out%20center%20top%20horiz%20box&wxh=1580x300&autoreload=15
-			URL url = new URL("ssh://localhost?kp=helios");
+			//URL url = new URL("ssh://localhost?kp=helios");
+			URL url = new URL("ssh://njwmintx");
 			term = TunnelRepository.getInstance().openAsyncCommandTerminal(url);
 			final TSDBSubmitter tsdbSub = new TSDBSubmitter("localhost", 4242)
-//				.setLogTraces(true)
+				.setLogTraces(true)
 				.addRootTag("host", "mfthost").addRootTag("app", "MFT");
 			tsdbSub.connect();
 			final GCEventTracer tracer = new GCEventTracer(tsdbSub);
@@ -72,8 +75,22 @@ public class TestAsyncTerminal {
 				}
 			};
 //			LOG.info("External DF: {}", term.exec("df -k").toString());
-			term.exec(handler, "ls -l /home/nwhitehead/test/gc.log", "tail -F /home/nwhitehead/test/gc.log");
+			term.exec(handler, "tail -F /home/nwhitehe/test/gc.log");
 			LOG.info("Connected");
+			new Thread() {
+				public void run() {
+					final InputStreamReader isr = new InputStreamReader(System.in);
+					BufferedReader br = new BufferedReader(isr);
+					while(true) {
+						try {
+							String line = br.readLine();
+							if("exit".equals(line)) {
+								System.exit(-1);
+							}
+						} catch (Exception ex) {/* No Op */}
+					}
+				}
+			}.start();
 			Thread.currentThread().join();
 		} catch (Exception ex) {
 			ex.printStackTrace(System.err);

@@ -55,16 +55,16 @@ import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
+import org.cliffc.high_scale_lib.NonBlockingHashSet;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.buffer.DirectChannelBufferFactory;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import com.heliosapm.SimpleLogger;
-import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
-import com.heliosapm.jmx.util.helpers.ReconnectorService;
 import com.heliosapm.jmx.util.helpers.StringHelper;
 import com.heliosapm.opentsdb.AnnotationBuilder.TSDBAnnotation;
 import com.ning.http.client.AsyncHandler;
@@ -130,7 +130,8 @@ public class TSDBSubmitter {
 	/** Indicates if traces are disabled */
 	protected boolean disableTraces = false;
 	
-	private static final SLogger LOG = SimpleLogger.logger(TSDBSubmitter.class);
+	private static final Logger LOG = LoggerFactory.getLogger(TSDBSubmitter.class); 
+
 	
 	/** The ObjectName transform cache */
 	protected final TransformCache transformCache = new TransformCache();
@@ -145,7 +146,12 @@ public class TSDBSubmitter {
 	/** Deltas for double values */
 	protected final NonBlockingHashMap<String, Double> doubleDeltas = new NonBlockingHashMap<String, Double>(); 
 	/** Deltas for int values */
-	protected final NonBlockingHashMap<String, Integer> intDeltas = new NonBlockingHashMap<String, Integer>(); 
+	protected final NonBlockingHashMap<String, Integer> intDeltas = new NonBlockingHashMap<String, Integer>();
+	
+	
+	/** Filter in map defs */
+	protected final NonBlockingHashMap<String, Map<String, String>> filterIns = new NonBlockingHashMap<String, Map<String, String>>(); 
+
 	
 	/** The socket receive buffer size in bytes */
 	protected int receiveBufferSize = DEFAULT_RECEIVE_BUFFER_SIZE;
@@ -203,6 +209,20 @@ public class TSDBSubmitter {
 //		tags.put("host", "tpsolaris");
 //		transformCache.register(JMXHelper.objectName("*:*"), new com.heliosapm.opentsdb.Transformers.DefaultTransformer(tags, null));
 		baseURL = "http://" + host + ":" + port + "/";
+		final Thread shutdownHook = new Thread() {
+			public void run() {
+				if(socket!=null) {
+					if(socket.isConnected()) {
+						try { 
+							socket.close(); 
+							LOG.warn("Closed Socket [{}:{}] in shutdown hook", host, port);
+						} catch (Exception x) {/* No Op */} 
+					}
+				}
+			}
+		};
+		
+		Runtime.getRuntime().addShutdownHook(shutdownHook);
 	}
 	
 	interface SubmitterFlush {
@@ -254,7 +274,7 @@ public class TSDBSubmitter {
 			connector = JMXConnectorFactory.connect(surl);
 //			ReconnectorService.getInstance().autoReconnect(connector, surl, false, null);
 			MBeanServerConnection server = connector.getMBeanServerConnection();
-			LOG.log("Connected");
+			LOG.info("Connected");
 			// public void trace(
 				//final ObjectName target, 
 				//final String metricName, 
@@ -279,13 +299,13 @@ public class TSDBSubmitter {
 					flush();
 					try { Thread.currentThread().join(5000); } catch (Exception x) {/* No Op */}
 				} catch (Exception ex) {
-					LOG.log("Loop Error: %s", ex);
+					LOG.error("Loop Error", ex);
 					while(true) {
 						try { Thread.currentThread().join(5000); } catch (Exception x) {/* No Op */}
 						try {
 							server = connector.getMBeanServerConnection();
 							server.getMBeanCount();
-							LOG.log("\nReconnected....");
+							LOG.info("\nReconnected....");
 							break;
 						} catch (Exception x) {
 							System.err.print(".");
@@ -294,7 +314,7 @@ public class TSDBSubmitter {
 				}
 			}
 		} catch (Exception ex) {
-			LOG.loge("Unexpected Loop Exit: %s", ex);
+			LOG.error("Unexpected Loop Exit", ex);
 		} finally {
 			if(connector!=null) try { connector.close(); } catch (Exception x) {/* No Op */}
 			try { this.close(); } catch (Exception x) {/* No Op */}
@@ -303,7 +323,7 @@ public class TSDBSubmitter {
 	
 	public static void main(String[] args) {
 		try {
-			LOG.log("Submitter Test");
+			LOG.info("Submitter Test");
 			TSDBSubmitter submitter = new TSDBSubmitter("localhost", 4242);
 			submitter.loopOnJVMStats();
 //			final MBeanServer ser = ManagementFactory.getPlatformMBeanServer();
@@ -405,7 +425,7 @@ public class TSDBSubmitter {
 	public TSDBSubmitter connect() {
 		try {
 			if(socket.isConnected()) return this;
-			LOG.log("Connecting to [%s:%s]....", host, port);
+			LOG.info("Connecting to [{}:{}]....", host, port);
 			socket = new Socket();
 			socket.setKeepAlive(keepAlive);
 			socket.setReceiveBufferSize(receiveBufferSize);
@@ -415,11 +435,11 @@ public class TSDBSubmitter {
 			socket.setSoTimeout(timeout);
 			socket.setTcpNoDelay(tcpNoDelay);
 			socket.connect(new InetSocketAddress(host, port));
-			LOG.log("Connected to [%s:%s]", host, port);
+			LOG.info("Connected to [{}:{}]", host, port);
 			os = socket.getOutputStream();
 			is = socket.getInputStream();
 			httpClient = new AsyncHttpClient(new AsyncHttpClientConfig.Builder().setAllowPoolingConnection(true).setConnectionTimeoutInMs(2000).build());
-			LOG.log("Version: %s", getVersion());
+			LOG.info("Version: {}", getVersion());
 			return this;
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to connect to [" + host + ":" + port + "]", ex);
@@ -443,6 +463,73 @@ public class TSDBSubmitter {
 		return b;
 	}
 	
+	// =========================================================================================================================
+	//    Filter Ins
+	// =========================================================================================================================
+	//NonBlockingHashSet<Map<String, String>> filterIns
+	
+	/**
+	 * Adds a filter for any metric in for which all submitted metrics must match
+	 * @param in The map of tag keys and values
+	 */
+	public void addFilterIn(final Map<String, String> in) {
+		if(in!=null) filterIns.put("*", in);
+	}
+	
+	/**
+	 * Adds a filter for the specified metric in for which all submitted metrics must match
+	 * @param metric The metric key the filter should be applied to
+	 * @param in The map of tag keys and values
+	 */
+	public void addFilterIn(final String metric, final Map<String, String> in) {
+		final String _metric = metric==null ? "*" :
+			metric.trim().isEmpty() ? "*" : metric.trim();
+		if(in!=null) filterIns.put(_metric, in);
+	}
+	
+	
+	/**
+	 * Validates that the passed tags should be included according to the registered filter-ins.
+	 * If no filter-ins are registered, returns true
+	 * @param metric The metric key to validate
+	 * @param tags The tags to validate
+	 * @return true if should be included, false otherwise
+	 */
+	public boolean matches(final String metric, final Map<String, String> tags) {
+		if(metric==null || metric.trim().isEmpty() || tags==null || tags.isEmpty()) return false;
+		final String _metric = metric.trim();
+		if(filterIns.isEmpty()) return true;
+		for(final Map.Entry<String, Map<String, String>> entry: filterIns.entrySet()) {
+			final String fmet = entry.getKey();
+			if("*".equals(fmet) || _metric.equals(fmet)) {
+				for(Map.Entry<String, String> f: entry.getValue().entrySet()) {
+					if(!matches(f.getKey(), f.getValue(), tags)) return false;				
+				}				
+			}
+		}
+		return true;
+	}
+	
+	/**
+	 * Checks a filter entry item against the passed tags
+	 * @param key The defined filter key
+	 * @param value The defined filter value
+	 * @param tags The tag map to verify
+	 * @return true for a match, false otherwise
+	 */
+	protected boolean matches(final String key, final String value, final Map<String, String> tags) {
+		final String _value = tags.get(key);
+		if(_value==null) return false;
+		if("*".equals(value)) return true;
+		return _value.equals(value);		
+	}
+	
+	
+	
+	// =========================================================================================================================
+	
+	
+	
 	/**
 	 * Returns the current time.
 	 * @return the current time in seconds if {@link #traceInSeconds} is true, otherwise in milliseconds
@@ -453,6 +540,7 @@ public class TSDBSubmitter {
 	
 	/**
 	 * Converts the passed ms time.
+	 * @param time The time to convert
 	 * @return the time converted to seconds if {@link #traceInSeconds} is true, otherwise in milliseconds (unchanged)
 	 */
 	public long time(final long time) {
@@ -467,6 +555,7 @@ public class TSDBSubmitter {
 	 * @param tags The metric tags
 	 */
 	public void trace(final String metric, final double value, final Map<String, String> tags) {
+		if(!matches(metric, tags)) return;
 		// put $metric $now $value host=$HOST "
 		StringBuilder b = getSB();
 		b.append("put ").append(clean(metric)).append(" ").append(time()).append(" ").append(value).append(" ");
@@ -498,7 +587,7 @@ public class TSDBSubmitter {
 			b.append(clean(entry.getKey())).append("=").append(clean(entry.getValue())).append(" ");
 		}
 		final String s = b.deleteCharAt(b.length()-1).append("\n").toString();
-		if(logTraces) LOG.log("Trace: [%s]", s.trim());
+		if(logTraces) LOG.info("Trace: [{}]", s.trim());
 		final byte[] trace = s.getBytes(CHARSET);		
 		synchronized(dataBuffer) {
 			dataBuffer.writeBytes(trace);
@@ -664,7 +753,7 @@ public class TSDBSubmitter {
 			String jsonText = httpClient.prepareGet(url).execute().get(timeout, TimeUnit.MILLISECONDS).getResponseBody("UTF-8");
 			return new JSONArray(jsonText);
 		} catch (Exception ex) {
-			LOG.loge("Failed to retrieve content for [%s] - %s", url, ex);
+			LOG.error("Failed to retrieve content for [{}]", url, ex);
 			throw new RuntimeException(String.format("Failed to retrieve content for [%s] - %s", url, ex), ex);
 		}		
 	}
@@ -724,7 +813,7 @@ public class TSDBSubmitter {
 				protected HttpResponseStatus responseStatus = null;
 				@Override
 				public void onThrowable(final Throwable t) {
-					LOG.loge("Async failure on annotation send for [%s] - %s", annotation, t);
+					LOG.error("Async failure on annotation send for [{}]", annotation, t);
 				}
 
 				@Override
@@ -746,12 +835,12 @@ public class TSDBSubmitter {
 				@Override
 				public Object onCompleted() throws Exception {
 					long elapsed = System.currentTimeMillis() - start;
-					LOG.log("Annotation Send Complete in [%s] ms. Response: [%s], URI: [%s]", elapsed, responseStatus.getStatusText(), responseStatus.getUrl());
+					LOG.info("Annotation Send Complete in [{}] ms. Response: [{}], URI: [{}]", elapsed, responseStatus.getStatusText(), responseStatus.getUrl());
 					return null;
 				}				
 			});
 		} catch (Exception ex) {
-			LOG.loge("Failed to send annotation [%s] - %s", annotation, ex);
+			LOG.error("Failed to send annotation [{}]", annotation, ex);
 		}
 	}
 		
@@ -770,6 +859,7 @@ public class TSDBSubmitter {
 		for(int i = 0; i < tags.length; i++) {
 			map.put(tags[i], tags[++i]);
 		}
+		if(!matches(metric, map)) return;
 		trace(metric, value, map);
 	}
 	
@@ -782,6 +872,7 @@ public class TSDBSubmitter {
 	 * @param tags The metric tags
 	 */
 	public void trace(final long timestamp, final String metric, final long value, final Map<String, String> tags) {
+		if(!matches(metric, tags)) return;
 		StringBuilder b = getSB();
 		b.append("put ").append(clean(metric)).append(" ").append(time(timestamp)).append(" ").append(value).append(" ");
 		appendRootTags(b);
@@ -789,13 +880,37 @@ public class TSDBSubmitter {
 			b.append(clean(entry.getKey())).append("=").append(clean(entry.getValue())).append(" ");
 		}
 		final String s = b.deleteCharAt(b.length()-1).append("\n").toString();
-		if(logTraces) LOG.log("Trace: [%s]", s.trim());
+		if(logTraces) LOG.info("Trace: [{}]", s.trim());
 		final byte[] trace = s.getBytes(CHARSET);
 		synchronized(dataBuffer) {
 			dataBuffer.writeBytes(trace);
 			traceCount.incrementAndGet();
 		}
 	}
+	
+	/**
+	 * Traces a double metric
+	 * @param timestamp The provided time in ms.
+	 * @param metric The metric name
+	 * @param value The value
+	 * @param tags The metric tags
+	 */
+	public void trace(final long timestamp, final String metric, final double value, final Map<String, String> tags) {
+		if(!matches(metric, tags)) return;
+		StringBuilder b = getSB();
+		b.append("put ").append(clean(metric)).append(" ").append(time(timestamp)).append(" ").append(value).append(" ");
+		appendRootTags(b);
+		for(Map.Entry<String, String> entry: tags.entrySet()) {
+			b.append(clean(entry.getKey())).append("=").append(clean(entry.getValue())).append(" ");
+		}
+		final String s = b.deleteCharAt(b.length()-1).append("\n").toString();
+		if(logTraces) LOG.info("Trace: [{}]", s.trim());
+		final byte[] trace = s.getBytes(CHARSET);
+		synchronized(dataBuffer) {
+			dataBuffer.writeBytes(trace);
+			traceCount.incrementAndGet();
+		}
+	}	
 	
 	/**
 	 * Traces a long metric
@@ -824,7 +939,7 @@ public class TSDBSubmitter {
 			b.append(clean(entry.getKey())).append("=").append(clean(entry.getValue())).append(" ");
 		}
 		final String s = b.deleteCharAt(b.length()-1).append("\n").toString();
-		if(logTraces) LOG.log("Trace: [%s]", s.trim());
+		if(logTraces) LOG.info("Trace: [{}]", s.trim());
 		final byte[] trace = s.getBytes(CHARSET);
 		synchronized(dataBuffer) {
 			dataBuffer.writeBytes(trace);
@@ -832,6 +947,11 @@ public class TSDBSubmitter {
 		}
 	}
 	
+	/**
+	 * Registers a JMX query result transformer
+	 * @param transformer The transformer
+	 * @param on The ObjectName to match for this transformer to be applied
+	 */
 	public void registerTransformer(final TSDBJMXResultTransformer transformer, final ObjectName on) {
 		transformCache.register(on, transformer);
 	}
@@ -950,6 +1070,7 @@ public class TSDBSubmitter {
 		for(int i = 0; i < tags.length; i++) {
 			map.put(tags[i], tags[++i]);
 		}
+		if(!matches(metric, map)) return;
 		trace(metric, value, map);
 	}
 	
@@ -981,10 +1102,9 @@ public class TSDBSubmitter {
 				bytesWritten[0] = r;
 				bytesWritten[1] = traceCount.getAndSet(0);
 				long elapsed = System.currentTimeMillis() - startTime;
-				LOG.log("Flushed %s traces in %s bytes. Elapsed: %s ms.", bytesWritten[1], r, elapsed);
+				LOG.debug("Flushed {} traces in {} bytes. Elapsed: {} ms.", bytesWritten[1], r, elapsed);
 			} catch (Exception ex) {
-				LOG.log("Failed to flush. Stack trace follows...");
-				ex.printStackTrace(System.err);
+				LOG.error("Failed to flush", ex);
 				if(pos!=-1) dataBuffer.readerIndex(pos);
 			} finally {
 //				if(gzip!=null) try { gzip.close(); } catch (Exception x) {/* No Op */}
