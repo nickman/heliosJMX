@@ -186,11 +186,12 @@ public enum SSHOption {
 		}
 		for(SSHOption opt: values()) {
 			//System.out.println(opt.name() + " : " + opt.propertyName + "   (" + opt.defaultValue + ")");
-			if(opt.defaultValue==null) {
-				System.out.println("#" + prefix +  opt.propertyName + "=");
-			} else {
-				System.out.println(prefix +  opt.propertyName + "=" + opt.defaultValue);
-			}
+			System.out.println(opt.shortCode + "   (" + opt.propertyName + ")");
+//			if(opt.defaultValue==null) {
+//				System.out.println("#" + prefix +  opt.propertyName + "=");
+//			} else {
+//				System.out.println(prefix +  opt.propertyName + "=" + opt.defaultValue);
+//			}
 		}
 	}
 	

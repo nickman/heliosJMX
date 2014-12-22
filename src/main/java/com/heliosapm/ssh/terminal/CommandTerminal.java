@@ -25,7 +25,7 @@
 package com.heliosapm.ssh.terminal;
 
 import java.io.Closeable;
-import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * <p>Title: CommandTerminal</p>
@@ -73,6 +73,12 @@ public interface CommandTerminal extends Closeable {
 	 * @return the tty of this terminal
 	 */
 	public String getTty();
+	
+	/**
+	 * Returns an input stream from which the last command's response can be read
+	 * @return the response input stream
+	 */
+	public InputStream getResponseStream();
 	
 	/**
 	 * Returns the exit status codes of the most recently invoked commands

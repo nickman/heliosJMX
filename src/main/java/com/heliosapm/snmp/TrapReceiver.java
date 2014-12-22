@@ -32,6 +32,7 @@ import org.snmp4j.CommunityTarget;
 import org.snmp4j.MessageDispatcher;
 import org.snmp4j.MessageDispatcherImpl;
 import org.snmp4j.PDU;
+import org.snmp4j.PDUv1;
 import org.snmp4j.Snmp;
 import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
@@ -62,7 +63,7 @@ public class TrapReceiver implements CommandResponder {
 	public static void main(String[] args) {
 		TrapReceiver snmp4jTrapReceiver = new TrapReceiver();
 		try {
-			snmp4jTrapReceiver.listen(new UdpAddress("localhost/162"));
+			snmp4jTrapReceiver.listen(new UdpAddress("localhost/1062"));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -116,8 +117,13 @@ public class TrapReceiver implements CommandResponder {
 		System.out.println("Received PDU...");
 		PDU pdu = cmdRespEvent.getPDU();
 		if (pdu != null) {
+			if(pdu instanceof PDUv1) {
+				PDUv1 p1 = (PDUv1)pdu;
+				System.out.println("Timestamp = " + p1.getTimestamp());
+			}
 			System.out.println("Trap Type = " + pdu.getType());
 			System.out.println("Variables = " + pdu.getVariableBindings());
+			System.out.println("================================================");
 		}		
 	}
 }

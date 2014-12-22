@@ -84,6 +84,7 @@ public class J9GCGenconLogParser implements ContentHandler {
 			"af", "sys"
 	)));
 	
+	
 	private static Map<String, String> attributeMap(final Attributes atts) {
 		final int x = atts.getLength();
 		Map<String, String> map = new HashMap<String, String>(x);
@@ -660,7 +661,7 @@ public class J9GCGenconLogParser implements ContentHandler {
 	 */
 	@Override
 	public void endElement(final String uri, final String localName, final String qName) throws SAXException {
-		//LOG.info("End Element: {}", localName);		
+		
 	}
 
 	/**

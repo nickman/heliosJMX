@@ -99,7 +99,7 @@ public class TrapSenderVersion2 {
 			
 			
 			OID JOID  = new OID("jvmLowMemoryPoolUsageNotif");
-			pdu.add(new VariableBinding(JOID, new Counter64(8373437)));
+			pdu.add(new VariableBinding(JOID, new Counter64(Long.MAX_VALUE)));
 			
 
 			// Send the PDU

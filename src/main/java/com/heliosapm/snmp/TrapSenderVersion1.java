@@ -32,6 +32,9 @@ package com.heliosapm.snmp;
  * <p><code>com.heliosapm.snmp.TrapSenderVersion1</code></p>
  */
 
+import java.lang.management.ManagementFactory;
+import java.util.Date;
+
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.PDU;
 import org.snmp4j.PDUv1;
@@ -42,6 +45,8 @@ import org.snmp4j.smi.IpAddress;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
 import org.snmp4j.smi.UdpAddress;
+import org.snmp4j.smi.UnsignedInteger32;
+import org.snmp4j.smi.VariableBinding;
 import org.snmp4j.transport.DefaultUdpTransportMapping;
 
 public class TrapSenderVersion1 {
@@ -52,10 +57,10 @@ public class TrapSenderVersion1 {
 	public static final String Oid = ".1.3.6.1.2.1.1.8";
 
 	//IP of Local Host
-	public static final String ipAddress = "10.230.13.67";
+	public static final String ipAddress = "127.0.0.1";
 
 	//Ideally Port 162 should be used to send receive Trap, any other available Port can be used
-	public static final int port = 163;
+	public static final int port = 1062;
 
 	public static void main(String[] args) {
 		TrapSenderVersion1 trapV1 = new TrapSenderVersion1();
@@ -79,16 +84,25 @@ public class TrapSenderVersion1 {
 			cTarget.setRetries(2);
 
 			PDUv1 pdu = new PDUv1();
+//			pdu.setTimestamp(new UnsignedInteger32(System.currentTimeMillis()).getValue());
+			pdu.add(new VariableBinding(SnmpConstants.sysUpTime,
+					new OctetString(new Date().toString())));
+			
+			long uptime = System.currentTimeMillis() - ManagementFactory.getRuntimeMXBean().getStartTime();
+			long ttCurrentTime = System.currentTimeMillis()/10;
+			
 			pdu.setType(PDU.V1TRAP);
+			pdu.setTimestamp(uptime);
 			pdu.setEnterprise(new OID(Oid));
 			pdu.setGenericTrap(PDUv1.ENTERPRISE_SPECIFIC);
 			pdu.setSpecificTrap(1);
+			pdu.add(new VariableBinding(new OID(".2.3.8.6.7"), new OctetString("This is my message")));
 			
 			pdu.setAgentAddress(new IpAddress(ipAddress));
 
 			// Send the PDU
 			Snmp snmp = new Snmp(transport);
-			System.out.println("Sending V1 Trap... Check Wheather NMS is Listening or not? ");
+			System.out.println("Sending V1 Trap");
 			snmp.send(pdu, cTarget);
 			snmp.close();
 		} catch (Exception e) {

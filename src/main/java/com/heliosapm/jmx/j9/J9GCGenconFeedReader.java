@@ -94,6 +94,9 @@ public class J9GCGenconFeedReader implements Runnable {
 	public static final String AF_STARTER = "<af ";
 	/** The Allocation Failure triggered GC event ener */
 	public static final String AF_ENDER = "</af>";
+	/** Element name ENDING meaning the file being read has ended, meaning the target JVM terminated, or the GC log file rolled */
+	public static final String EOF = "</verbosegc>";
+	
 	
 	/** Static class logger */
 	protected static final Logger LOG = LoggerFactory.getLogger(J9GCGenconLogParser.class);
@@ -168,6 +171,8 @@ public class J9GCGenconFeedReader implements Runnable {
 							inSegment = true;
 							endSegment = SYS_ENDER;
 							buff.append(line);
+						} else if(line.indexOf(EOF)!=-1) {
+							LOG.warn("GC Log Stream Ended");
 						} else {
 							continue;
 						}

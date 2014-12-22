@@ -42,6 +42,7 @@ import ch.ethz.ssh2.Session;
 import com.heliosapm.SimpleLogger;
 import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.remote.InetAddressCache;
+import com.heliosapm.ssh.terminal.AsyncCommandTerminal;
 import com.heliosapm.ssh.terminal.CommandTerminal;
 import com.heliosapm.ssh.terminal.WrappedSession;
 
@@ -125,8 +126,9 @@ public class TunnelRepository {
 					connectionsByAddress.put(key, cw);
 				} catch (Exception ex) {
 					connectionsByAddress.remove(key);
+					try { cw.close(); } catch (Exception x) {/* No Op */}
 					throw ex;
-				}
+				} 
 			}
 			final Session session = cw.openSession();
 			return new WrappedSession(session, cw).openCommandTerminal();
@@ -134,6 +136,46 @@ public class TunnelRepository {
 			throw new RuntimeException("Failed to open command terminal for SSH URL [" + sshUrl + "]", ex);
 		}
 	}
+	
+	/**
+	 * Creates, opens and returns an async command terminal
+	 * @param sshUrl An SSH URL defining the connection parameters
+	 * @return a command terminal through which command line directives can be issued
+	 */
+	public AsyncCommandTerminal openAsyncCommandTerminal(final URL sshUrl) {
+		if(sshUrl==null) throw new IllegalArgumentException("The passed SSH URL was null");
+		try {
+			final SSHTunnelConnector sshConnector = new TunnelURLConnection(sshUrl).getTunnelConnector();
+			final String host = sshConnector.getSSHHost();
+			final int port = sshConnector.getSSHPort();
+			String[] aliases = InetAddressCache.getInstance().getAliases(host);
+			final String key = String.format("%s:%s", aliases[0], port);		
+			ConnectionWrapper cw = connectionsByAddress.get(key);
+			if(cw==null) {
+				synchronized(connectionsByAddress) {
+					cw = connectionsByAddress.get(key);
+					if(cw==null) {
+						connectionsByAddress.put(key, ConnectionWrapper.EMPTY_CONNECTION);
+					}
+				}
+			}
+			if(cw==null) {
+				try {
+					cw = _connect(sshConnector, true);
+					connectionsByAddress.put(key, cw);
+				} catch (Exception ex) {
+					connectionsByAddress.remove(key);
+					try { cw.close(); } catch (Exception x) {/* No Op */}
+					throw ex;
+				} 
+			}
+			final Session session = cw.openSession();
+			return new WrappedSession(session, cw).openAsyncCommandTerminal();
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to open async command terminal for SSH URL [" + sshUrl + "]", ex);
+		}
+	}
+	
 	
 	/**
 	 * Creates a new LocalStreamForwarder for the passed JMX tunnel endpoint
