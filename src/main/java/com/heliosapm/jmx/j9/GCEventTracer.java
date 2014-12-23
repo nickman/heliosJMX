@@ -120,6 +120,8 @@ public class GCEventTracer implements GCEventListener {
 				tags.append("space", space.name().toLowerCase());
 				submitter.trace(ts, "java.mem", ms.freebytes, tags.append("metric", "bytesFree"));
 				submitter.trace(ts, "java.mem", ms.totalbytes, tags.append("metric", "bytesTotal"));
+				submitter.trace(ts, "java.mem", ms.totalbytes - ms.freebytes, tags.append("metric", "bytesUsed"));
+				
 				submitter.trace(ts, "java.mem", ms.percentFree, tags.append("metric", "percentFree"));
 				submitter.trace(ts, "java.mem", ms.percentUsed, tags.append("metric", "percentUsed"));				
 			}

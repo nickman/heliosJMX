@@ -1,0 +1,52 @@
+MM
+==============
+	Name / Description / Active
+	Base Metric Groups  (host=*, app=*)
+
+Groups
+==============
+	Name / Description / Active
+	Default to MM
+		:metricA=*, metricB=* 
+	or 
+	Specify Metric Groups
+		host=*, app=*:metricA=*, metricB=*
+		
+Alert
+==============
+	Name / Description / Active
+	Metric Group Watched
+	Check Period  (e.g.  15 seconds)
+	Comparison  (GT/GTOE/LT/LTOE/NE/Script)
+	Combination (Any/All/XofY)
+	Alert on Individual Metric [or Metric Group] (true/false)
+	Trigger When:  Sev Increases / Each Period Exists / Sev Change / Final State
+	Thresholds:
+		Warn:  X
+		Critical: Y
+	Actions:
+		PeriodCount (X of the Last Y)
+		Action Execution Endpoint	(Mail, Http Post, WebSocket, JMS etc.)
+	Status:
+		INIT, 	OK, 	WARN, 	CRITICAL, 	PAUSED,  DEACTIVATED,  NODATA
+	
+		
+Alert Rollup (extends Alert)
+====================
+	Name / Description / Active
+	Alerts[]
+	
+	
+Alert Blackout   (supresses actions fired on Alerts)
+=====================			
+	Name / Description / Active
+	Schedule:
+		Cron Start / Cron End
+	
+Calculator
+=====================
+	Name / Description / Active
+	Metric Group Calced On
+	Op:  Sum, Avg, Min, Max
+	Type: Counter (sticky), Interval Count (resets to zero at end of period)
+	Result Metric Name

@@ -57,8 +57,8 @@ public class TestAsyncTerminal {
 		try {
 			//URL url = new URL("ssh://nwhitehead@localhost:22?kp=helios");
 			// http://localhost:4242/#start=5m-ago&m=zimsum:1m-avg:java.mem{trigger=alloc_failure,gctype=global,metric=percentUsed,space=*,phase=postalloc}&o=&yrange=[0:]&key=out%20center%20top%20horiz%20box&wxh=1580x300&autoreload=15
-			URL url = new URL("ssh://localhost?kp=helios");
-			//URL url = new URL("ssh://njwmintx");
+			//URL url = new URL("ssh://localhost?kp=helios");
+			URL url = new URL("ssh://njwmintx");
 			term = TunnelRepository.getInstance().openAsyncCommandTerminal(url);
 			final TSDBSubmitter tsdbSub = new TSDBSubmitter("localhost", 4242)
 				.setLogTraces(true)
@@ -75,7 +75,7 @@ public class TestAsyncTerminal {
 				}
 			};
 //			LOG.info("External DF: {}", term.exec("df -k").toString());
-			term.exec(handler, "tail -F /home/nwhitehead/test/gc.log");
+			term.exec(handler, "tail -F /home/nwhitehe/test/gc.log");
 			LOG.info("Connected");
 			new Thread() {
 				public void run() {

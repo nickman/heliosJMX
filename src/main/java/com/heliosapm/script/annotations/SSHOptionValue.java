@@ -30,41 +30,27 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import com.heliosapm.jmx.remote.tunnel.SSHOption;
+
 /**
- * <p>Title: Inject</p>
- * <p>Description: Defines a resource injection into an executable script</p> 
+ * <p>Title: SSHOptionValue</p>
+ * <p>Description: Annotation to specify an {@link SSHOption} value for SSH resource injections.
+ * Can be either placed inside a parent SSH injection annotation or on a local variable or field to use that construct's value</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.annotations.Inject</code></p>
+ * <p><code>com.heliosapm.script.annotations.SSHOptionValue</code></p>
  */
 @Target({ElementType.LOCAL_VARIABLE, ElementType.FIELD, ElementType.ANNOTATION_TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface Inject {
+public @interface SSHOptionValue {
 	/**
-	 * The type of the resource injected
+	 * The SSHOption to specify
 	 */
-	InjectionType injectionType();
-	
-	/**
-	 * The name of the resource to be injected
-	 */
-	String name();
+	SSHOption value();
 	
 	/**
-	 * The name of the node the injection will be bound into
+	 * The value of the SSHOption
 	 */
-	String fieldName();
-	
-	
-	/**
-	 * The data type of the fixture invocation return value
-	 */
-	Class<?> type() default Object.class;
-	
-	/**
-	 * The arguments to invoke a parameterized fixture
-	 */
-	FixtureArg[] args() default {};
-	
+	String optValue() default "";
 }

@@ -31,40 +31,19 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * <p>Title: Inject</p>
- * <p>Description: Defines a resource injection into an executable script</p> 
+ * <p>Title: SSHShell</p>
+ * <p>Description: Special @Inject like annotation to activate a SSH shell for the annotated deployment</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.script.annotations.Inject</code></p>
+ * <p><code>com.heliosapm.script.annotations.SSHShell</code></p>
  */
 @Target({ElementType.LOCAL_VARIABLE, ElementType.FIELD, ElementType.ANNOTATION_TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface Inject {
+public @interface SSHShell {
 	/**
-	 * The type of the resource injected
+	 * The SSHOption values defined to acquire the shell
 	 */
-	InjectionType injectionType();
-	
-	/**
-	 * The name of the resource to be injected
-	 */
-	String name();
-	
-	/**
-	 * The name of the node the injection will be bound into
-	 */
-	String fieldName();
-	
-	
-	/**
-	 * The data type of the fixture invocation return value
-	 */
-	Class<?> type() default Object.class;
-	
-	/**
-	 * The arguments to invoke a parameterized fixture
-	 */
-	FixtureArg[] args() default {};
-	
+	SSHOptionValue[] options() default {};
+
 }
