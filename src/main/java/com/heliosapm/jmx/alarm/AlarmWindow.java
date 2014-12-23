@@ -30,12 +30,15 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.management.MBeanNotificationInfo;
 import javax.management.NotificationBroadcasterSupport;
 import javax.management.ObjectName;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMapLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hasher;
@@ -57,12 +60,32 @@ public class AlarmWindow<T extends Number> extends NotificationBroadcasterSuppor
 	protected final ObjectName objectName;
 	/** The hash code */
 	protected final long hashCode;
+	/** The alarm state */
+	protected final AtomicReference<AlarmState> alarmState = new AtomicReference<AlarmState>(AlarmState.INIT);
+	/** The alarm type */
+	protected final AlarmType alarmType;
+	/** The alarm value evaluator */
+	protected final AlarmValueEval valueEval;
 	
+	
+	/** The alarm's metric name */
 	final String metricName;
+	/** The alarm's metric tags */
 	final Map<String, String> tags; 
+	/** The alarm window size */
 	final int windowSize;
-	final T threshold;
+	/** The number of samples out of the total window that will tip the alarm into a non-ok status */
+	final int tipSize;
+	/** The alarm's warning value threshold */	
+	final T warningThreshold;
+	/** The alarm's critical value threshold */
+	final T criticalThreshold;
+	/** The alarm's value history keyed by the timestamp */
 	final ConcurrentSkipListMap<Long, T> window = new ConcurrentSkipListMap<Long, T>(); 
+	
+	/** Instance logger */
+	protected final Logger log = LoggerFactory.getLogger(getClass());
+
 	
 	
 	/** The JMX domain for alarms */
@@ -93,7 +116,23 @@ public class AlarmWindow<T extends Number> extends NotificationBroadcasterSuppor
 		this.metricName = metricName;
 		this.tags = Collections.unmodifiableMap(tags);
 		this.windowSize = windowSize;
-		this.threshold = threshold;		
+		this.tipSize = windowSize;
+		this.warningThreshold = null;		
+		this.criticalThreshold = null;
+		alarmType = null;
+		valueEval = null;
+	}
+	
+	/**
+	 * Sets the alarm state, firing any applicable notifications if there is a change,
+	 * ignored if there is not change in state
+	 * @param newState The new state to set
+	 */
+	protected void setState(final AlarmState newState) {
+		if(newState==null) throw new IllegalArgumentException("The passed AlarmState was null");
+		final AlarmState priorState = alarmState.getAndSet(newState);
+		if(priorState==newState) return;
+		log.info("Switching AlarmState [{}] from [{}] --> [{}]", objectName, priorState, newState);
 	}
 	
 	
@@ -103,7 +142,7 @@ public class AlarmWindow<T extends Number> extends NotificationBroadcasterSuppor
 	 * @param value The value of the sample
 	 */
 	protected void sample(long timestamp, final T value) {
-		if(value.doubleValue() >= threshold.doubleValue()) {
+		if(value.doubleValue() >= warningThreshold.doubleValue()) {
 			synchronized(window) {
 				window.put(timestamp, value);
 				if(window.size() >= windowSize) {

@@ -33,5 +33,46 @@ package com.heliosapm.jmx.alarm;
  */
 
 public enum AlarmType {
-	
+	VALUE,
+	VALUES,
+	TIME,
+	EXP;
 }
+
+/*
+ * Params: window size, threshold, duration
+ * Trip:  (spin out async event with metric name and sample history)
+ * 		X number of consecutive samples over threshold
+ * 		N out last X consecutive samples over threshold
+ * 		Elapsed time with value over threshold
+ * 		Exponentially Weighted value over threshold
+ * Alarm State:  Open / Closed / Paused / NoData
+ * Pause on sample end (e.g. GCEnd)
+ * Clear and resume on sample start (e.g. GCStart)
+ * Config alarm windows from file
+ * 
+ * 
+ * Alarms
+======
+
+BasicValueThreshold:
+====================
+	Retains last n samples that are >|< warn threshold
+	When a sample is processed:
+		OK:
+			if >|< warn threshold, append
+				if accumulated samples = n, switch to WARN|CRITICAL
+			else clear samples
+		WARN
+			append, discard oldest
+			when n consecutive values are OK, switch to OK
+			when n consecutive values are CRITICAL, switch to CRITICAL
+		CRITICAL
+			append, discard oldest
+			when n consecutive values are OK, switch to OK
+			when n consecutive values are WARN, switch to WARN
+
+
+ * 
+ * 
+ */

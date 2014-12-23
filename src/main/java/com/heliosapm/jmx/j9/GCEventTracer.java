@@ -74,6 +74,11 @@ public class GCEventTracer implements GCEventListener {
 			//submitter.trace(new AnnotationBuilder().);
 		}
 	}
+	
+	public void onGCStart() {
+		tags.aclear();
+		submitter.trace(System.currentTimeMillis(), "java.gc", 1, Collections.singletonMap("metric", "GCRunning"));		
+	}
 
 	/**
 	 * {@inheritDoc}
@@ -82,8 +87,7 @@ public class GCEventTracer implements GCEventListener {
 	@Override
 	public void onGCEvent(final GCEvent event) {  // public void trace(final long timestamp, final String metric, final long value, final Map<String, String> tags) {
 		if(gcRunning.compareAndSet(false, true)) {
-			tags.aclear();
-			submitter.trace(System.currentTimeMillis(), "java.gc", 1, Collections.singletonMap("metric", "GCRunning"));
+			onGCStart();
 		}
 		tags.aclear()
 			.append("gctype", event.getGcType().name().toLowerCase())

@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2014, Helios Development Group and individual contributors
+ * Copyright 2007, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -22,32 +22,34 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.jmx.j9;
-
-import com.heliosapm.jmx.j9.J9GCGenconLogParser.GCEvent;
+package com.heliosapm.jmx.alarm;
 
 /**
- * <p>Title: GCEventListener</p>
- * <p>Description: Defines a listener that will be notified of every processed GCEvent</p> 
+ * <p>Title: IAlarmPeriodListener</p>
+ * <p>Description: Defines a listener that is notified of alarm events</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.jmx.j9.GCEventListener</code></p>
+ * <p><code>com.heliosapm.jmx.alarm.IAlarmPeriodListener</code></p>
  */
 
-public interface GCEventListener {
+public interface IAlarmPeriodListener {
 	/**
-	 * Callback on GCEvent processing completion for each event
-	 * @param event the GCEvent
+	 * Callback from the AlarmTimer on a period timer event
+	 * @param period The period that fired in seconds
 	 */
-	public void onGCEvent(final GCEvent event);
-
-	/**
-	 * Called when the GC event stream starts after cold boot, and end tag or an event timeout
-	 */
-	public void onGCStart();
+	public void onPeriodFlush(int period);
 	
 	/**
-	 * Called when the GC log end tag <b><code>&lt;/verbosegc&gt;</code></b> tag is encountered in the stream
+	 * Returns the periods that the listener is interested in.
+	 * If the returned array is a single value of <b>-1</b>, it will subscribe all periods.
+	 * @return the periods to notify this listener on
 	 */
-	public void onGCEnd();
+	public int[] getPeriods();
+	
+	/**
+	 * Callback from the timer passing the adjusted periods that the timer converted this listeners interest periods
+	 * @param adjustedPeriods The periods for which the listener was subscribed 
+	 */
+	public void setAdjustedPeriods(int[] adjustedPeriods);
+
 }

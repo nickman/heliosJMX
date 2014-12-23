@@ -2,7 +2,7 @@
  * Helios, OpenSource Monitoring
  * Brought to you by the Helios Development Group
  *
- * Copyright 2014, Helios Development Group and individual contributors
+ * Copyright 2007, Helios Development Group and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -22,32 +22,19 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.jmx.j9;
-
-import com.heliosapm.jmx.j9.J9GCGenconLogParser.GCEvent;
+package com.heliosapm.jmx.alarm;
 
 /**
- * <p>Title: GCEventListener</p>
- * <p>Description: Defines a listener that will be notified of every processed GCEvent</p> 
+ * <p>Title: AlarmValueEval</p>
+ * <p>Description: Enumerates the implemented methods of comparing threshold values to submitted sample values</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.jmx.j9.GCEventListener</code></p>
+ * <p><code>com.heliosapm.jmx.alarm.AlarmValueEval</code></p>
  */
 
-public interface GCEventListener {
-	/**
-	 * Callback on GCEvent processing completion for each event
-	 * @param event the GCEvent
-	 */
-	public void onGCEvent(final GCEvent event);
-
-	/**
-	 * Called when the GC event stream starts after cold boot, and end tag or an event timeout
-	 */
-	public void onGCStart();
-	
-	/**
-	 * Called when the GC log end tag <b><code>&lt;/verbosegc&gt;</code></b> tag is encountered in the stream
-	 */
-	public void onGCEnd();
+public enum AlarmValueEval {
+	GT,
+	GTOE,
+	LT,
+	LTOE;
 }

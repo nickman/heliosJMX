@@ -1658,7 +1658,7 @@ curl -XPUT 'http://localhost:9200/events/'     <---  index name: events
 
 
 #add a mapping to make sure timestamp is automatically saved
-curl -XPUT 'http://localhost:9200/events/test/_mapping' -d '
+curl -XPUT 'http://localhost:9200/alerts/test/_mapping' -d '
 {
     "test" : {
         "_timestamp" : { "enabled" : true, "store": "yes" }
@@ -1666,7 +1666,7 @@ curl -XPUT 'http://localhost:9200/events/test/_mapping' -d '
 }'
 
 #Post some data
-curl -XPOST 'http://localhost:9200/events/test' -d '{
+curl -XPOST 'http://localhost:9200/alerts/test' -d '{
     "tags" : ["test","start"],
     "message" : "Just a test of events for grafana. Test start. "
 }'
