@@ -44,6 +44,8 @@ public @interface SSHShell {
 	/**
 	 * The SSHOption values defined to acquire the shell
 	 */
-	SSHOptionValue[] options() default {};
+	SSHOptionValue[] value() default {};
+	
+	String fieldName() default "";
 
 }

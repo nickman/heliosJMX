@@ -358,6 +358,12 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 		}
 	}
 	
+	/**
+	 * Cleans up any allocated resources in the executable that is being discarded
+	 * @param executable the executable to clean
+	 */
+	protected abstract void closeOldExecutable(final T executable);
+	
 	
 	public String getDomain() {
 		return DEPLOYMENT_DOMAIN;
@@ -519,7 +525,10 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	 */
 	@Override
 	public void setExecutable(final T executable, final long checksum, final long timestamp) {
-		if(executable==null) throw new IllegalArgumentException("The passed executable was null");		
+		if(executable==null) throw new IllegalArgumentException("The passed executable was null");
+		if(this.executable!=null) {
+			closeOldExecutable(this.executable);
+		}
 		if(this.checksum != checksum || this.lastModified != timestamp) {
 			this.executable = executable;
 			this.checksum = checksum;

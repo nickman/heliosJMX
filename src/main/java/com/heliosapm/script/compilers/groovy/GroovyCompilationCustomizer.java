@@ -510,9 +510,15 @@ public class GroovyCompilationCustomizer {
 										}
 									} else {
 										if(node instanceof Variable || node instanceof DeclarationExpression) {
-											final Variable var = (node instanceof Variable) ? (Variable)node : ((DeclarationExpression)node).getVariableExpression().getAccessedVariable(); 
+											final Variable var = (node instanceof Variable) ? (Variable)node : ((DeclarationExpression)node).getVariableExpression().getAccessedVariable();
+											
 											final String nodeName = var.getName();
-											nodeAnnotation.setMember("fieldName", new ConstantExpression(nodeName));
+											
+											if(nodeAnnotation.getMembers().containsKey("fieldName")) {
+												nodeAnnotation.setMember("fieldName", new ConstantExpression(nodeName));
+											} else {
+												nodeAnnotation.addMember("fieldName", new ConstantExpression(nodeName));
+											}
 											fieldTransformer.visit(new ASTNode[] {FIELD_CLASS_ANNOTATION, node}, source);
 											injectMembers.addExpression(new AnnotationConstantExpression(nodeAnnotation));
 											addedInjects.incrementAndGet();

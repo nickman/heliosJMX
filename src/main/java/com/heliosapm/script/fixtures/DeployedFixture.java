@@ -24,6 +24,7 @@
  */
 package com.heliosapm.script.fixtures;
 
+import java.io.Closeable;
 import java.io.File;
 import java.util.Collections;
 import java.util.HashMap;
@@ -31,7 +32,6 @@ import java.util.Map;
 import java.util.Set;
 
 import com.heliosapm.script.AbstractDeployedScript;
-import com.heliosapm.script.annotations.FixtureArg;
 import com.heliosapm.script.compilers.FixtureCompiler.AbstractFixture;
 
 /**
@@ -78,6 +78,23 @@ public class DeployedFixture<T> extends AbstractDeployedScript<Fixture<T>> imple
 		fixtureTypeName = fixtureType.isPrimitive() ? fixtureType.getName() : fixtureType.getSimpleName();
 		FixtureAccessor.newFixtureAccessor(this);
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.script.AbstractDeployedScript#closeOldExecutable(java.lang.Object)
+	 */
+	@Override
+	protected void closeOldExecutable(final Fixture<T> executable) {
+		if(executable!=null) {
+			if(executable instanceof Closeable) {
+				try {
+					((Closeable)executable).close();
+				} catch (Exception x) {
+					/* No Op */
+				}
+			}
+		}
+	}	
 	
 	/**
 	 * {@inheritDoc}

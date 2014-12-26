@@ -178,6 +178,18 @@ public class SSHTunnelConnector implements ServerHostKeyVerifier, ConnectionMoni
 	
 	/**
 	 * Creates a new SSHTunnelConnector
+	 * @param sshOptions A map of SSHOptions and values
+	 */
+	public SSHTunnelConnector(final Map<SSHOption, Object> sshOptions) {
+		Map<SSHOption, Object> options = new EnumMap<SSHOption, Object>(SSHOption.class);
+		options.putAll(sshOptions);
+		final Map<SSHOption, Object> top = gather(null, options);
+		options.putAll(top);
+		initialize(options);
+	}
+	
+	/**
+	 * Creates a new SSHTunnelConnector
 	 * @param url A tunnel URL with the SSH options encoded 
 	 */
 	public SSHTunnelConnector(URL url) {

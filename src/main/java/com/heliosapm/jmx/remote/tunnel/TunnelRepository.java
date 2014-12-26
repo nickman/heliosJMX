@@ -97,6 +97,44 @@ public class TunnelRepository {
 //		LOG.log("Remaining Connections: %s", connectionsByAddress.size());
 //		LOG.log("Remaining Tunnels: %s", tunnelsByAddress.size() + tunnelsByAddressWithLocal.size());
 	}
+	/**
+	 * Creates, opens and returns a command terminal
+	 * @param sshOptions A map of SSHOptions and values
+	 * @return a command terminal through which command line directives can be issued
+	 */
+	public CommandTerminal openCommandTerminal(final Map<SSHOption, Object> sshOptions) {
+		try {
+			final SSHTunnelConnector sshConnector = new SSHTunnelConnector(sshOptions);
+			final String host = sshConnector.getSSHHost();
+			final int port = sshConnector.getSSHPort();
+			String[] aliases = InetAddressCache.getInstance().getAliases(host);
+			final String key = String.format("%s:%s", aliases[0], port);		
+			ConnectionWrapper cw = connectionsByAddress.get(key);
+			if(cw==null) {
+				synchronized(connectionsByAddress) {
+					cw = connectionsByAddress.get(key);
+					if(cw==null) {
+						connectionsByAddress.put(key, ConnectionWrapper.EMPTY_CONNECTION);
+					}
+				}
+			}
+			if(cw==null) {
+				try {
+					cw = _connect(sshConnector, true);
+					connectionsByAddress.put(key, cw);
+				} catch (Exception ex) {
+					connectionsByAddress.remove(key);
+					try { cw.close(); } catch (Exception x) {/* No Op */}
+					throw ex;
+				} 
+			}
+			final Session session = cw.openSession();
+			return new WrappedSession(session, cw).openCommandTerminal();
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to open command terminal for SSHOptions [" + sshOptions + "]", ex);
+		}
+		
+	}
 	
 	/**
 	 * Creates, opens and returns a command terminal

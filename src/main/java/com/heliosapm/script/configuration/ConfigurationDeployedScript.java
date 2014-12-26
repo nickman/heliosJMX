@@ -105,6 +105,8 @@ public class ConfigurationDeployedScript extends AbstractDeployedScript<Configur
 //		return false;
 //	}
 	
+	protected void closeOldExecutable(Configuration executable) {/* No Op */};
+	
 	/**
 	 * Sends a configuration notification
 	 * @param isnew The current configuration

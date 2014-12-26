@@ -24,20 +24,20 @@
  */
 package com.heliosapm.script.executable;
 
+import java.io.Closeable;
 import java.io.File;
-import java.lang.ref.WeakReference;
+import java.util.Map;
 import java.util.Set;
 
+import javax.script.Bindings;
 import javax.script.CompiledScript;
 import javax.script.Invocable;
 import javax.script.ScriptContext;
-import javax.script.SimpleBindings;
 
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
 
 import com.heliosapm.script.AbstractDeployedScript;
-import com.heliosapm.script.DeployedScript;
 import com.heliosapm.script.DeploymentStatus;
 
 /**
@@ -72,6 +72,26 @@ public class JSR223DeployedScript extends AbstractDeployedScript<CompiledScript>
 		initExcutable();		
 		locateConfigFiles(sourceFile, rootDir, pathSegments);
 		
+	}
+	
+	@Override
+	protected void closeOldExecutable(final CompiledScript executable) {
+		if(executable!=null) {
+			final Bindings binding = executable.getEngine().getBindings(ScriptContext.ENGINE_SCOPE);
+			if(binding!=null) {
+				for(Object var: binding.values()) {
+					if(var==null) continue;
+					if(var instanceof Closeable) {
+						try {
+							((Closeable)var).close();
+							log.info("[Executable Recycle]: Closed instance of [{}]", var.getClass().getSimpleName());
+						} catch (Exception x) {
+							/* No Op */
+						}
+					}
+				}
+			}
+		}
 	}
 	
 	/**

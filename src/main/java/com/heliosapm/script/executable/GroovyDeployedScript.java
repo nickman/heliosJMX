@@ -31,10 +31,16 @@ import groovy.lang.Script;
 
 import java.beans.PropertyEditor;
 import java.beans.PropertyEditorManager;
+import java.io.Closeable;
 import java.io.File;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -106,10 +112,68 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 		super.initExcutable();
 	}
 	
+	protected void closeOldExecutable(final Script executable) {
+		if(executable!=null) {
+			final Binding binding = executable.getBinding();
+			if(binding!=null) {
+				Map<Object, Object> vars = binding.getVariables();
+				if(vars!=null) {
+					for(Object var: vars.values()) {
+						if(var==null) continue;
+						if(var instanceof Closeable) {
+							try {
+								((Closeable)var).close();
+								log.info("[Executable Recycle]: Closed instance of [{}]", var.getClass().getSimpleName());
+							} catch (Exception x) {
+								/* No Op */
+							}
+						}
+					}
+				}
+			}
+			for(MetaProperty mp: executable.getMetaClass().getProperties()) {
+				String name = mp.getName();
+				Object value = mp.getProperty(executable);
+				if(value!=null && (value instanceof Closeable)) {
+					try {
+						((Closeable)value).close();
+						log.info("[Executable Recycle]: Closed instance of [{}]", value.getClass().getSimpleName());
+					} catch (Exception x) {
+						/* No Op */
+					}
+				}
+			}
+			final List<Field> fields = new ArrayList<Field>(Arrays.asList(executable.getClass().getFields()));
+			final String className = executable.getClass().getSimpleName();
+			Collections.addAll(fields, executable.getClass().getDeclaredFields());
+			for(Field f: fields) {
+				if(f==null) continue;
+				try {					
+					String name = f.getName();
+					//log.info("Testing field {}.{}", className, name);
+					f.setAccessible(true);
+					Object value = f.get(executable);
+					if(value!=null && (value instanceof Closeable)) {
+						
+						try {
+							((Closeable)value).close();
+							log.info("[Executable Recycle]: Closed instance of [{}] in [{}]", value.getClass().getSimpleName(), name);
+						} catch (Exception x) {
+							/* No Op */
+						}							
+					}
+				} catch (Exception x) {
+					/* No Op */
+				}
+			}
+		}
+	}
+	
 	protected void processAnnotations() {
 		for(Annotation ann: executable.getClass().getAnnotations()) {
 			log.info("Annotation Found: {}", ann.annotationType().getName());
 		}
+		
 		config.addDependency(executable.getClass().getAnnotation(Dependencies.class));
 		config.addDependency(executable.getClass().getAnnotation(Dependency.class));
 		
@@ -151,6 +215,7 @@ public class GroovyDeployedScript extends AbstractDeployedScript<Script> impleme
 				}
 			}
 		}		
+//		sshShellProcessor.process(executable);
 	}
 
 

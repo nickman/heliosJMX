@@ -3,9 +3,51 @@
 @Dependency(keys=["thost", "foobar"])
 @Inject(injectionType=com.heliosapm.script.annotations.InjectionType.FIXTURE, name="JMXTunnel_JMXConnector")
 jmxConnector;
+/*
+@SSHShell([
+	@com.heliosapm.script.annotations.SSHOptionValue(
+		value=com.heliosapm.jmx.remote.tunnel.SSHOption.HOST,
+		optValue="localhost"
+	),
+	@com.heliosapm.script.annotations.SSHOptionValue(
+		value=com.heliosapm.jmx.remote.tunnel.SSHOption.KEYPHR,
+		optValue="helios"
+	)
+])
+*/
+//SSH_CommandTerminal
+@Inject(injectionType=com.heliosapm.script.annotations.InjectionType.FIXTURE, name="SSH_CommandTerminal")
+shellFactory;
+@Field
+jmxConn = null;
+
+@Field
+shell = null;
+mbs = null;
 try {
-	if(jmxConnector!=null) println "Injected jmxConnector: $jmxConnector  -->  ${jmxConnector.get(['HOST' : 'localhost', 'PORT' : 8006, 'KEYPHR' : 'helios'])}   -  ${System.identityHashCode(jmxConnector)}";
+	if(jmxConnector!=null) {
+		if(jmxConn==null) {
+			jmxConn = jmxConnector.get(['HOST' : 'localhost', 'PORT' : 8006, 'KEYPHR' : 'helios']);			
+
+		}
+		mbs = jmxConn.getMBeanServerConnection();
+		println "JMXConn: ${mbs.getAttribute(MBeanServerDelegate.DELEGATE_NAME, 'MBeanServerId')}\n\t --------> ${System.identityHashCode(mbs)}"
+	}
 	else println "jmxConnector is still null";
+	println "======================";
+
+	if(shellFactory!=null) {
+		if(shell==null) {
+			shell = shellFactory.get(['HOST' : 'localhost', 'KEYPHR' : 'helios']);
+		}
+		//println "Injected shellFactory: $shellFactory  -->  ${shell}   -  ${System.identityHashCode(shellFactory)}";
+		println "UPTIME: ${shell.exec('uptime')} \n\t --------> ${System.identityHashCode(shell)} WOOT !"
+
+	} else println "shellFactory is still null";
+
+
+
+
 	//println "connectorFactory: $connectorFactory"; 
 	tmpDir = System.getProperty("java.io.tmpdir");
 	//println "TMP: ${tmpDir}";

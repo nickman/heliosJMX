@@ -24,12 +24,15 @@
  */
 package com.heliosapm.script.compilers;
 
+import java.io.Closeable;
 import java.io.File;
 import java.lang.annotation.Annotation;
 import java.net.URL;
 import java.util.Map;
 
+import javax.script.Bindings;
 import javax.script.CompiledScript;
+import javax.script.ScriptContext;
 import javax.script.ScriptException;
 import javax.script.SimpleBindings;
 
@@ -137,7 +140,7 @@ public class FixtureCompiler<T> implements DeploymentCompiler<Fixture<T>> {
 	 * @author Whitehead (nwhitehead AT heliosdev DOT org)
 	 * <p><code>com.heliosapm.script.compilers.FixtureCompiler.AbstractFixture</code></p>
 	 */
-	public class AbstractFixture implements Fixture<T> {
+	public class AbstractFixture implements Fixture<T>, Closeable {
 		/** The underlying compiled script */
 		final CompiledScript cs;		
 		/** The name of the fixture's script */
@@ -154,6 +157,29 @@ public class FixtureCompiler<T> implements DeploymentCompiler<Fixture<T>> {
 			this.cs = cs;
 			this.name = name;
 			flog = LoggerFactory.getLogger(getClass().getEnclosingClass().getName() + "." + this.name);
+		}
+		
+		/**
+		 * {@inheritDoc}
+		 * @see java.io.Closeable#close()
+		 */
+		public void close() {
+			if(cs!=null) {
+				final Bindings binding = cs.getEngine().getBindings(ScriptContext.ENGINE_SCOPE);
+				if(binding!=null) {
+					for(Object var: binding.values()) {
+						if(var==null) continue;
+						if(var instanceof Closeable) {
+							try {
+								((Closeable)var).close();
+								log.info("[Executable Recycle]: Closed instance of [{}]", var.getClass().getSimpleName());
+							} catch (Exception x) {
+								/* No Op */
+							}
+						}
+					}
+				}
+			}
 		}
 		
 		/**

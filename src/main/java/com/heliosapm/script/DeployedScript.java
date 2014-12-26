@@ -24,6 +24,8 @@
  */
 package com.heliosapm.script;
 
+import groovy.lang.Script;
+
 import java.util.Map;
 import java.util.concurrent.Callable;
 
@@ -103,6 +105,8 @@ public interface DeployedScript<T> extends DeployedScriptMXBean, Callable<T> {
 	 * Performs any initialization required on a new executable
 	 */
 	public void initExcutable();
+	
+	
 	
 	/**
 	 * Marks the deployment as broken

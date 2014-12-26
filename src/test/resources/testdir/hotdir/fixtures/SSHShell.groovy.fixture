@@ -1,0 +1,37 @@
+@Fixture(name="SSH_CommandTerminal", type=com.heliosapm.ssh.terminal.CommandTerminal.class, params=[
+	@FixtureArg(name="HOST", optional=false),
+	@FixtureArg(name="PORT", optional=false),
+	@FixtureArg(name="USER", optional=true),
+	@FixtureArg(name="KEY", optional=true),	
+	@FixtureArg(name="LOCAL_PORT", optional=true),
+	@FixtureArg(name="SVRKEY", optional=true),
+	@FixtureArg(name="HOSTFILE", optional=true),
+	@FixtureArg(name="SSHPROPS", optional=true),
+	@FixtureArg(name="PROPSPREF", optional=true),
+	@FixtureArg(name="SUBPROTO", optional=true),
+	@FixtureArg(name="DELPROTO", optional=true),
+	@FixtureArg(name="SSHTO", optional=true),
+	@FixtureArg(name="SSHKTO", optional=true),
+	@FixtureArg(name="READTO", optional=true),
+	@FixtureArg(name="RECON", optional=true),
+	@FixtureArg(name="PASS", optional=true),
+	@FixtureArg(name="JMXUSER", optional=true),
+	@FixtureArg(name="JMXPASS", optional=true),
+	@FixtureArg(name="KEYPHR", optional=true)	
+])
+a = 1;
+Map<SSHOption, Object> sshOptions = new EnumMap<SSHOption, Object>(SSHOption.class);
+try {
+	int addedOptions = 0;
+	SSHOption.values().each() {
+		if(binding.hasVariable(it.name())) {
+			sshOptions.put(it, binding.getProperty(it.name()));
+			addedOptions++;
+		}
+	}
+	return TunnelRepository.getInstance().openCommandTerminal(sshOptions);
+} catch (e) {
+	System.err.println("Failed to get command terminal for [$sshOptions]");
+	e.printStackTrace(System.err);
+	throw e;
+}
