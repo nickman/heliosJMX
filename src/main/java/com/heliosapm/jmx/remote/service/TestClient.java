@@ -52,9 +52,8 @@ import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.batch.BulkJMXServiceMBean;
 import com.heliosapm.jmx.util.helpers.ClassSwapper;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
-import com.heliosapm.jmx.util.helpers.ReconnectCallback;
-import com.heliosapm.jmx.util.helpers.ReconnectorService;
 import com.heliosapm.opentsdb.TSDBSubmitter;
+import com.heliosapm.opentsdb.TSDBSubmitterConnection;
 
 /**
  * <p>Title: TestClient</p>
@@ -159,7 +158,9 @@ public class TestClient {
 		//new TestClient("service:jmx:tunnel://pdk-pt-ceas-01:17083/ssh/jmxmp:");   //:pr=C:/ProdMonitors/ssh.properties,pref=pdk-ecs,h=pdk-pt-ceas-01,p=XXXX
 		JMXConnector connector = null;
 		MBeanServerConnection conn = null;
+		TSDBSubmitterConnection tsdbSubmitterConn = null;
 		TSDBSubmitter tsdbSubmitter = null;
+		
 //		//JMXMPConnectorServer server  = new JMXMPConnectorServer(ManagementFactory.getPlatformMBeanServer());
 //		final ObjectName CLIENT_TIMER = JMXHelper.objectName("com.onexchange.jmx.remote:service=Timer");
 		try {
@@ -226,7 +227,8 @@ public class TestClient {
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:jmxmp://localhost:8007");
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18088/ssh/jmxmp:");
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18089/ssh/jmxmp:");
-			tsdbSubmitter = new TSDBSubmitter("localhost", 4242).setTracingDisabled(true).setLogTraces(false).connect();
+			tsdbSubmitterConn = new TSDBSubmitterConnection("localhost", 4242).connect();
+			tsdbSubmitter = tsdbSubmitterConn.submitter().setTracingDisabled(true).setLogTraces(false);
 //			tsdbSubmitter = new TSDBSubmitter("opentsdb", 8080).setTracingDisabled(true).setLogTraces(false).connect();
 		    ClassSwapper.getInstance().swapIn(InstrumentedStreamForwarder.class);
 			connector = JMXConnectorFactory.connect(jmxUrl, Collections.singletonMap("jmx.remote.x.client.autoreconnect", true));
@@ -312,7 +314,7 @@ public class TestClient {
 	//		    	LOG.log(b);
 	//		    }
 			    
-			    LOG.log("Flush: %s", Arrays.toString(tsdbSubmitter.flush()));			    
+			    LOG.log("Flushing.....");			    
 			    for(Map.Entry<ObjectName, String[]> entry: attrNames.entrySet()) {		    
 		    		final ObjectName on = entry.getKey();
 		    		final String[] attrs = entry.getValue();		    	
@@ -327,7 +329,7 @@ public class TestClient {
 			ex.printStackTrace(System.err);
 		} finally {
 		    if(connector!=null) try { connector.close(); } catch(Exception x) {/* No Op */}
-		    if(tsdbSubmitter!=null) try { tsdbSubmitter.close(); } catch(Exception x) {/* No Op */}
+		    if(tsdbSubmitterConn!=null) try { tsdbSubmitterConn.close(); } catch(Exception x) {/* No Op */}
 		}		
 		
 		//pref=
