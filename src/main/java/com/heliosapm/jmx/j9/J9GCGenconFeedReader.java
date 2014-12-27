@@ -42,6 +42,7 @@ import com.heliosapm.jmx.j9.J9GCGenconLogParser.GCEvent;
 import com.heliosapm.jmx.j9.J9GCGenconLogParser.GCFail;
 import com.heliosapm.jmx.j9.J9GCGenconLogParser.GCTrigger;
 import com.heliosapm.opentsdb.TSDBSubmitter;
+import com.heliosapm.opentsdb.TSDBSubmitterConnection;
 
 /**
  * <p>Title: J9GCGenconFeedReader</p>
@@ -144,6 +145,9 @@ public class J9GCGenconFeedReader implements Runnable {
 		}
 	}
 	
+	/**
+	 * Runs the feed reader synchronously in the current thread
+	 */
 	public void synchRun() {
 		try {
 			run();
@@ -238,7 +242,7 @@ public class J9GCGenconFeedReader implements Runnable {
 	public static void main(String[] args) {
 		//final String content = URLHelper.getTextFromURL(URLHelper.toURL(new File(System.getProperty("java.io.tmpdir") + File.separator + "gclog-sample.xml")));
 		FileInputStream fis = null;
-		TSDBSubmitter tsdb = new TSDBSubmitter("localhost", 4242);
+		TSDBSubmitter tsdb = new TSDBSubmitterConnection("localhost", 4242).connect().submitter();
 		J9GCGenconFeedReader reader = null;
 		final String fileName = System.getProperty("java.io.tmpdir") + File.separator + "noapp.log";
 		//final String fileName = "C:\\temp\\gclog-sample.xml";		
@@ -249,7 +253,6 @@ public class J9GCGenconFeedReader implements Runnable {
 			
 			tsdb.setLogTraces(true);
 			tsdb.addRootTag("host", "mfthost").addRootTag("app", "MFT");
-			tsdb.connect();
 			GCEventTracer tracer = new GCEventTracer(tsdb);
 			
 			final long start = System.currentTimeMillis();

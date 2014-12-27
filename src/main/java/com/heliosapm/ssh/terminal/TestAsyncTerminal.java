@@ -36,6 +36,7 @@ import com.heliosapm.jmx.j9.GCEventTracer;
 import com.heliosapm.jmx.j9.J9GCGenconFeedReader;
 import com.heliosapm.jmx.remote.tunnel.TunnelRepository;
 import com.heliosapm.opentsdb.TSDBSubmitter;
+import com.heliosapm.opentsdb.TSDBSubmitterConnection;
 
 /**
  * <p>Title: TestAsyncTerminal</p>
@@ -60,10 +61,10 @@ public class TestAsyncTerminal {
 			//URL url = new URL("ssh://localhost?kp=helios");
 			URL url = new URL("ssh://njwmintx");
 			term = TunnelRepository.getInstance().openAsyncCommandTerminal(url);
-			final TSDBSubmitter tsdbSub = new TSDBSubmitter("localhost", 4242)
+			final TSDBSubmitter tsdbSub = new TSDBSubmitterConnection("localhost", 4242).connect()
+				.submitter()
 				.setLogTraces(true)
 				.addRootTag("host", "mfthost").addRootTag("app", "MFT");
-			tsdbSub.connect();
 			final GCEventTracer tracer = new GCEventTracer(tsdbSub);
 			DefaultAsyncStreamHandler handler = new DefaultAsyncStreamHandler() {
 				@Override

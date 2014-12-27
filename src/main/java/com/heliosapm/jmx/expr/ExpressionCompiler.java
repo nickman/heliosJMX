@@ -63,6 +63,7 @@ import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.opentsdb.ExpressionResult;
 import com.heliosapm.opentsdb.TSDBSubmitter;
+import com.heliosapm.opentsdb.TSDBSubmitterConnection;
 import com.heliosapm.script.StateService;
 
 /**
@@ -378,7 +379,7 @@ public class ExpressionCompiler {
 	
 	public static void main(String[] args) {
 		log.log("Testing ExpressionCompiler");
-		final TSDBSubmitter submitter = new TSDBSubmitter("localhost", 4242).addRootTag("app", "StockTrader").addRootTag("host", "ro-dev9");
+		final TSDBSubmitter submitter = new TSDBSubmitterConnection("localhost", 4242).connect().submitter().addRootTag("app", "StockTrader").addRootTag("host", "ro-dev9");
 		final ExpressionResult er = submitter.newExpressionResult();
 		//getInstance().get("{domain}.gc.{attr:Foo}::type={key:type},type={key:name}->{attr:A/B/C}");
 //		getInstance().get("{domain}.gc.{attr:Foo}::{allkeys}->{attr:A/B/C}");

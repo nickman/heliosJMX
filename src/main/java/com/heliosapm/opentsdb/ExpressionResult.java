@@ -34,7 +34,7 @@ import javax.management.ObjectName;
 import org.jboss.netty.buffer.ChannelBuffer;
 
 import com.heliosapm.jmx.util.helpers.JMXHelper;
-import com.heliosapm.opentsdb.TSDBSubmitter.SubmitterFlush;
+import com.heliosapm.opentsdb.TSDBSubmitterConnection.SubmitterFlush;
 
 
 /**
