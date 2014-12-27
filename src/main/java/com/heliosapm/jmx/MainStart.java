@@ -28,6 +28,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.heliosapm.filewatcher.ScriptFileWatcher;
+import com.heliosapm.jmx.server.JMXMPServer;
+import com.heliosapm.script.compilers.groovy.GroovyConsole;
+import com.heliosapm.script.compilers.groovy.stdio.SystemStreamRedirector;
 
 import io.hawt.embedded.Main;
 
@@ -52,6 +55,7 @@ public class MainStart {
 	 */
 	public static void main(String[] args) {
 		LOG.info("Starting heliosJMX....");
+		SystemStreamRedirector.install();
 		final Main main = new Main();
 		main.setWar(ISWIN ? WIN_HAWT_WAR : HAWT_WAR);
 		main.setPort(9090);
@@ -66,6 +70,8 @@ public class MainStart {
 				}
 			}
 		};
+		JMXMPServer.getInstance();
+		GroovyConsole.getInstance();
 		bootThread.start();
 		ScriptFileWatcher.main(new String[] {});
 	}
