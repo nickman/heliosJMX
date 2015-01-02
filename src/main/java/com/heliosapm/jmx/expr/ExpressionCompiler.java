@@ -27,9 +27,12 @@ package com.heliosapm.jmx.expr;
 import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.Constructor;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -233,7 +236,7 @@ public class ExpressionCompiler {
 		final String nameExpr;
 		final String valueExpr;
 		final Matcher fullExpressionMatcher;
-		final int maxIter = maxIterator(fullExpression);
+		final int maxIter = isLooper ? maxIterator(fullExpression) : -1;
 		if(isLooper) {
 			fullExpressionMatcher = LOOPERS_PATTERN.matcher(fullExpression);
 			if(!fullExpressionMatcher.matches()) throw new RuntimeException("Invalid expression: [" + fullExpression + "]");
@@ -253,6 +256,7 @@ public class ExpressionCompiler {
 		cp.importPackage(JMXHelper.class.getPackage().getName());
 		cp.importPackage(StateService.class.getPackage().getName());
 		cp.importPackage("javax.script");
+		cp.importPackage("java.util");
 		cp.importPackage("com.heliosapm.jmx.util.helpers");
 		
 		
@@ -288,15 +292,84 @@ public class ExpressionCompiler {
 		
 		try {
 			processorCtClass = cp.makeClass(className, abstractExpressionProcessorCtClass);
-			// Add default ctor
-			CtConstructor defaultCtor = CtNewConstructor.make(new CtClass[] {expressionResultCtClass}, new CtClass[0], processorCtClass); 
-			processorCtClass.addConstructor(defaultCtor);
-		
+			final CodeBuilder openLooperCode = new CodeBuilder();
+			final CodeBuilder closeLooperCode = new CodeBuilder();
+			final CodeBuilder invocationAppendCode = new CodeBuilder();
+			// true for an iterator, false for a map
+			final LinkedHashMap<String, Boolean> looperTypes = new LinkedHashMap<String, Boolean>(); 
 
 			// =======================================================================
 			// Collect looper directives
 			// =======================================================================
 			if(isLooper && maxIter >= 0) {
+				final String[] looperExprs = looperExpr.split(",");  //  split(",") -->  a, b:c, d
+				final List<String> trimmedLoopers = new ArrayList<String>(looperExprs.length);
+				for(int i = 0; i < looperExprs.length; i++) {
+					if(looperExprs[i]==null) continue;
+					looperExprs[i] = looperExprs[i].replace(" ", ""); 
+					if(looperExprs[i].isEmpty()) continue;
+					trimmedLoopers.add(looperExprs[i]);
+				}
+				if(!trimmedLoopers.isEmpty()) {
+					for(String s: trimmedLoopers) {
+						String[] frags = s.split(":");
+						if(frags.length==1) looperTypes.put(s, true);
+						else if(frags.length==2) looperTypes.put(s, false);
+						else throw new RuntimeException("Invalid looper declaration [" + s + "] in expression [" + fullExpression + "]");
+					}
+				}
+				if(!looperTypes.isEmpty()) {
+					int index = 0;
+					for(Map.Entry<String, Boolean> entry: looperTypes.entrySet()) {
+						final boolean isIter = entry.getValue();
+						
+						if(isIter) {
+							openLooperCode.append("\n\tfinal Iterable %sIter = $4[%s];", entry.getKey(), index);
+						} else {
+							final String mapName = entry.getKey().replace(":", "");
+							openLooperCode.append("\n\tfinal Map %sMap = $4[%s];", mapName, index);
+						}
+						index++;
+					}
+					index = 0;
+					for(Map.Entry<String, Boolean> entry: looperTypes.entrySet()) {
+						openLooperCode.append("\n\t");
+						closeLooperCode.append("\n\t");						
+						for(int x = 0; x < index; x++) {
+							openLooperCode.append("\t");
+							closeLooperCode.append("\t");
+						}
+						closeLooperCode.append("}");
+						final boolean isIter = entry.getValue();
+						if(isIter) {
+							openLooperCode.append("for(%s in %sIter) {", entry.getKey(), entry.getKey());
+						} else {
+							final String mapName = entry.getKey().replace(":", "");
+							final String[] keyVal = entry.getKey().split(":");
+							final String key = keyVal[0];
+							final String val = keyVal[1];
+							openLooperCode.append("for(Map.Entry %sEntry in %sMap) {", mapName, mapName);
+							char[] indent = new char[index+2];
+							Arrays.fill(indent, '\t');
+							indent[0] = '\n';
+							openLooperCode.append(new String(indent));
+							openLooperCode.append("final String %s = %sEntry.getKey().toString();", key, mapName);
+							openLooperCode.append("final String %s = %sEntry.getValue().toString();", val, mapName);
+						}						
+					}
+				}
+				// Add default ctor
+				final CtConstructor defaultCtor; 
+				if(looperTypes.isEmpty()) {
+					defaultCtor = CtNewConstructor.make(new CtClass[] {expressionResultCtClass}, new CtClass[0], processorCtClass);
+				} else {
+					defaultCtor = CtNewConstructor.make(new CtClass[] {expressionResultCtClass, CtClass.booleanType}, new CtClass[0], processorCtClass);
+				}
+				
+				
+				processorCtClass.addConstructor(defaultCtor);
+
+				
 				// LOOPER_INSTANCE_PATTERN = Pattern.compile("\\{iter(\\d+)\\}")
 				Set<String> looperNames = new HashSet<String>();
 				Matcher m = LOOPER_INSTANCE_PATTERN.matcher(looperExpr);

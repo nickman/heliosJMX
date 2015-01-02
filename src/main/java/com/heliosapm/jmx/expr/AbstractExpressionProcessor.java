@@ -55,15 +55,30 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	
 	/** The expression result that handles the expression processing and result buffering */
 	protected final ExpressionResult er;
+	/** Indicates if this a looping processor */
+	protected final boolean looper;
+	
 	/** Instance logger */
 	protected final Logger log = LoggerFactory.getLogger(getClass());
+	
 	/**
 	 * Creates a new AbstractExpressionProcessor
 	 * @param er The expression result that handles the expression processing and result buffering
+	 * @param looper true if this a looping processor, false otherwise
 	 */
-	public AbstractExpressionProcessor(ExpressionResult er) {
+	public AbstractExpressionProcessor(final ExpressionResult er, final boolean looper) {
 		this.er = er;
+		this.looper = looper;
 	}
+	
+	/**
+	 * Creates a new non-looping AbstractExpressionProcessor
+	 * @param er The expression result that handles the expression processing and result buffering
+	 */
+	public AbstractExpressionProcessor(final ExpressionResult er) {
+		this(er, false);
+	}
+	
 	
 	/**
 	 * {@inheritDoc}
