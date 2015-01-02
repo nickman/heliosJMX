@@ -928,6 +928,30 @@ public class JMXHelper {
 		}
 	}
 	
+	
+	/**
+	 * Returns the AgentId for the passed MBeanServer
+	 * @param connection The MBeanServerConnection to get the AgentId from
+	 * @return the AgentId
+	 */
+	public static String getAgentId(final MBeanServerConnection connection) {
+		if(connection == null) throw new IllegalArgumentException("The passed MBeanServerConnection was null");
+		try {
+			return (String) connection.getAttribute(MBeanServerDelegate.DELEGATE_NAME, "MBeanServerId");
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to get MBeanServer Agent ID", ex);
+		}
+	}
+	
+	/**
+	 * Returns the AgentId for the default MBeanServer
+	 * @return the AgentId of the default MBeanServer
+	 */
+	public static String getAgentId() {
+		return getAgentId(getHeliosMBeanServer());
+	}
+	
+	
 	/**
 	 * Inspects the array to see if it contains the passed string.
 	 * @param name The name to search for

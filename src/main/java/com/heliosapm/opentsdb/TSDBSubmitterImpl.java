@@ -762,6 +762,15 @@ class TSDBSubmitterImpl implements TSDBSubmitter {
 		}
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.opentsdb.TSDBSubmitter#deepFlush()
+	 */
+	@Override
+	public void deepFlush() {
+		flush();
+		tsdbConnection.flush();
+	}
 
 	// =========================================================================================================================
 	//    Misc Ops

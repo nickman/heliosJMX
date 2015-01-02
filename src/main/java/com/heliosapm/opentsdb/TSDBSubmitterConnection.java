@@ -158,6 +158,40 @@ public class TSDBSubmitterConnection  {
 	/** A counter of traces between each flush */
 	protected final AtomicInteger traceCount = new AtomicInteger(0);
 	
+	protected static final Map<String, TSDBSubmitterConnection> instances = new NonBlockingHashMap<String, TSDBSubmitterConnection>(12);
+	
+	/**
+	 * Acquires a TSDBSubmitterConnection for the passed host and port
+	 * @param host The OpenTSDB host or ip address
+	 * @param port The OpenTSDB listening port 
+	 * @return a TSDBSubmitterConnection for the passed host and port
+	 */
+	public static TSDBSubmitterConnection getTSDBSubmitterConnection(final String host, final int port) {
+		if(host==null || host.trim().isEmpty()) throw new IllegalArgumentException("The passed host name was null or empty");
+		final String key = host + ":" + port;
+		TSDBSubmitterConnection connection = instances.get(key);
+		if(connection==null) {
+			synchronized(instances) {
+				connection = instances.get(key);
+				if(connection==null) {
+					connection = new TSDBSubmitterConnection(host, port);
+					connection.connect();
+					instances.put(key, connection);
+				}
+			}
+		}
+		return connection;
+	}
+	
+	/**
+	 * Acquires a TSDBSubmitterConnection for the passed host and default port (4242)
+	 * @param host The OpenTSDB host or ip address
+	 * @return a TSDBSubmitterConnection for the passed host and default port
+	 */
+	public static TSDBSubmitterConnection getTSDBSubmitterConnection(final String host) {
+		return getTSDBSubmitterConnection(host, 4242);
+	}
+	
 	/** The default socket send buffer size in bytes */
 	public static final int DEFAULT_SEND_BUFFER_SIZE;
 	/** The default socket receive buffer size in bytes */
@@ -183,11 +217,11 @@ public class TSDBSubmitterConnection  {
 	
 	
 	/**
-	 * Creates a new TSDBSubmitter
+	 * Creates a new TSDBSubmitterConnection
 	 * @param host The OpenTSDB host or ip address
 	 * @param port The OpenTSDB listening port 
 	 */
-	public TSDBSubmitterConnection(final String host, final int port) {
+	private TSDBSubmitterConnection(final String host, final int port) {
 		this.host = host;
 		this.port = port;
 		socket = new Socket();
@@ -246,7 +280,7 @@ public class TSDBSubmitterConnection  {
 	 * Creates a new TSDBSubmitter using the default OpenTSDB port
 	 * @param host The OpenTSDB host or ip address
 	 */
-	public TSDBSubmitterConnection(final String host) {
+	private TSDBSubmitterConnection(final String host) {
 		this(host, 4242);
 	}
 	
@@ -600,6 +634,7 @@ public class TSDBSubmitterConnection  {
 	 */
 	public void close() {
 		try {
+			instances.remove(this.host + ":" + this.port);
 			socket.close();
 		} catch (Exception x) {
 			/* No Op */
@@ -607,7 +642,7 @@ public class TSDBSubmitterConnection  {
 			for(StringBuilder b: SBs) {
 				b.setLength(0);
 				b.trimToSize();
-			}
+			}			
 		}
 	}
 	

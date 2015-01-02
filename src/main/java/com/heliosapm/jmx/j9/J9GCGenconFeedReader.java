@@ -242,7 +242,7 @@ public class J9GCGenconFeedReader implements Runnable {
 	public static void main(String[] args) {
 		//final String content = URLHelper.getTextFromURL(URLHelper.toURL(new File(System.getProperty("java.io.tmpdir") + File.separator + "gclog-sample.xml")));
 		FileInputStream fis = null;
-		TSDBSubmitter tsdb = new TSDBSubmitterConnection("localhost", 4242).connect().submitter();
+		TSDBSubmitter tsdb = TSDBSubmitterConnection.getTSDBSubmitterConnection("localhost", 4242).submitter();
 		J9GCGenconFeedReader reader = null;
 		final String fileName = System.getProperty("java.io.tmpdir") + File.separator + "noapp.log";
 		//final String fileName = "C:\\temp\\gclog-sample.xml";		

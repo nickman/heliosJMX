@@ -22,36 +22,29 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org. 
  *
  */
-package com.heliosapm.jmx.expr;
+package com.heliosapm.script.compilers.groovy;
 
-import java.util.Map;
 
-import javax.management.ObjectName;
+
 
 /**
- * <p>Title: ExpressionProcessor</p>
- * <p>Description: Defines an expression processor which extracts and traces values sampled from a JMX MBean</p> 
+ * <p>Title: GroovyConsoleMXBean</p>
+ * <p>Description: JMX MXBean interface for {@link GroovyConsole}</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>com.heliosapm.jmx.expr.ExpressionProcessor</code></p>
+ * <p><code>com.heliosapm.script.compilers.groovy.GroovyConsoleMXBean</code></p>
  */
 
-public interface ExpressionProcessor {
-	
-	
+public interface GroovyConsoleMXBean {
 	/**
-	 * Executes a trace for one value extracted from the values collected from the passed JMX ObjectName
-	 * @param sourceId A unique id identifying where the values and object name were collected from
-	 * @param attrValues A map of attribute values keyed by the attribute name
-	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
-	 * @param loopers The loopers iterables to nest the execution with
-	 * @return The expression result rendered to a char sequence
+	 * Launches the groovy console, loading an empty console 
 	 */
-	public CharSequence process(
-			String sourceId, 
-			Map<String, Object> attrValues, 
-			ObjectName objectName, 
-			Object...loopers
-	);
+	public void launchConsole();
+
+	/**
+	 * Launches the groovy console 
+	 * @param fileName The name of the local file to load
+	 */
+	public void launchConsole(String fileName);
 
 }

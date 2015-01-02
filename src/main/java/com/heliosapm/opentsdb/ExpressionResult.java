@@ -171,7 +171,8 @@ public class ExpressionResult {
 			}
 		} else {
 			String valStr = value.toString().trim();
-			if(valStr.isEmpty()) throw new IllegalArgumentException("The passed value evaluated to an empty string");
+			if(valStr.isEmpty()) throw new IllegalArgumentException("The passed value [" + value + "] evaluated to an empty string");
+			if("null".equals(valStr)) throw new IllegalArgumentException("The passed value [" + value + "] evaluated to a null");
 			final int index = valStr.indexOf('.'); 
 			if(index != -1) {
 				if(valStr.substring(index+1).replace("0", "").isEmpty()) {

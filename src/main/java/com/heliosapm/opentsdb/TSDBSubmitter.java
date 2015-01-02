@@ -213,9 +213,14 @@ public interface TSDBSubmitter {
 	public void trace(String metric, long value, String... tags);
 
 	/**
-	 * Flushes the databuffer to the socket output stream and on success, clears the data buffer
+	 * Flushes the databuffer to the connection's buffer
 	 */
 	public void flush();
+	
+	/**
+	 * Flushes the databuffer to the connection's buffer and to the underlying socket output stream and on success, clears the data buffer
+	 */
+	public void deepFlush();
 	
 	/**
 	 * Closes the underlying TSDBSubmitterConnection.

@@ -31,17 +31,17 @@ try {
 
 		}
 		mbs = jmxConn.getMBeanServerConnection();
-		println "JMXConn: ${mbs.getAttribute(MBeanServerDelegate.DELEGATE_NAME, 'MBeanServerId')}\n\t --------> ${System.identityHashCode(mbs)}"
+		//println "JMXConn: ${mbs.getAttribute(MBeanServerDelegate.DELEGATE_NAME, 'MBeanServerId')}\n\t --------> ${System.identityHashCode(mbs)}"
 	}
 	else println "jmxConnector is still null";
-	println "======================";
+	//println "======================";
 
 	if(shellFactory!=null) {
 		if(shell==null) {
 			shell = shellFactory.get(['HOST' : 'localhost', 'KEYPHR' : 'helios']);
 		}
 		//println "Injected shellFactory: $shellFactory  -->  ${shell}   -  ${System.identityHashCode(shellFactory)}";
-		println "UPTIME: ${shell.exec('uptime')} \n\t --------> ${System.identityHashCode(shell)} WOOT !"
+		//println "UPTIME: ${shell.exec('uptime')} \n\t --------> ${System.identityHashCode(shell)} WOOT !"
 
 	} else println "shellFactory is still null";
 

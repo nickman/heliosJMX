@@ -61,7 +61,7 @@ public class TestAsyncTerminal {
 			//URL url = new URL("ssh://localhost?kp=helios");
 			URL url = new URL("ssh://njwmintx");
 			term = TunnelRepository.getInstance().openAsyncCommandTerminal(url);
-			final TSDBSubmitter tsdbSub = new TSDBSubmitterConnection("localhost", 4242).connect()
+			final TSDBSubmitter tsdbSub = TSDBSubmitterConnection.getTSDBSubmitterConnection("localhost", 4242)
 				.submitter()
 				.setLogTraces(true)
 				.addRootTag("host", "mfthost").addRootTag("app", "MFT");

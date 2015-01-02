@@ -31,6 +31,9 @@ import javax.management.ObjectName;
 import javax.script.Bindings;
 import javax.script.CompiledScript;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.CacheService;
 import com.heliosapm.opentsdb.ExpressionResult;
@@ -46,12 +49,14 @@ import com.heliosapm.script.StateService;
 
 public abstract class AbstractExpressionProcessor implements ExpressionProcessor {
 	/** A reference to the script compiler service */
-	protected final StateService state = StateService.getInstance();
+	protected static final StateService state = StateService.getInstance();
 	/** A reference to the cache service */
-	protected final CacheService cache = CacheService.getInstance();
+	protected static final CacheService cache = CacheService.getInstance();
 	
 	/** The expression result that handles the expression processing and result buffering */
 	protected final ExpressionResult er;
+	/** Instance logger */
+	protected final Logger log = LoggerFactory.getLogger(getClass());
 	/**
 	 * Creates a new AbstractExpressionProcessor
 	 * @param er The expression result that handles the expression processing and result buffering
@@ -65,9 +70,16 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	 * @see com.heliosapm.jmx.expr.ExpressionProcessor#process(java.lang.String, java.util.Map, javax.management.ObjectName, java.lang.Object[])
 	 */
 	public CharSequence process(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final Object...loopers) {
-		doName(sourceId, attrValues, objectName);
-		doValue(sourceId, attrValues, objectName);
-		return er.renderPut();		
+		try {
+			if(doName(sourceId, attrValues, objectName)) {
+				if(doValue(sourceId, attrValues, objectName)) {
+					return er.renderPut();
+				}
+			}
+		} catch (Exception ex) {
+			log.error("[{}] Expression Execution Failed", toString(), ex);
+		}
+		return "";				
 	}
 	
 	
@@ -92,9 +104,31 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 		try {
 			return ((CompiledScript)cs).eval(bindings);
 		} catch (Exception x) {
-			if(defaultValue!=null) return defaultValue;
+			if(defaultValue!=null) return defaultValue;			
 			throw new RuntimeException(x);
 		}
+	}
+	
+	/**
+	 * Computes a key that uniquely identifies the combination of the passed values
+	 * @param sourceId The source ID of the values
+	 * @param attrValues The metric tags
+	 * @param objectName The JMX ObjectName
+	 * @return the unique key
+	 */
+	public static String key(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName) {
+		final StringBuilder b = new StringBuilder(sourceId).append("/");
+		if(attrValues!=null & !attrValues.isEmpty()) {
+			b.append("{");
+			for(Map.Entry<String, Object> entry: attrValues.entrySet()) {
+				b.append(entry.getKey()).append(",");
+			}
+			b.deleteCharAt(b.length()-1).append("}/");
+		}
+		if(objectName!=null) {
+			b.append(objectName.toString());
+		}
+		return b.toString();
 	}
 	
 	/**
@@ -102,16 +136,18 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	 * @param sourceId A unique id identifying where the values and object name were collected from
 	 * @param attrValues A map of attribute values keyed by the attribute name
 	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
+	 * @return true to continue, false to abort tracing
 	 */
-	protected abstract void doName(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName);
+	protected abstract boolean doName(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName);
 	
 	/**
 	 * Executes the value part of the expression
 	 * @param sourceId A unique id identifying where the values and object name were collected from
 	 * @param attrValues A map of attribute values keyed by the attribute name
 	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
+	 * @return true to continue, false to abort tracing
 	 */
-	protected abstract void doValue(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName);
+	protected abstract boolean doValue(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName);
 	
 	/**
 	 * Returns the passed object cast or wrapped as an {@link Iterable}

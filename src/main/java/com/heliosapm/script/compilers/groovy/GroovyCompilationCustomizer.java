@@ -115,7 +115,8 @@ public class GroovyCompilationCustomizer {
 			"import javax.management.*", 						// JMX Core
 			"import javax.management.remote.*", 				// JMX Remoting
 			"import groovy.transform.*",						// Groovy AST transforms
-			"import com.heliosapm.jmx.remote.tunnel.*"			// SSH Options
+			"import com.heliosapm.jmx.remote.tunnel.*",			// SSH Options,
+			"import com.heliosapm.opentsdb.*"					// OpenTSDB extensions
 	};
 	
 	

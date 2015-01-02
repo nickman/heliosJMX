@@ -56,9 +56,9 @@ import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import com.heliosapm.SimpleLogger;
-import com.heliosapm.SimpleLogger.SLogger;
 import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.opentsdb.ExpressionResult;
@@ -81,8 +81,8 @@ public class ExpressionCompiler {
 	private static final Object lock = new Object();
 	
 	
-	/** Instance simple logger */
-	protected static final SLogger log = SimpleLogger.logger(ExpressionCompiler.class);
+	/** Static class logger */
+	protected static final Logger log = LoggerFactory.getLogger(ExpressionCompiler.class);
 	
 	/** A cache of compiled claass constructors */
 	private final NonBlockingHashMap<String, Constructor<ExpressionProcessor>> classes = new NonBlockingHashMap<String, Constructor<ExpressionProcessor>>();
@@ -92,6 +92,19 @@ public class ExpressionCompiler {
 	/** The registered directives */
 	protected final Set<DirectiveCodeProvider> providers = new CopyOnWriteArraySet<DirectiveCodeProvider>(Directives.PROVIDERS);
 
+	/**
+	 * {@inheritDoc}
+	 * @see java.lang.Object#toString()
+	 */
+	@Override
+	public String toString() {
+		return new StringBuilder(getClass().getSimpleName())
+			.append("[Compiled Classes:").append(classes.size())
+			.append(", Providers:").append(providers.size())
+			.append("]")
+			.toString();
+	}
+	
 	
 	public static final Pattern FULL_EXPR = Pattern.compile("(.*?)\\s*?\\->(.*?)");
 	public static final Pattern TOKEN_PATTERN = Pattern.compile("\\{(.*?)(?::(.*?))?\\}");
@@ -133,6 +146,16 @@ public class ExpressionCompiler {
 	/** The package in which new processors will be created in */
 	public static final String PROCESSOR_PACKAGE = ExpressionCompiler.class.getPackage().getName() + ".impls";
 	
+	/** The doName method descriptor */
+	public static String DO_NAME_DESCR = "(Ljava/lang/String;Ljava/util/Map;Ljavax/management/ObjectName;Lcom/heliosapm/jmx/expr/ExpressionResult;)V";
+	
+	/** Empty CtClass Array Const */
+	public static final CtClass[] EMPTY_CT_CLASS_ARR = {};
+	
+	/** String CtClass Const */
+	public static final CtClass STRING_CT_CLASS;
+
+	
 	static {
 		final ClassPool cp = new ClassPool();
 		cp.appendSystemPath();
@@ -141,6 +164,7 @@ public class ExpressionCompiler {
 		try {
 			abstractExpressionProcessorCtClass = cp.get(AbstractExpressionProcessor.class.getName());
 			expressionResultCtClass = cp.get(ExpressionResult.class.getName());
+			STRING_CT_CLASS = cp.get(String.class.getName());
 		} catch(Exception ex) {
 			throw new RuntimeException(ex);
 		}
@@ -190,7 +214,7 @@ public class ExpressionCompiler {
 		}
 	}
 	
-	public static String DO_NAME_DESCR = "(Ljava/lang/String;Ljava/util/Map;Ljavax/management/ObjectName;Lcom/heliosapm/jmx/expr/ExpressionResult;)V";
+	
 	
 	public CtMethod findMethod(final CtClass clazz, final String name) {
 		for(CtMethod ctm: clazz.getMethods()) {
@@ -286,15 +310,15 @@ public class ExpressionCompiler {
 			
 			
 			// CodeBuilder for naming and value
-			final CodeBuilder codeBuffer = new CodeBuilder().append("{\n\tfinal StringBuilder nBuff = new StringBuilder();");
+			final CodeBuilder codeBuffer = new CodeBuilder().append("{\n\tfinal StringBuilder nBuff = new StringBuilder();\n");
 			codeBuffer.push();
 			// =======================================================================
 			// Collect name directives
 			// =======================================================================
 
 			processName(nameExpr, codeBuffer);
-			codeBuffer.append("\n\ter.objectName(nBuff);\n}");
-			log.log("Generated Name Code:\n%s", codeBuffer);
+			codeBuffer.append("\n\ter.objectName(nBuff);\n\treturn true;}");
+			log.info("Generated Name Code for Expr [{}]:\n{}", fullExpression, codeBuffer);
 
 			// =======================================================================
 			// Add do name method
@@ -318,8 +342,8 @@ public class ExpressionCompiler {
 			// Collect value directives
 			// =======================================================================
 			processValue(valueExpr, codeBuffer);
-			codeBuffer.append("\n\ter.value(nBuff);\n}");
-			log.log("Generated Value Code:\n%s", codeBuffer);
+			codeBuffer.append("\n\ter.value(nBuff);\n\treturn true;}");
+			log.info("Generated Value Code:\n{}", codeBuffer);
 			
 			// =======================================================================
 			// Add do value method
@@ -333,6 +357,16 @@ public class ExpressionCompiler {
 			doValueMethod.setBody(codeBuffer.render());
 			doValueMethod.setModifiers(doValueMethod.getModifiers() & ~Modifier.ABSTRACT);
 			processorCtClass.addMethod(doValueMethod);
+
+			// =======================================================================
+			// Add toString method
+			// =======================================================================
+		
+			CtMethod toStringMethod = new CtMethod(STRING_CT_CLASS, "toString", EMPTY_CT_CLASS_ARR, processorCtClass);
+			toStringMethod.setModifiers(toStringMethod.getModifiers() & ~Modifier.ABSTRACT);
+			processorCtClass.addMethod(toStringMethod);			
+			toStringMethod.setBody("{ return getClass().getName() + \" --> [" + fullExpression + "]\"; }");
+			
 			// =======================================================================
 			// Generate class
 			// =======================================================================
@@ -378,83 +412,86 @@ public class ExpressionCompiler {
 	}
 	
 	public static void main(String[] args) {
-		log.log("Testing ExpressionCompiler");
-		final TSDBSubmitter submitter = new TSDBSubmitterConnection("localhost", 4242).connect().submitter().addRootTag("app", "StockTrader").addRootTag("host", "ro-dev9");
-		final ExpressionResult er = submitter.newExpressionResult();
-		//getInstance().get("{domain}.gc.{attr:Foo}::type={key:type},type={key:name}->{attr:A/B/C}");
-//		getInstance().get("{domain}.gc.{attr:Foo}::{allkeys}->{attr:A/B/C}");
-		getInstance().get("{domain}.gc.{eval:d(nuthin):ON.getKeyProperty('Foo');}::{allkeys}->{attr:A/B/C}", er);
-		ManagementFactory.getMemoryMXBean().gc();
 		try {
-			MBeanServer server = ManagementFactory.getPlatformMBeanServer();			
-			final String agentId = server.getAttribute(MBeanServerDelegate.DELEGATE_NAME, "MBeanServerId").toString();
-			for(ObjectName on: server.queryNames(JMXHelper.objectName(ManagementFactory.GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE + ",*"), null)) {
-				Map<String, Object> attrValues = JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on));
-				ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}", er); 
-				CharSequence m = ep.process(agentId, attrValues, on);
-				log.log("Expr [%s]: %s", on, er);
+			log.info("Testing ExpressionCompiler");
+			final TSDBSubmitter submitter = TSDBSubmitterConnection.getTSDBSubmitterConnection("localhost", 4242).submitter().addRootTag("app", "StockTrader").addRootTag("host", "ro-dev9").setLogTraces(true);
+			final ExpressionResult er = submitter.newExpressionResult();
+			//getInstance().get("{domain}.gc.{attr:Foo}::type={key:type},type={key:name}->{attr:A/B/C}");
+	//		getInstance().get("{domain}.gc.{attr:Foo}::{allkeys}->{attr:A/B/C}");
+			getInstance().get("{domain}.gc.{eval:d(nuthin):ON.getKeyProperty('Foo');}::{allkeys}->{attr:A/B/C}", er);
+			ManagementFactory.getMemoryMXBean().gc();
+			try {
+				MBeanServer server = ManagementFactory.getPlatformMBeanServer();			
+				final String agentId = server.getAttribute(MBeanServerDelegate.DELEGATE_NAME, "MBeanServerId").toString();
+				for(ObjectName on: server.queryNames(JMXHelper.objectName(ManagementFactory.GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE + ",*"), null)) {
+					Map<String, Object> attrValues = JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on));
+					ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}", er); 
+					CharSequence m = ep.process(agentId, attrValues, on);
+					log.info("Expr [{}]: {}", on, er);
+				}
+			} catch (Exception ex) {
+				ex.printStackTrace(System.err);
 			}
-		} catch (Exception ex) {
-			ex.printStackTrace(System.err);
-		}
-		log.log("\n\t===============================\n\tHBase Test\n\t===============================\n");
-		try {
-			JMXServiceURL serviceUrl = new JMXServiceURL("service:jmx:attach:///[.*HMaster.*]");
-			JMXConnector jconn = JMXConnectorFactory.connect(serviceUrl);
-			MBeanServerConnection server = jconn.getMBeanServerConnection();
-			final String agentId = server.getAttribute(MBeanServerDelegate.DELEGATE_NAME, "MBeanServerId").toString();
-			log.log("Connected to HMaster. ServerID: [%s]", agentId);
-			for(ObjectName on: server.queryNames(JMXHelper.objectName(ManagementFactory.GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE + ",*"), null)) {
+			log.info("\n\t===============================\n\tHBase Test\n\t===============================\n");
+			try {
+				JMXServiceURL serviceUrl = new JMXServiceURL("service:jmx:attach:///[.*HMaster.*]");
+				JMXConnector jconn = JMXConnectorFactory.connect(serviceUrl);
+				MBeanServerConnection server = jconn.getMBeanServerConnection();
+				final String agentId = JMXHelper.getAgentId(server); //server.getAttribute(MBeanServerDelegate.DELEGATE_NAME, "MBeanServerId").toString();
+				log.info("Connected to HMaster. ServerID: [{}]", agentId);
+				for(ObjectName on: server.queryNames(JMXHelper.objectName(ManagementFactory.GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE + ",*"), null)) {
+					Map<String, Object> attrValues = JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on));
+					ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}", er); 
+					String rez = ep.process(agentId, attrValues, on).toString();
+					log.info("Expr [{}]: {}", on, rez);
+				}
+				Set<String> memoryPoolNames = new HashSet<String>(5);
+				int index = 0;
+				for(ObjectName on: server.queryNames(JMXHelper.objectName("java.lang:type=MemoryPool,*"), null)) {
+					memoryPoolNames.add(on.getKeyProperty("name"));
+				}
+				log.info("Memory Pool Names: {}", memoryPoolNames.toString());
+				
+				ExpressionProcessor ep = ExpressionCompiler.getInstance()
+	//					.get("{domain}::{allkeys},pool={attr:MemoryPoolNames([0])}->{attr:LastGCInfo}");
+						.get("{domain}::{allkeys},pool={eval:attrValues.get('MemoryPoolNames')[0]}->1", er);
+				
+				
+				for(ObjectName on: server.queryNames(JMXHelper.objectName("java.lang:type=GarbageCollector,*"), null)) {
+					final String gcName = on.getKeyProperty("name");
+					String memPoolName = ((String[])server.getAttribute(on, "MemoryPoolNames"))[0];
+					log.info("GC: [{}], First Pool: [{}]", gcName, memPoolName);
+					String rez = ep.process(agentId, JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on, server)), on).toString();
+					log.info("ER: [{}], rez: [{}]", er, rez);
+				}
+				
+				// java.lang:type=OperatingSystem
+				ObjectName on = JMXHelper.objectName("java.lang:type=OperatingSystem");
 				Map<String, Object> attrValues = JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on));
-				ExpressionProcessor ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}", er); 
+				ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:FreeSwapSpaceSize}", er); 
 				String rez = ep.process(agentId, attrValues, on).toString();
-				log.log("Expr [%s]: %s", on, rez);
+				
+				
+				
+				//  {eval:attrValues.get('MemoryPoolNames')[0]}
+				
+				/*
+				 * LastGcInfo / 
+				 * 		GcThreadCount, duration
+				 * 		memoryUsageBeforeGc / memoryUsageAfterGc
+				 * 			key: <pool name>  e.g. CMS Old Gen
+				 * 			value: MemoryUsage
+				 * 				committed, init, max, used
+				 */
+				
+				jconn.close();
+				
+			} catch (Exception ex) {
+				ex.printStackTrace(System.err);
 			}
-			Set<String> memoryPoolNames = new HashSet<String>(5);
-			int index = 0;
-			for(ObjectName on: server.queryNames(JMXHelper.objectName("java.lang:type=MemoryPool,*"), null)) {
-				memoryPoolNames.add(on.getKeyProperty("name"));
-			}
-			log.log("Memory Pool Names: %s", memoryPoolNames.toString());
-			
-			ExpressionProcessor ep = ExpressionCompiler.getInstance()
-//					.get("{domain}::{allkeys},pool={attr:MemoryPoolNames([0])}->{attr:LastGCInfo}");
-					.get("{domain}::{allkeys},pool={eval:attrValues.get('MemoryPoolNames')[0]}->1", er);
-			
-			
-			for(ObjectName on: server.queryNames(JMXHelper.objectName("java.lang:type=GarbageCollector,*"), null)) {
-				final String gcName = on.getKeyProperty("name");
-				String memPoolName = ((String[])server.getAttribute(on, "MemoryPoolNames"))[0];
-				log.log("GC: [%s], First Pool: [%s]", gcName, memPoolName);
-				String rez = ep.process(agentId, JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on, server)), on).toString();
-				log.log("ER: %s", er);
-			}
-			
-			// java.lang:type=OperatingSystem
-			ObjectName on = JMXHelper.objectName("java.lang:type=OperatingSystem");
-			Map<String, Object> attrValues = JMXHelper.getAttributes(on, server, JMXHelper.getAttributeNames(on));
-			ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:CollectionCount}", er); 
-			String rez = ep.process(agentId, attrValues, on).toString();
-			
-			
-			
-			//  {eval:attrValues.get('MemoryPoolNames')[0]}
-			
-			/*
-			 * LastGcInfo / 
-			 * 		GcThreadCount, duration
-			 * 		memoryUsageBeforeGc / memoryUsageAfterGc
-			 * 			key: <pool name>  e.g. CMS Old Gen
-			 * 			value: MemoryUsage
-			 * 				committed, init, max, used
-			 */
-			
-			jconn.close();
-			
-		} catch (Exception ex) {
-			ex.printStackTrace(System.err);
+		} finally {
+			System.exit(0);
 		}
-		
 	}
 	
 	/**

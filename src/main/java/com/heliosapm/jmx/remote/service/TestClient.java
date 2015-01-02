@@ -227,7 +227,7 @@ public class TestClient {
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:jmxmp://localhost:8007");
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18088/ssh/jmxmp:");
 //			JMXServiceURL jmxUrl = new JMXServiceURL("service:jmx:tunnel://pdk-pt-ceas-01:18089/ssh/jmxmp:");
-			tsdbSubmitterConn = new TSDBSubmitterConnection("localhost", 4242).connect();
+			tsdbSubmitterConn = TSDBSubmitterConnection.getTSDBSubmitterConnection("localhost", 4242);
 			tsdbSubmitter = tsdbSubmitterConn.submitter().setTracingDisabled(true).setLogTraces(false);
 //			tsdbSubmitter = new TSDBSubmitter("opentsdb", 8080).setTracingDisabled(true).setLogTraces(false).connect();
 		    ClassSwapper.getInstance().swapIn(InstrumentedStreamForwarder.class);
