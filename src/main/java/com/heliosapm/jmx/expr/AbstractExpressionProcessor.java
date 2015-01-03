@@ -53,6 +53,9 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	/** A reference to the cache service */
 	protected static final CacheService cache = CacheService.getInstance();
 	
+	/** End of line separator */
+	public static final String EOL = System.getProperty("line.separator", "\n");
+	
 	/** The expression result that handles the expression processing and result buffering */
 	protected final ExpressionResult er;
 	/** Indicates if this a looping processor */
@@ -79,6 +82,16 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 		this(er, false);
 	}
 	
+	/**
+	 * The default looper impl call.
+	 * @param sourceId A unique id identifying where the values and object name were collected from
+	 * @param attrValues A map of attribute values keyed by the attribute name
+	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
+	 * @param loopers The loopers iterables to nest the execution with
+	 * @return blank string by default. Overrides should return a string of EOL separated metric puts
+	 */
+	public abstract CharSequence processLoop(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final Object...loopers);
+	
 	
 	/**
 	 * {@inheritDoc}
@@ -86,9 +99,13 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	 */
 	public CharSequence process(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final Object...loopers) {
 		try {
-			if(doName(sourceId, attrValues, objectName)) {
-				if(doValue(sourceId, attrValues, objectName)) {
-					return er.renderPut();
+			if(looper) {
+				return processLoop(sourceId, attrValues, objectName, loopers);
+			} else {
+				if(doName(sourceId, attrValues, objectName)) {
+					if(doValue(sourceId, attrValues, objectName)) {
+						return er.renderPut();
+					}
 				}
 			}
 		} catch (Exception ex) {
@@ -151,18 +168,20 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	 * @param sourceId A unique id identifying where the values and object name were collected from
 	 * @param attrValues A map of attribute values keyed by the attribute name
 	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
+	 * @param looperValues The resolved looper values
 	 * @return true to continue, false to abort tracing
 	 */
-	protected abstract boolean doName(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName);
+	protected abstract boolean doName(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, String...looperValues);
 	
 	/**
 	 * Executes the value part of the expression
 	 * @param sourceId A unique id identifying where the values and object name were collected from
 	 * @param attrValues A map of attribute values keyed by the attribute name
 	 * @param objectName The JMX ObjectName of the MBean the attribute values were sampled from
+	 * @param looperValues The resolved looper values
 	 * @return true to continue, false to abort tracing
 	 */
-	protected abstract boolean doValue(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName);
+	protected abstract boolean doValue(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, String...looperValues);
 	
 	/**
 	 * Returns the passed object cast or wrapped as an {@link Iterable}
