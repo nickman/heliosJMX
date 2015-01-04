@@ -75,6 +75,11 @@ public class Directives {
 	/** The directive matching expression for an ElapsedTimeDirective */
 	public static final Pattern ELAPSED_EXPR = Pattern.compile("\\{elapsed(?:\\((.*?)\\))?\\}");
 
+	public static String formatParam(final String ext) {
+		if(ext==null) return null;
+		if(ext.indexOf("$4[")!=0) return "\"" + ext + "\"";
+		return ext;
+	}
 
 	/**
 	 * <p>Title: ElapsedTimeDirective</p>
@@ -92,7 +97,7 @@ public class Directives {
 			Matcher m = ELAPSED_EXPR.matcher(directive);
 			// "\\{elapsed(?:\\((.*?)\\))?\\}"
 			m.matches();
-			final String ext = m.group(1);
+			final String ext = formatParam(m.group(1));
 			code.append("\n\tfinal String KEY = key($1, $2, $3);");
 			if(ext==null) {
 				// No in param
@@ -102,7 +107,7 @@ public class Directives {
 //				code.append("\n\treturn true;");
 			} else {
 				code.append("\n\ttry {");
-				code.append("\n\t\tfinal Number param = (Number)$2.get(\"").append(ext).append("\");");
+				code.append("\n\t\tfinal Number param = (Number)$2.get(").append(ext).append(");");
 				code.append("\n\tif(param==null) return false;");
 				code.append("\n\tfinal Long ts = cache.elapsedTime(KEY, param.longValue());");
 				code.append("\n\tif(ts==null) return false;");
@@ -150,6 +155,7 @@ public class Directives {
 			code.append("\n\tb.put(\"sourceId\", $1);");
 			code.append("\n\tb.put(\"attrValues\", $2);");
 			code.append("\n\tb.put(\"objectName\", $3);");
+			code.append("\n\tb.put(\"javax.script.argv\", $4);");
 			code.append("\n\tb.put(\"exResult\", er);");			
 			code.append("\n\ttry {");
 			if(defaultValue!=null && !defaultValue.trim().isEmpty()) {
@@ -191,16 +197,16 @@ public class Directives {
 			code.append("\n\tif($3==null) return false;");
 			Matcher m = KEY_EXPR.matcher(directive);
 			m.matches();
-			String arg = m.group(1);
+			String arg = formatParam(m.group(1));
 			m = SUBSCRIPT_EXPR.matcher(arg);			
 			if(m.matches()) {
-				String key = m.group(1);
-				String sub = m.group(2);
-				code.append("\n\tfinal ObjectName on = $3.getKeyProperty(\"").append(key).append("\");");
+				String key = formatParam(m.group(1));
+				String sub = formatParam(m.group(2));
+				code.append("\n\tfinal ObjectName on = $3.getKeyProperty(").append(key).append(");");
 				code.append("\n\tif(on==null) return false;");
 				code.append("\n\tnBuff.append(\"%s\").append(\"=\").append($3.getKeyProperty(\"%s\")%s).append(\",\");", key.trim(), key.trim(), sub.trim());
 			} else {
-				code.append("\n\tfinal ObjectName on = $3.getKeyProperty(\"").append(arg).append("\");");
+				code.append("\n\tfinal ObjectName on = $3.getKeyProperty(").append(arg).append(");");
 				code.append("\n\tif(on==null) return false;");
 				code.append("\n\tnBuff.append(\"%s\").append(\"=\").append($3.getKeyProperty(\"%s\")).append(\",\");", arg.trim(), arg.trim());				
 			}
@@ -229,16 +235,16 @@ public class Directives {
 			
 			Matcher m = KEY_EXPR.matcher(directive);
 			m.matches();
-			String arg = m.group(1);
+			String arg = formatParam(m.group(1));
 			m = SUBSCRIPT_EXPR.matcher(arg);
 			if(m.matches()) {
-				arg = m.group(1);
-				String sub = m.group(2);
-				code.append("\n\tfinal Object value = $3.getKeyProperty(\"").append(arg).append("\");");
+				arg = formatParam(m.group(1));
+				String sub = formatParam(m.group(2));
+				code.append("\n\tfinal Object value = $3.getKeyProperty(").append(arg).append(");");
 				code.append("\n\tif(value==null) return false;");
 				code.append("\n\tnBuff.append(value").append(sub).append(");");
 			} else {
-				code.append("\n\tfinal Object value = $3.getKeyProperty(\"").append(arg).append("\");");
+				code.append("\n\tfinal Object value = $3.getKeyProperty(").append(arg).append(");");
 				code.append("\n\tif(value==null) return false;");				
 				code.append("\n\tnBuff.append(value);");
 			}
@@ -266,10 +272,10 @@ public class Directives {
 			Matcher m = ATTR_EXPR.matcher(directive);
 			// "\\{attr:(.*?)\\}"
 			m.matches();
-			String arg = m.group(1).trim();			
+			String arg = formatParam(m.group(1).trim());			
 			// "(.*?)\\((.*?)\\)$"  //  e.g.   ABC.trim()  or ABC.get('X')
 			code.append("\n\tif($2==null) return false;");
-			code.append("\n\tfinal Object val = $2.get(\"").append(arg).append("\");");
+			code.append("\n\tfinal Object val = $2.get(").append(arg).append(");");
 			code.append("\n\tif(val==null) return false;");
 			m = SUBSCRIPT_EXPR.matcher(arg);
 			if(m.matches()) {
@@ -332,7 +338,8 @@ public class Directives {
 				if(isNumber(s)) {
 					values.add(s);
 				} else {
-					values.add("\"" + s + "\"");
+					s = formatParam(s);
+					values.add(s);
 				}
 				
 			}

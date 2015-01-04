@@ -28,9 +28,11 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.management.ObjectName;
 
+import org.cliffc.high_scale_lib.NonBlockingHashSet;
 import org.jboss.netty.buffer.ChannelBuffer;
 
 import com.heliosapm.jmx.util.helpers.JMXHelper;
@@ -53,6 +55,18 @@ public class ExpressionResult {
 	/** The OpenTSDB root tags that do not get reset */
 	protected Map<String, String> rootTags = new LinkedHashMap<String, String>(2);
 	
+	/** Indicates if the ER is loaded (true) or reset (false) */
+	protected final AtomicBoolean loaded = new AtomicBoolean(false);
+	
+	/** The dup check filter */
+	protected final NonBlockingHashSet<String> dupCheck;
+	
+	/** End of line separator */
+	public static final String EOL = System.getProperty("line.separator", "\n");
+	
+	
+
+	
 	/** The metric value if a double type */
 	protected double dValue = 0D;
 	/** The metric value if a long type */
@@ -60,6 +74,11 @@ public class ExpressionResult {
 	/** Indicates if the metric value is a double type */
 	protected boolean doubleValue = true;
 	
+	/** Indicates if the ER should track and filter dups. */
+	protected final boolean filterDups;
+	
+
+
 	/** The submitted metric buffer */
 	protected final ChannelBuffer buffer;
 	/** The flush target where this buffer will flush to */
@@ -76,26 +95,30 @@ public class ExpressionResult {
 	
 	/**
 	 * Creates a new ExpressionResult
+	 * @param filterDups Indicates if the ER should track and filter dups
 	 * @param rootTags An optional map of root tags
 	 * @param buffer The submitted metric buffer
 	 * @param flushTarget The target the buffer will be flushed to
 	 * @return a new ExpressionResult
 	 */
-	static ExpressionResult newInstance(final Map<String, String> rootTags, final ChannelBuffer buffer, final SubmitterFlush flushTarget) {
-		return new ExpressionResult(rootTags, buffer, flushTarget);
+	static ExpressionResult newInstance(final boolean filterDups, final Map<String, String> rootTags, final ChannelBuffer buffer, final SubmitterFlush flushTarget) {
+		return new ExpressionResult(filterDups, rootTags, buffer, flushTarget);
 	}
 	
 
 
 	/**
 	 * Creates a new ExpressionResult
+	 * @param filterDups Indicates if the ER should track and filter dups
 	 * @param rootTags An optional map of root tags
 	 * @param buffer The submitted metric buffer
 	 * @param flushTarget The target the buffer will be flushed to
 	 */
-	private ExpressionResult(final Map<String, String> rootTags, final ChannelBuffer buffer, final SubmitterFlush flushTarget) {
+	private ExpressionResult(final boolean filterDups, final Map<String, String> rootTags, final ChannelBuffer buffer, final SubmitterFlush flushTarget) {
 		this.buffer = buffer;
+		this.filterDups = filterDups;
 		this.flushTarget = flushTarget;
+		dupCheck = this.filterDups ? new NonBlockingHashSet<String>() : null;
 		if(rootTags!=null && !rootTags.isEmpty()) {
 			for(final Map.Entry<String, String> tag: rootTags.entrySet()) {
 				this.rootTags.put(clean(tag.getKey()), clean(tag.getValue()));
@@ -103,8 +126,60 @@ public class ExpressionResult {
 		}
 	}
 	
-	public void process(Map<String, Object> attrValues, ObjectName objectName, String...expressions) {
-		
+	/**
+	 * Indicates if this ER is loaded
+	 * @return true if this ER is loaded, false otherwise
+	 */
+	public boolean isLoaded() {
+		return loaded.get();
+	}
+	
+	
+	/**
+	 * Flushes the current ER value to the buffer
+	 * @return This expression result
+	 */
+	public ExpressionResult flush() {
+		return flush(null);
+	}
+	
+	
+	/**
+	 * Flushes the current ER value to the buffer
+	 * @param result Appends the rendered expression result into the passed buffer
+	 * @return This expression result
+	 */
+	public ExpressionResult flush(final StringBuilder result) {
+		if(result!=null && loaded.get()) result.append(toString());
+		appendPut();
+		return this;
+	}
+	
+	
+	/**
+	 * Flushes the current ER value to the buffer
+	 * @param timestamp The timestamp to attach to the flushed ER
+	 * @param result Appends the rendered expression result into the passed buffer
+	 * @return This expression result
+	 */
+	public ExpressionResult flush(final long timestamp, final StringBuilder result) {
+		if(result!=null && loaded.get()) result.append(toString());
+		appendPut(timestamp);
+		return this;
+	}
+	
+	
+	/**
+	 * Flushes the current ER value to the buffer and then flushes to the endpoint
+	 */
+	public void deepFlush() {
+		flush();
+		if(filterDups) {
+			dupCheck.clear();
+		}
+		if(buffer.readableBytes()>0) {
+			flushTarget.deepFlush();
+		}		
 	}
 	
 	private StringBuilder getSB() {
@@ -119,7 +194,7 @@ public class ExpressionResult {
 	 */
 	public ExpressionResult reset() {
 		metricName = null;
-		tags.clear();		
+		tags.clear();			
 		return this;
 	}
 	
@@ -142,6 +217,7 @@ public class ExpressionResult {
 	public ExpressionResult value(final long value) {
 		lValue = value;
 		doubleValue = false;
+		loaded.set(true);
 		return this;
 	}
 	
@@ -153,6 +229,7 @@ public class ExpressionResult {
 	public ExpressionResult value(final double value) {
 		dValue = value;
 		doubleValue = true;
+		loaded.set(true);
 		return this;
 	}
 	
@@ -207,6 +284,7 @@ public class ExpressionResult {
 		if(on==null) throw new IllegalArgumentException("The passed ObjectName was null");
 		metric(on.getDomain());
 		tags(on.getKeyPropertyList());
+		loaded.set(true);
 		return this;
 	}
 	
@@ -239,23 +317,29 @@ public class ExpressionResult {
 	/**
 	 * Appends an OpenTSDB telnet put text line to submit this result to the passed buffer.
 	 * @param timestamp The timestamp in ms.
-	 * @param buffer The buffer to append to
 	 * @return this expression result
 	 */
-	public ExpressionResult appendPut(final long timestamp, final StringBuilder buffer) {
-		if(buffer==null) throw new IllegalArgumentException("The passed buffer was null");		
-		buffer.append(renderPut(timestamp));
+	public ExpressionResult appendPut(final long timestamp) {
+		if(loaded.compareAndSet(true, false)) {
+			if(filterDups) {
+				final String key = rootTags.toString() + tags.toString() + metricName.toString() + timestamp;
+				if(dupCheck.add(key)) {
+					buffer.writeBytes(renderPut(timestamp).getBytes());
+				}
+			} else {
+				buffer.writeBytes(renderPut(timestamp).getBytes());
+			}
+			reset();
+		}
 		return this;
 	}
 	
 	/**
 	 * Appends an OpenTSDB telnet put text line to submit this result for the current timestamp to the passed buffer.
-	 * @param buffer The buffer to append to
 	 * @return this expression result
 	 */
-	public ExpressionResult appendPut(final StringBuilder buffer) {
-		if(buffer==null) throw new IllegalArgumentException("The passed buffer was null");		
-		buffer.append(renderPut(System.currentTimeMillis()));
+	public ExpressionResult appendPut() {
+		appendPut(System.currentTimeMillis());		
 		return this;
 	}
 	
@@ -292,7 +376,7 @@ public class ExpressionResult {
 			b.append(clean(tag.getKey())).append("=").append(clean(tag.getValue())).append(" ");
 		}
 		
-		return b.deleteCharAt(b.length()-1).append("\n").toString();
+		return b.deleteCharAt(b.length()-1).append(EOL).toString();
 	}
 	
 	public String toString() {
@@ -323,5 +407,13 @@ public class ExpressionResult {
 		}
 		return s.replace(" ", "_");
 	}
+	
+	/**
+	 * Indicates if the ER is tracking and filter dups.
+	 * @return true if the ER is tracking and filter dups, false otherwise
+	 */
+	public boolean isFilterDups() {
+		return filterDups;
+	}	
 
 }

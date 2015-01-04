@@ -150,7 +150,7 @@ class TSDBSubmitterImpl implements TSDBSubmitter {
 	@Override
 	public ExpressionResult newExpressionResult() {
 		final ChannelBuffer _buffer = tsdbConnection.newChannelBuffer();
-		return ExpressionResult.newInstance(rootTagsMap, _buffer, tsdbConnection.newSubmitterFlush(_buffer));
+		return ExpressionResult.newInstance(true, rootTagsMap, _buffer, tsdbConnection.newSubmitterFlush(_buffer, logTraces));
 	}
 	
 	/**
@@ -160,7 +160,7 @@ class TSDBSubmitterImpl implements TSDBSubmitter {
 	@Override
 	public ExpressionResult newExpressionResult(final Map<String, String> rootTagsMapOverride) {
 		final ChannelBuffer _buffer = tsdbConnection.newChannelBuffer();
-		return ExpressionResult.newInstance(rootTagsMapOverride, _buffer, tsdbConnection.newSubmitterFlush(_buffer));
+		return ExpressionResult.newInstance(true, rootTagsMapOverride, _buffer, tsdbConnection.newSubmitterFlush(_buffer, logTraces));
 	}
 
 	/**
@@ -769,7 +769,7 @@ class TSDBSubmitterImpl implements TSDBSubmitter {
 	@Override
 	public void deepFlush() {
 		flush();
-		tsdbConnection.flush();
+		tsdbConnection.flush(logTraces);
 	}
 
 	// =========================================================================================================================

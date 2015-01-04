@@ -57,6 +57,7 @@ import javax.management.remote.JMXServiceURL;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.cliffc.high_scale_lib.NonBlockingHashSet;
+import org.eclipse.jetty.util.log.Log;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.buffer.DirectChannelBufferFactory;
@@ -248,16 +249,22 @@ public class TSDBSubmitterConnection  {
 	
 	interface SubmitterFlush {
 		void flush();
+		void deepFlush();
 	}
 	
 	
 	/**
 	 * Creates and returns a new SubmitterFlush that flushes to this connection's buffer
-	 * @return a new SubmitterFlush that flushes to this connection's buffer
+	 * @return a new SubmitterFlush that flushes to this connection's buffer	 * 
 	 */
-	SubmitterFlush newSubmitterFlush(final ChannelBuffer _buffer) {
-
+	SubmitterFlush newSubmitterFlush(final ChannelBuffer _buffer, final boolean logTraces) {
+		final TSDBSubmitterConnection conn = this;
 		final SubmitterFlush _flushTarget = new SubmitterFlush() {
+			@Override
+			public void deepFlush() {
+				this.flush();
+				conn.flush(logTraces);				
+			}
 			@Override
 			public void flush() {
 				synchronized(_buffer) {
@@ -581,7 +588,7 @@ public class TSDBSubmitterConnection  {
 	}
 	
 
-	public int[] flush() {
+	public int[] flush(final boolean logTraces) {
 		final long startTime = System.currentTimeMillis();
 		final int[] bytesWritten = new int[]{0, 0};
 //		GZIPOutputStream gzip = null;
@@ -592,13 +599,16 @@ public class TSDBSubmitterConnection  {
 				final int r = dataBuffer.readableBytes();
 //				gzip = new GZIPOutputStream(os, r * 2);
 				pos = dataBuffer.readerIndex();
+				if(logTraces) {
+					LOG.info("\n{}", dataBuffer.toString(CHARSET));
+				}
+				
 				if(os!=null) {
 					dataBuffer.readBytes(os, dataBuffer.readableBytes());
 					os.flush();
 				}
 //				gzip.finish();
-//				gzip.flush();
-				
+//				gzip.flush();		
 				dataBuffer.clear();
 				bytesWritten[0] = r;
 				bytesWritten[1] = traceCount.getAndSet(0);

@@ -53,5 +53,10 @@ public interface ExpressionProcessor {
 			ObjectName objectName, 
 			Object...loopers
 	);
+	
+	public void flush();
+	
+	public void deepFlush();
+	
 
 }

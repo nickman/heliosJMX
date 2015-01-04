@@ -25,7 +25,10 @@
 package com.heliosapm.jmx.expr;
 
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.management.ObjectName;
 import javax.script.Bindings;
@@ -55,6 +58,8 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	
 	/** End of line separator */
 	public static final String EOL = System.getProperty("line.separator", "\n");
+	/** Replacer for args replacements */
+	public static final Pattern FREPL = Pattern.compile("(\\$4\\[(\\d+)\\])");
 	
 	/** The expression result that handles the expression processing and result buffering */
 	protected final ExpressionResult er;
@@ -90,7 +95,9 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 	 * @param loopers The loopers iterables to nest the execution with
 	 * @return blank string by default. Overrides should return a string of EOL separated metric puts
 	 */
-	public abstract CharSequence processLoop(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final Object...loopers);
+	public CharSequence processLoop(final String sourceId, final Map<String, Object> attrValues, final ObjectName objectName, final Object...loopers) {
+		return "";
+	}
 	
 	
 	/**
@@ -104,7 +111,9 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 			} else {
 				if(doName(sourceId, attrValues, objectName)) {
 					if(doValue(sourceId, attrValues, objectName)) {
-						return er.renderPut();
+						final StringBuilder b = new StringBuilder();
+						er.flush(b);
+						return b;
 					}
 				}
 			}
@@ -112,6 +121,27 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 			log.error("[{}] Expression Execution Failed", toString(), ex);
 		}
 		return "";				
+	}
+	
+	public void flush() {
+		er.flush();
+	}
+	
+	public void deepFlush() {
+		er.deepFlush();
+	}
+	
+	public static void argsRepl(final StringBuilder buff, final String...args) {
+		if(args.length==0 || buff.length()<1) return;
+		final Matcher m = FREPL.matcher(buff);
+		int maxIndex = args.length-1;
+		while(m.find()) {
+			String tok = m.group(1);
+			int index = Integer.parseInt(m.group(2));
+			if(index < 0 || index > maxIndex) throw new RuntimeException("Failed on code segment [" + buff + "] caused by args index [" + index + "] which was greater than the max [" + maxIndex + "]");
+			int pos = buff.indexOf(tok);
+			buff.replace(pos, pos + tok.length(), args[index]);
+		}
 	}
 	
 	
@@ -198,6 +228,33 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 			return (Iterable<T>) Arrays.asList(ArrayUtils.flatten(iterable));			
 		}
 		throw new IllegalArgumentException("The passed object could not be itered [" + iterable.getClass().getName() + "]");
+	}
+	
+	public static String iterStr(final Iterator iter) {		
+		try {
+			Object obj = iter.next();
+			return obj==null ? "" : obj.toString();
+		} catch (Exception ex) {
+			return "1";
+		}
+	}
+	
+	public static String mapEntryKeyStr(final Map.Entry entry) {
+		try {
+			Object obj = entry.getKey();
+			return obj==null ? "" : obj.toString();
+		} catch (Exception ex) {
+			return "1";
+		}		
+	}
+	
+	public static String mapEntryValStr(final Map.Entry entry) {
+		try {
+			Object obj = entry.getValue();
+			return obj==null ? "" : obj.toString();
+		} catch (Exception ex) {
+			return "1";
+		}		
 	}
 	
 

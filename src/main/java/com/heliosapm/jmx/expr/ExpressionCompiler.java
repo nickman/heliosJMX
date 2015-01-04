@@ -114,6 +114,9 @@ public class ExpressionCompiler {
 	public static final Pattern LOOPERS_PATTERN = Pattern.compile("foreach\\((.*?)\\)\\s+" + FULL_EXPR.pattern());
 	public static final Pattern LOOPER_INSTANCE_PATTERN = Pattern.compile("\\{iter(\\d+)\\}");
 	public static final Pattern LOOPER_SPLITTER = Pattern.compile("\\|");
+	public static final Pattern FREPL = Pattern.compile("(\\$4\\[\\d+\\])");
+	
+	
 	/*
 	 * Loopers represent Iterables.
 	 * If loopers are passed as (a, b, c), then the logic flow would be
@@ -145,18 +148,16 @@ public class ExpressionCompiler {
 	protected static final CtClass abstractExpressionProcessorCtClass;
 	/** The CtClass for ExpressionResult */
 	protected static final CtClass expressionResultCtClass;
-	
 	/** The package in which new processors will be created in */
 	public static final String PROCESSOR_PACKAGE = ExpressionCompiler.class.getPackage().getName() + ".impls";
-	
-	/** The doName method descriptor */
-	public static String DO_NAME_DESCR = "(Ljava/lang/String;Ljava/util/Map;Ljavax/management/ObjectName;Lcom/heliosapm/jmx/expr/ExpressionResult;)V";
-	
 	/** Empty CtClass Array Const */
 	public static final CtClass[] EMPTY_CT_CLASS_ARR = {};
-	
 	/** String CtClass Const */
 	public static final CtClass STRING_CT_CLASS;
+	/** The validation and group defs for the name segment of the expression */
+	public static final Pattern NAME_SEGMENT = Pattern.compile("^(.*?):(.*?)$");
+	/** Splits the domain part of the expression from the tags */
+	public static final Pattern NAME_TAG_SPLITTER = Pattern.compile("::");
 
 	
 	static {
@@ -173,9 +174,6 @@ public class ExpressionCompiler {
 		}
 	}
 	
-	public static final Set<String> NAME_KEYS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
-			"key" // resolves to the value of the key name pairs in the object name for the specified value, objectName.getKeyProperty(key)
-	))); 
 	
 	/**
 	 * Acquires and returns the ExpressionCompiler singleton instance
@@ -232,28 +230,152 @@ public class ExpressionCompiler {
 	}
 	
 	/**
+	 * Builds and returns the looper source code block, returning null if no loopers are found
+	 * @param fullExpression The full expression
+	 * @param looperDecodes The looper tokens are placed in here
+	 * @return the looper source code block or null
+	 */
+	protected String buildLooperCode(final String fullExpression, final LinkedHashMap<String, String> looperDecodes) {
+		if(!isLooper(fullExpression)) return null;
+		final CodeBuilder openLooperCode = new CodeBuilder();
+		final CodeBuilder closeLooperCode = new CodeBuilder();
+		// true for an iterator, false for a map
+		final LinkedHashMap<String, Boolean> looperTypes = new LinkedHashMap<String, Boolean>(); 
+		int looperSeq = 0;
+		
+
+		final Matcher fullExpressionMatcher = LOOPERS_PATTERN.matcher(fullExpression);
+		if(!fullExpressionMatcher.matches()) throw new RuntimeException("Invalid expression: [" + fullExpression + "]");
+		final String looperExpr = fullExpressionMatcher.group(1);
+		
+		// =======================================================================
+		// Collect looper directives
+		// =======================================================================
+		final String[] looperExprs = looperExpr.split(",");  //  split(",") -->  a, b:c, d
+		final List<String> trimmedLoopers = new ArrayList<String>(looperExprs.length);
+		for(int i = 0; i < looperExprs.length; i++) {
+			if(looperExprs[i]==null) continue;
+			looperExprs[i] = looperExprs[i].replace(" ", ""); 
+			if(looperExprs[i].isEmpty()) continue;
+			trimmedLoopers.add(looperExprs[i]);
+		}
+		if(!trimmedLoopers.isEmpty()) {
+			for(String s: trimmedLoopers) {
+				String[] frags = s.split(":");
+				if(frags.length==1) looperTypes.put(s, true);
+				else if(frags.length==2) looperTypes.put(s, false);
+				else throw new RuntimeException("Invalid looper declaration [" + s + "] in expression [" + fullExpression + "]");
+			}
+		}
+		if(!looperTypes.isEmpty()) {
+			final StringBuilder looperValuesBuff = new StringBuilder();
+			for(String s: looperTypes.keySet()) {
+				looperValuesBuff.append(s).append(",");
+			}
+			final String looperValuesSig = looperValuesBuff.deleteCharAt(looperValuesBuff.length()-1).toString().replace(':', ',');
+			openLooperCode.append("\n\t{\nif($4.length != %s) throw new RuntimeException(\"Expecting %s vargs but got only \" + $4.length);", looperTypes.size(), looperTypes.size());
+			openLooperCode.append("\n\tfinal StringBuilder erBuff = new StringBuilder();"); 
+			int index = 0;
+			for(Map.Entry<String, Boolean> entry: looperTypes.entrySet()) {
+				final boolean isIter = entry.getValue();
+				
+				if(isIter) {
+					openLooperCode.append("\n\tfinal Iterable %sIter = $4[%s];", entry.getKey(), index);							
+				} else {
+					final String mapName = entry.getKey().replace(":", "");
+					openLooperCode.append("\n\tfinal Map %sMap = $4[%s];", mapName, index);
+				}
+				index++;
+			}
+			index = 0;
+			for(Map.Entry<String, Boolean> entry: looperTypes.entrySet()) {
+				openLooperCode.append("\n\t");
+				closeLooperCode.append("\n\t");						
+				for(int x = 0; x < index; x++) {
+					openLooperCode.append("\t");
+					closeLooperCode.append("\t");
+				}
+				closeLooperCode.append("}");
+				final boolean isIter = entry.getValue();
+				if(isIter) {
+					openLooperCode.append("for(Iterator %sIterator = %sIter.iterator(); %sIterator.hasNext();) { \nfinal String %s = iterStr(%sIterator);", entry.getKey(), entry.getKey(), entry.getKey(), entry.getKey(), entry.getKey());    
+					if(!looperDecodes.containsKey("{" + entry.getKey() + "}")) {
+						looperDecodes.put("{" + entry.getKey() + "}", "$4[" + looperSeq + "]");
+						looperSeq++;
+					}
+				} else {
+					final String mapName = entry.getKey().replace(":", "");
+					final String[] keyVal = entry.getKey().split(":");
+					final String key = keyVal[0];
+					final String val = keyVal[1];
+					openLooperCode.append("\n\tfinal Set %sMapEntrySet = %sMap.entrySet();", mapName, mapName);
+					openLooperCode.append("for(Iterator %sMapIterator = %sMapEntrySet.iterator(); %sMapIterator.hasNext();) { \n final java.util.Map.Entry %sEntry = (java.util.Map.Entry)%sMapIterator.next();", mapName, mapName, mapName, mapName, mapName);  
+					char[] indent = new char[index+2];
+					Arrays.fill(indent, '\t');
+					indent[0] = '\n';
+					openLooperCode.append(new String(indent));
+					openLooperCode.append("final String %s = mapEntryKeyStr(%sEntry);", key, mapName);
+					openLooperCode.append("final String %s = mapEntryValStr(%sEntry);", val, mapName);
+					if(!looperDecodes.containsKey("{" + key + "}")) {
+						looperDecodes.put("{" + key + "}", "$4[" + looperSeq + "]");
+						looperSeq++;								
+					}
+					if(!looperDecodes.containsKey("{" + val + "}")) {
+						looperDecodes.put("{" + val + "}", "$4[" + looperSeq + "]");
+						looperSeq++;
+					}
+				}
+			}
+			char[] indent = new char[index+3];
+			Arrays.fill(indent, '\t');
+			indent[0] = '\n';
+			openLooperCode.append(new String(indent)).append("final String[] _sargs_ = new String[]{%s};", looperValuesSig);
+			openLooperCode.append(new String(indent)).append("final boolean _dname_ = doName($1, $2, $3, _sargs_);");
+			openLooperCode.append(new String(indent)).append("final boolean _dvalue_ = doValue($1, $2, $3, _sargs_);");			
+			openLooperCode.append(new String(indent)).append("if(_dname_ && _dvalue_) { er.flush(erBuff); erBuff.append(EOL);}");			
+			openLooperCode.append(new String(indent)).append("log.debug(\"dn:{}, dv:{}, ARGS:{}\", new Object[]{ \"\"+_dname_, \"\"+_dvalue_, _sargs_});");
+			
+			closeLooperCode.append("\n\treturn erBuff;\n}");
+			return openLooperCode.append(closeLooperCode.render()).render();
+		} else {
+			return null;
+		}		
+	}
+	
+	/**
 	 * Here's where the real work is done
 	 * @param fullExpression
 	 * @param er
 	 * @return
 	 */
-	private Constructor<ExpressionProcessor> build(final String fullExpression, final ExpressionResult er) {
-		final boolean isLooper = isLooper(fullExpression);
-		final String looperExpr;
+	private Constructor<ExpressionProcessor> build(final String preLoopFullExpression, final ExpressionResult er) {
+		final LinkedHashMap<String, String> looperVariableDecodes = new LinkedHashMap<String, String>();
+		final String looperCodeBlock = buildLooperCode(preLoopFullExpression, looperVariableDecodes); 
+		final boolean isLooper = looperCodeBlock!=null;
+		final String fullExpression;
+		if(isLooper && !looperVariableDecodes.isEmpty()) {
+			String tmp = preLoopFullExpression;
+			for(Map.Entry<String, String> entry: looperVariableDecodes.entrySet()) {
+				final String token = entry.getKey();
+				final String replacement = entry.getValue();
+				tmp = tmp.replace(token, replacement);
+			}
+			fullExpression = tmp;
+		} else {
+			fullExpression = preLoopFullExpression;
+		}
+		
 		final String nameExpr;
 		final String valueExpr;
 		final Matcher fullExpressionMatcher;
-		final int maxIter = isLooper ? maxIterator(fullExpression) : -1;
 		if(isLooper) {
 			fullExpressionMatcher = LOOPERS_PATTERN.matcher(fullExpression);
 			if(!fullExpressionMatcher.matches()) throw new RuntimeException("Invalid expression: [" + fullExpression + "]");
-			looperExpr = fullExpressionMatcher.group(1);
 			nameExpr = fullExpressionMatcher.group(2);
 			valueExpr = fullExpressionMatcher.group(3);
 		} else {
 			fullExpressionMatcher = FULL_EXPR.matcher(fullExpression);
 			if(!fullExpressionMatcher.matches()) throw new RuntimeException("Invalid expression: [" + fullExpression + "]");
-			looperExpr = null;
 			nameExpr = fullExpressionMatcher.group(1);
 			valueExpr = fullExpressionMatcher.group(2);			
 		}
@@ -266,154 +388,24 @@ public class ExpressionCompiler {
 		cp.importPackage("java.util");
 		cp.importPackage("com.heliosapm.jmx.util.helpers");
 		
-		
-
-//		===================================================================
-/*
- * Next:
- * 	at start, determine if we're a foreach loop or not: i.e. matches LOOPERS_PATTERN
- * 	if not, it's the same as now.
- * 
- *  if it is:
- *  	find all iter symbols
- *  	define looping variables for each one
- *  	implement the nested iterator loop  
- *  	(impl should save # of symbolic loopers 
- *  		and by derivation, the number of parameterized loopers required)
- *  
- *  	!!!  parameterized loopers are always inner to symbolics  !!!
- *  
- *  	execution is nested loop on iterables, action is:
- *  		bind looper variables
- *  		resolve all opens 
- *  		execute process
- * 		
- */
-//		===================================================================		
-		
-		
-		
 		CtClass processorCtClass = null;
 		final String className = PROCESSOR_PACKAGE + ".ExpressionProcessorImpl" + classSerial.incrementAndGet();
-		
+		CtConstructor defaultCtor = null;
 		
 		try {
 			processorCtClass = cp.makeClass(className, abstractExpressionProcessorCtClass);
-			final CodeBuilder openLooperCode = new CodeBuilder();
-			final CodeBuilder closeLooperCode = new CodeBuilder();
-			CtConstructor defaultCtor = null; 
-			// true for an iterator, false for a map
-			final LinkedHashMap<String, Boolean> looperTypes = new LinkedHashMap<String, Boolean>(); 
-			int looperSeq = 0;
-			final LinkedHashMap<String, String> looperDecodes = new LinkedHashMap<String, String>();
-
-			// =======================================================================
-			// Collect looper directives
-			// =======================================================================
-			if(isLooper) {
-				final String[] looperExprs = looperExpr.split(",");  //  split(",") -->  a, b:c, d
-				final List<String> trimmedLoopers = new ArrayList<String>(looperExprs.length);
-				for(int i = 0; i < looperExprs.length; i++) {
-					if(looperExprs[i]==null) continue;
-					looperExprs[i] = looperExprs[i].replace(" ", ""); 
-					if(looperExprs[i].isEmpty()) continue;
-					trimmedLoopers.add(looperExprs[i]);
-				}
-				if(!trimmedLoopers.isEmpty()) {
-					for(String s: trimmedLoopers) {
-						String[] frags = s.split(":");
-						if(frags.length==1) looperTypes.put(s, true);
-						else if(frags.length==2) looperTypes.put(s, false);
-						else throw new RuntimeException("Invalid looper declaration [" + s + "] in expression [" + fullExpression + "]");
-					}
-				}
-				if(!looperTypes.isEmpty()) {
-					openLooperCode.append("\n\t{\nif($4.length != %s) throw new RuntimeException(\"Expecting %s vargs but got only \" + $4.length);", looperTypes.size(), looperTypes.size());
-					openLooperCode.append("\n\tfinal StringBuilder erBuff = new StringBuilder();"); 
-					int index = 0;
-					for(Map.Entry<String, Boolean> entry: looperTypes.entrySet()) {
-						final boolean isIter = entry.getValue();
-						
-						if(isIter) {
-							openLooperCode.append("\n\tfinal Iterable %sIter = $4[%s];", entry.getKey(), index);							
-						} else {
-							final String mapName = entry.getKey().replace(":", "");
-							openLooperCode.append("\n\tfinal Map %sMap = $4[%s];", mapName, index);
-						}
-						index++;
-					}
-					index = 0;
-					for(Map.Entry<String, Boolean> entry: looperTypes.entrySet()) {
-						openLooperCode.append("\n\t");
-						closeLooperCode.append("\n\t");						
-						for(int x = 0; x < index; x++) {
-							openLooperCode.append("\t");
-							closeLooperCode.append("\t");
-						}
-						closeLooperCode.append("}");
-						final boolean isIter = entry.getValue();
-						if(isIter) {
-							openLooperCode.append("for(Iterator %sIterator = %sIter.iterator(); %sIterator.hasNext();) { \nfinal Object %s = %sIterator.next();", entry.getKey(), entry.getKey(), entry.getKey(), entry.getKey(), entry.getKey());    
-							//openLooperCode.append("for(Object %s : %sIter) {", entry.getKey(), entry.getKey());
-							if(!looperDecodes.containsKey("{" + entry.getKey() + "}")) {
-								looperDecodes.put("{" + entry.getKey() + "}", "$4[" + looperSeq + "]");
-								looperSeq++;
-							}
-						} else {
-							final String mapName = entry.getKey().replace(":", "");
-							final String[] keyVal = entry.getKey().split(":");
-							final String key = keyVal[0];
-							final String val = keyVal[1];
-							openLooperCode.append("for(Map.Entry %sEntry : %sMap.entrySet()) {", mapName, mapName);
-							char[] indent = new char[index+2];
-							Arrays.fill(indent, '\t');
-							indent[0] = '\n';
-							openLooperCode.append(new String(indent));
-							openLooperCode.append("final String %s = %sEntry.getKey().toString();", key, mapName);
-							openLooperCode.append("final String %s = %sEntry.getValue().toString();", val, mapName);
-							if(!looperDecodes.containsKey("{" + key + "}")) {
-								looperDecodes.put("{" + key + "}", "$4[" + looperSeq + "]");
-								looperSeq++;								
-							}
-							if(!looperDecodes.containsKey("{" + val + "}")) {
-								looperDecodes.put("{" + val + "}", "$4[" + looperSeq + "]");
-								looperSeq++;
-							}
-						}
-						char[] indent = new char[index+3];
-						Arrays.fill(indent, '\t');
-						indent[0] = '\n';
-
-						openLooperCode.append(new String(indent)).append("if(doName($$)) { if(doValue($$)) { erBuff.append(er.renderPut()).append(EOL); } }");
-					}
-					closeLooperCode.append("\n\treturn erBuff;\n}");
-					// add method to processorCtClass
-					CtMethod loopMethod = null;	
-					for(CtMethod ctm: processorCtClass.getMethods()) {
-						if("processLoop".equals(ctm.getName())) {
-							loopMethod = ctm;
-							break;
-						}
-					}
-					loopMethod = CtNewMethod.copy(loopMethod, processorCtClass, null);
-					openLooperCode.append(closeLooperCode.render());
-					log.info(openLooperCode.render());
-					loopMethod.setBody(openLooperCode.render());
-					loopMethod.setModifiers(loopMethod.getModifiers() & ~Modifier.ABSTRACT);
-					processorCtClass.addMethod(loopMethod);
-				}  // Looper types empty
-			}
 		
 			// Add default ctor
-			if(looperTypes.isEmpty()) {
-				defaultCtor = CtNewConstructor.make(new CtClass[] {expressionResultCtClass}, new CtClass[0], processorCtClass);
-			} else {
+			if(isLooper) {				
 				defaultCtor = CtNewConstructor.make(new CtClass[] {expressionResultCtClass, CtClass.booleanType}, new CtClass[0], processorCtClass);
+			} else {
+				defaultCtor = CtNewConstructor.make(new CtClass[] {expressionResultCtClass}, new CtClass[0], processorCtClass);
 			}
 			processorCtClass.addConstructor(defaultCtor);
 			
-			
+			// =======================================================================
 			// CodeBuilder for naming and value
+			// =======================================================================
 			final CodeBuilder codeBuffer = new CodeBuilder().append("{\n\tfinal StringBuilder nBuff = new StringBuilder();\n");
 			codeBuffer.push();
 			// =======================================================================
@@ -428,16 +420,10 @@ public class ExpressionCompiler {
 			// Add do name method
 			// =======================================================================
 			CtMethod absDoNameMethod = abstractExpressionProcessorCtClass.getDeclaredMethod("doName");
-			//CtMethod doNameMethod = new CtMethod(absDoNameMethod.getReturnType(), "doName", absDoNameMethod.getParameterTypes(), processorCtClass);
 			CtMethod doNameMethod = CtNewMethod.copy(absDoNameMethod, processorCtClass, null); 
-//			for(CtClass ct: doNameMethod.getParameterTypes()) {
-//				ct.setModifiers(ct.getModifiers() | Modifier.FINAL);
-//			}
 			doNameMethod.setBody(codeBuffer.render());
 			doNameMethod.setModifiers(doNameMethod.getModifiers() & ~Modifier.ABSTRACT);
 			processorCtClass.addMethod(doNameMethod);
-
-			
 			
 			// Reset the code buffer
 			codeBuffer.pop();
@@ -454,9 +440,6 @@ public class ExpressionCompiler {
 			// =======================================================================
 			CtMethod absDoValueMethod = abstractExpressionProcessorCtClass.getDeclaredMethod("doValue");
 			CtMethod doValueMethod = new CtMethod(absDoValueMethod.getReturnType(), "doValue", absDoValueMethod.getParameterTypes(), processorCtClass);
-			for(CtClass ct: doValueMethod.getParameterTypes()) {
-				//ct.setModifiers(ct.getModifiers() | Modifier.FINAL);
-			}
 			
 			doValueMethod.setBody(codeBuffer.render());
 			doValueMethod.setModifiers(doValueMethod.getModifiers() & ~Modifier.ABSTRACT);
@@ -469,7 +452,25 @@ public class ExpressionCompiler {
 			CtMethod toStringMethod = new CtMethod(STRING_CT_CLASS, "toString", EMPTY_CT_CLASS_ARR, processorCtClass);
 			toStringMethod.setModifiers(toStringMethod.getModifiers() & ~Modifier.ABSTRACT);
 			processorCtClass.addMethod(toStringMethod);			
-			toStringMethod.setBody("{ return getClass().getName() + \" --> [" + fullExpression + "]\"; }");
+			toStringMethod.setBody("{ return getClass().getName() + \" --> [" + preLoopFullExpression + "]\"; }");
+			
+			// =======================================================================
+			// Add processLoop method
+			// =======================================================================
+			if(isLooper) {
+				// looperCodeBlock
+				CtMethod processLoopMethod = null;
+				for(CtMethod ctm: processorCtClass.getMethods()) {
+					if("processLoop".equals(ctm.getName())) {
+						processLoopMethod = ctm;
+						break;
+					}
+				}
+				log.info("\n\t===============\n\tAdding Looper:\n{}\n\t====================\n", looperCodeBlock);
+				final CtMethod processLoopOverrideMethod = CtNewMethod.copy(processLoopMethod, processorCtClass, null);
+				processLoopOverrideMethod.setBody(looperCodeBlock);
+				processorCtClass.addMethod(processLoopOverrideMethod);				
+			}
 			
 			// =======================================================================
 			// Generate class
@@ -491,11 +492,6 @@ public class ExpressionCompiler {
 	 */
 	
 	
-	/** The validation and group defs for the name segment of the expression */
-	public static final Pattern NAME_SEGMENT = Pattern.compile("^(.*?):(.*?)$");
-	
-	/** Splits the domain part of the expression from the tags */
-	public static final Pattern NAME_TAG_SPLITTER = Pattern.compile("::");
 	
 	
 	protected void processName(final String fullExpression, final CodeBuilder nameCode) {
@@ -506,8 +502,9 @@ public class ExpressionCompiler {
 		metricAndTags[0] = metricAndTags[0].trim();
 		metricAndTags[1] = metricAndTags[1].trim();		
 		build(metricAndTags[0], nameCode);
-		nameCode.append("\n\tnBuff.append(\":\");");
+		nameCode.append("\n\tnBuff.append(\":\");");		
 		build(metricAndTags[1], nameCode);		
+//		nameCode.append("\n\targsRepl(nBuff, $4);");
 	}
 	
 	protected void processValue(final String valueExpression, final CodeBuilder valueCode) {
@@ -577,8 +574,16 @@ public class ExpressionCompiler {
 				ep = ExpressionCompiler.getInstance().get("{domain}::{allkeys}->{attr:FreeSwapSpaceSize}", er); 
 				String rez = ep.process(agentId, attrValues, on).toString();
 				log.info("ER: [{}], rez: [{}]", er, rez);
-				ep = ExpressionCompiler.getInstance().get("foreach(a, b:c) {domain}.os.{a}::{allkeys}->{attr:{a}}", er);
+				int cnt = 0;
+				for(String k: System.getenv().keySet()) {
+					attrValues.put(k, cnt);
+					cnt++;
+				}
 				
+				ep = ExpressionCompiler.getInstance().get("foreach(a, b:c) {domain}.os.{a}::{allkeys}->{attr:{a}}", er);
+				rez = ep.process(agentId, attrValues, on, System.getenv().keySet(), System.getProperties()).toString();
+				ep.deepFlush();
+//				log.info("ER: [{}], rez: [{}]", ep, rez);
 				
 				
 				
@@ -632,7 +637,6 @@ public class ExpressionCompiler {
 	 * @param nameCode The code builder 
 	 */
 	protected void build(final String nameSegment, final CodeBuilder nameCode) {
-		//localVar nBuff builds the metric name
         int lstart = 0;
         int matcherStart = 0;
         int matcherEnd = 0;
@@ -649,6 +653,7 @@ public class ExpressionCompiler {
 		if(lstart < nameSegment.length()) {
 			nameCode.append("\n\tnBuff.append(\"").append(nameSegment.substring(lstart, nameSegment.length())).append("\");");
 		}
+		nameCode.append("\n\targsRepl(nBuff, $4);");
 	}
 	
 	
