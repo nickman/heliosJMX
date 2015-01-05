@@ -887,6 +887,39 @@ public class JMXHelper {
 	}
 	
 	/**
+	 * Returns a String->Object Map of the <b>numeric</b> named attributes from the Mbean.
+	 * @param on The object name of the MBean.
+	 * @param server The MBeanServerConnection the MBean is registered in. If this is null, uses the helios mbean server
+	 * @return A name value map of the requested attributes.
+	 */
+	public static Map<String, Number> getNumericAttributes(final ObjectName on, MBeanServerConnection server) {
+		try {
+			final String[] attributes = getNumericAttributeNames(on, server);
+			Map<String, Number> attrs = new HashMap<String, Number>(attributes.length);
+			if(server==null) server = getHeliosMBeanServer();
+			AttributeList attributeList = server.getAttributes(on, attributes);
+			for(int i = 0; i < attributeList.size(); i++) {
+				Attribute at = (Attribute)attributeList.get(i);
+				attrs.put(at.getName(), (Number)at.getValue());
+			}
+			return attrs;
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to getAttributes on [" + on + "]", e);
+		}
+	}
+	
+	/**
+	 * Returns a String->Object Map of the <b>numeric</b> named attributes from the Mbean in the helios mbeanserver
+	 * @param on The object name of the MBean.
+	 * @return A name value map of the requested attributes.
+	 */
+	public static Map<String, Number> getNumericAttributes(final ObjectName on) {
+		return getNumericAttributes(on, null);
+	}
+	
+	
+	
+	/**
 	 * Returns a String->Object Map of the named attributes from the Mbean in the helios mbeanserver
 	 * @param on The object name of the MBean.
 	 * @param attributes An array of attribute names to retrieve. If this is null or empty, retrieves all the names
@@ -927,6 +960,96 @@ public class JMXHelper {
 			return new String[0];
 		}
 	}
+
+	/**
+	 * Returns an array of the names of the <b>numeric</b> attributes for the passed ObjectName reached through the local helios mbeanserver
+	 * @param objectName The mbean to get the attribute names for
+	 * @return an array of strings
+	 */
+	public static String[] getNumericAttributeNames(final ObjectName objectName) {
+		return getNumericAttributeNames(objectName, null);
+	}
+	
+	
+	/**
+	 * Returns an array of the names of the <b>numeric</b> attributes for the passed ObjectName reached through the passed mbean server connection
+	 * @param objectName The mbean to get the attribute names for
+	 * @param connection The connection to reach the mbean through. If null, uses the helios mbean server
+	 * @return an array of strings
+	 */
+	public static String[] getNumericAttributeNames(final ObjectName objectName, MBeanServerConnection connection) {
+		if(objectName==null) throw new IllegalArgumentException("The passed objectname was null", new Throwable());
+		if(connection==null) connection = getHeliosMBeanServer();		
+		try {
+			MBeanAttributeInfo[] infos = connection.getMBeanInfo(objectName).getAttributes();
+			final Set<String> names = new HashSet<String>(infos.length);
+			
+			for(int i = 0; i < infos.length; i++) {
+				try {
+					final String typeName = infos[i].getType();
+					if(PRIMITIVE_NUMERIC_CLASS_NAMES.contains(typeName) || Number.class.isAssignableFrom(resolveClassName(typeName))) {
+						names.add(infos[i].getName());
+					}
+				} catch (Exception x) {/* No Op */}
+			}
+			return names.toArray(new String[names.size()]);
+		} catch (Exception ex) {
+			return new String[0];
+		}
+	}
+	
+	public static final Set<String> PRIMITIVE_CLASS_NAMES = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
+			"boolean", "byte", "short" , "char", "int", "float", "long", "double"
+	)));
+	public static final Set<String> PRIMITIVE_NUMERIC_CLASS_NAMES = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
+			"byte", "short" , "int", "float", "long", "double"
+	))); 
+	
+	public static final Map<String, Class<?>> PRIMITIVE_CLASS_DECODE;
+	
+	static {
+		Map<String, Class<?>> tmp = new HashMap<String, Class<?>>(PRIMITIVE_CLASS_NAMES.size());
+		tmp.put("boolean", boolean.class);
+		tmp.put("byte", byte.class);
+		tmp.put("short", short.class);
+		tmp.put("char", char.class);
+		tmp.put("int", int.class);
+		tmp.put("float", float.class);
+		tmp.put("long", long.class);
+		tmp.put("double", double.class);
+		PRIMITIVE_CLASS_DECODE =  Collections.unmodifiableMap(tmp);
+	}
+	
+	/**
+	 * Resolves a class name to a class
+	 * @param className The class name
+	 * @param cl The optional class loader to use. If null, uses {@link Thread#getContextClassLoader()}.
+	 * @return the class
+	 */
+	public static Class<?> resolveClassName(final CharSequence className, final ClassLoader cl) {
+		if(className==null || className.toString().trim().isEmpty()) throw new IllegalArgumentException("The passed class name was null or empty");
+		try {
+			final String cname = className.toString().trim();
+			if(PRIMITIVE_CLASS_NAMES.contains(cname)) {
+				return PRIMITIVE_CLASS_DECODE.get(cname);
+			}
+			final ClassLoader _cl = cl==null ? Thread.currentThread().getContextClassLoader() : cl;
+			return Class.forName(className.toString(), true, _cl);
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to resolve class name: [" + className + "]", ex);
+		}
+	}
+	
+	/**
+	 * Resolves a class name to a class
+	 * @param className The class name
+	 * @return the class
+	 */
+	public static Class<?> resolveClassName(final CharSequence className) {
+		return resolveClassName(className, null);
+	}
+	
+	
 	
 	
 	/**
@@ -942,6 +1065,23 @@ public class JMXHelper {
 			throw new RuntimeException("Failed to get MBeanServer Agent ID", ex);
 		}
 	}
+	
+	public static MBeanServerConnection getMBeanServerConnection(final JMXConnector connector) {
+		try {
+			return connector.getMBeanServerConnection();
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to get MBeanServerConnection from [" + connector + "]", ex);
+		}
+	}
+	
+	public static MBeanServerConnection getMBeanServerConnection(final CharSequence jmxUrl) {
+		try {
+			return getJMXConnection(jmxUrl).getMBeanServerConnection();
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to get MBeanServerConnection from [" + jmxUrl + "]", ex);
+		}
+	}
+	
 	
 	/**
 	 * Returns the AgentId for the default MBeanServer

@@ -29,7 +29,6 @@ import java.lang.management.ManagementFactory;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -62,11 +61,10 @@ import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
-import com.heliosapm.opentsdb.ExpressionResult;
 import com.heliosapm.opentsdb.TSDBSubmitter;
 import com.heliosapm.opentsdb.TSDBSubmitterConnection;
+import com.heliosapm.opentsdb.TSDBSubmitterImpl.ExpressionResult;
 import com.heliosapm.script.StateService;
 
 /**

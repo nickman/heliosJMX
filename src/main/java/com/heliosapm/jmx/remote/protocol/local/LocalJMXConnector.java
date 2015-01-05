@@ -42,7 +42,9 @@ import com.heliosapm.jmx.util.helpers.JMXHelper;
 
 /**
  * <p>Title: AttachJMXConnector</p>
- * <p>Description: JMXConnector to connect to a local in-VM MBeanServer</p> 
+ * <p>Description: JMXConnector to connect to a local in-VM MBeanServer.
+ * e.g. <b><code>service:jmx:local://</code></b> for the platform agent, <b><code>service:jmx:local:///jboss</code></b> for the jboss mbeanserver. 
+ * </p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>org.helios.jmx.remote.protocol.local.LocalJMXConnector</code></p>

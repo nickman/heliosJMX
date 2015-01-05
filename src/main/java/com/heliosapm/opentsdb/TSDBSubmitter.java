@@ -8,6 +8,7 @@ import javax.management.ObjectName;
 import org.json.JSONArray;
 
 import com.heliosapm.opentsdb.AnnotationBuilder.TSDBAnnotation;
+import com.heliosapm.opentsdb.TSDBSubmitterImpl.ExpressionResult;
 
 /**
  * <p>Title: Submitter</p>
@@ -318,5 +319,20 @@ public interface TSDBSubmitter {
 	 * @return this submitter
 	 */
 	public TSDBSubmitter setTracingDisabled(boolean disableTraces);
+	
+	/**
+	 * Indicates if duplicate trace filtering is enabled.
+	 * @return true if duplicate trace filtering is enabled, false otherwise
+	 */
+	public boolean isDupChecking();
+	
+	/**
+	 * Sets the enabled state of duplicate trace filtering 
+	 * This will filter out duplicate submissions between deep flushes but has some overhead.
+	 * @param enabled true to enable, false otherwise
+	 * @return this submitter
+	 */
+	public TSDBSubmitter setDupChecking(final boolean enabled);
+
 
 }

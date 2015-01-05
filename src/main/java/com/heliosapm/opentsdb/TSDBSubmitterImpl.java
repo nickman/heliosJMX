@@ -24,6 +24,7 @@
  */
 package com.heliosapm.opentsdb;
 
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.util.Arrays;
@@ -34,6 +35,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanServerConnection;
@@ -42,6 +44,7 @@ import javax.management.openmbean.CompositeData;
 import javax.management.openmbean.CompositeType;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
+import org.cliffc.high_scale_lib.NonBlockingHashSet;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.json.JSONArray;
 import org.slf4j.Logger;
@@ -49,6 +52,7 @@ import org.slf4j.LoggerFactory;
 
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.opentsdb.AnnotationBuilder.TSDBAnnotation;
+import com.heliosapm.opentsdb.TSDBSubmitterConnection.SubmitterFlush;
 import com.ning.http.client.AsyncHandler;
 import com.ning.http.client.HttpResponseBodyPart;
 import com.ning.http.client.HttpResponseHeaders;
@@ -62,7 +66,7 @@ import com.ning.http.client.HttpResponseStatus;
  * <p><code>com.heliosapm.opentsdb.TSDBSubmitterImpl</code></p>
  */
 
-class TSDBSubmitterImpl implements TSDBSubmitter {
+public class TSDBSubmitterImpl implements TSDBSubmitter {
 	
 	/** The underlying TSDBSubmitterConnection */
 	final TSDBSubmitterConnection tsdbConnection;
@@ -72,6 +76,9 @@ class TSDBSubmitterImpl implements TSDBSubmitter {
 	protected boolean traceInSeconds = true;
 	/** Indicates if traces should be logged */
 	protected boolean logTraces = false;
+	/** Indicates if dup checking should be enabled */
+	protected boolean dupChecking = false;
+	
 	/** Indicates if traces are disabled */
 	protected boolean disableTraces = false;
 	/** The sequential root tags applied to all traced metrics */
@@ -89,6 +96,18 @@ class TSDBSubmitterImpl implements TSDBSubmitter {
 	public static final Charset CHARSET = Charset.forName("UTF-8");
 	/** The query template to get TSUIDs from a metric name and tags. Tokens are: http server, http port, metric, comma separated key value pairs */
 	public static final String QUERY_TEMPLATE = "http://%s:%s/api/query?start=1s-ago&show_tsuids=true&m=avg:%s%s";
+	/** End of line separator */
+	public static final String EOL = System.getProperty("line.separator", "\n");
+
+	/** Fast string builder */
+	private static final ThreadLocal<StringBuilder> SB = new ThreadLocal<StringBuilder>() {
+		@Override
+		protected StringBuilder initialValue() {
+			final StringBuilder b = new StringBuilder(1024);
+			return b;
+		}
+	};
+	
 	
 
 	
@@ -150,7 +169,7 @@ class TSDBSubmitterImpl implements TSDBSubmitter {
 	@Override
 	public ExpressionResult newExpressionResult() {
 		final ChannelBuffer _buffer = tsdbConnection.newChannelBuffer();
-		return ExpressionResult.newInstance(true, rootTagsMap, _buffer, tsdbConnection.newSubmitterFlush(_buffer, logTraces));
+		return new ExpressionResult(true, rootTagsMap, _buffer, tsdbConnection.newSubmitterFlush(_buffer, isLogTraces()));
 	}
 	
 	/**
@@ -160,7 +179,7 @@ class TSDBSubmitterImpl implements TSDBSubmitter {
 	@Override
 	public ExpressionResult newExpressionResult(final Map<String, String> rootTagsMapOverride) {
 		final ChannelBuffer _buffer = tsdbConnection.newChannelBuffer();
-		return ExpressionResult.newInstance(true, rootTagsMapOverride, _buffer, tsdbConnection.newSubmitterFlush(_buffer, logTraces));
+		return new ExpressionResult(true, rootTagsMapOverride, _buffer, tsdbConnection.newSubmitterFlush(_buffer, isLogTraces()));
 	}
 
 	/**
@@ -858,7 +877,26 @@ class TSDBSubmitterImpl implements TSDBSubmitter {
 	@Override
 	public boolean isLogTraces() {
 		return logTraces;
-	}	
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.opentsdb.TSDBSubmitter#isDupChecking()
+	 */
+	@Override
+	public boolean isDupChecking() {
+		return dupChecking;
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.opentsdb.TSDBSubmitter#setDupChecking(boolean)
+	 */
+	@Override
+	public TSDBSubmitter setDupChecking(final boolean enabled) {
+		this.dupChecking = enabled;
+		return this;
+	}
 
 	/**
 	 * {@inheritDoc}
@@ -887,5 +925,342 @@ class TSDBSubmitterImpl implements TSDBSubmitter {
 	public void close() {
 		tsdbConnection.close();
 	}
+	
+	public class ExpressionResult {
+		/** The OpenTSDB metric name */
+		protected String metricName = null;
+		/** The OpenTSDB tags */
+		protected Map<String, String> tags = new LinkedHashMap<String, String>(8);
+		/** The OpenTSDB root tags that do not get reset */
+		protected Map<String, String> rootTags = new LinkedHashMap<String, String>(2);
+		
+		/** Indicates if the ER is loaded (true) or reset (false) */
+		protected final AtomicBoolean loaded = new AtomicBoolean(false);
+		
+		/** The dup check filter */
+		protected final NonBlockingHashSet<String> dupCheck;
+		
+		
+		
+
+		
+		/** The metric value if a double type */
+		protected double dValue = 0D;
+		/** The metric value if a long type */
+		protected long lValue = 0L;
+		/** Indicates if the metric value is a double type */
+		protected boolean doubleValue = true;
+		
+		/** Indicates if the ER should track and filter dups. */
+		protected final boolean filterDups;
+		
+
+
+		/** The submitted metric buffer */
+		protected final ChannelBuffer buffer;
+		/** The flush target where this buffer will flush to */
+		protected final SubmitterFlush flushTarget;
+		
+		
+
+
+		/**
+		 * Creates a new ExpressionResult
+		 * @param filterDups Indicates if the ER should track and filter dups
+		 * @param rootTags An optional map of root tags
+		 * @param buffer The submitted metric buffer
+		 * @param flushTarget The target the buffer will be flushed to
+		 */
+		ExpressionResult(final boolean filterDups, final Map<String, String> rootTags, final ChannelBuffer buffer, final SubmitterFlush flushTarget) {
+			this.buffer = buffer;
+			this.filterDups = filterDups;
+			this.flushTarget = flushTarget;
+			dupCheck = this.filterDups ? new NonBlockingHashSet<String>() : null;
+			if(rootTags!=null && !rootTags.isEmpty()) {
+				for(final Map.Entry<String, String> tag: rootTags.entrySet()) {
+					this.rootTags.put(clean(tag.getKey()), clean(tag.getValue()));
+				}
+			}
+		}
+		
+		/**
+		 * Indicates if this ER is loaded
+		 * @return true if this ER is loaded, false otherwise
+		 */
+		public boolean isLoaded() {
+			return loaded.get();
+		}
+		
+		
+		/**
+		 * Flushes the current ER value to the buffer
+		 * @return This expression result
+		 */
+		public ExpressionResult flush() {
+			return flush(null);
+		}
+		
+		
+		/**
+		 * Flushes the current ER value to the buffer
+		 * @param result Appends the rendered expression result into the passed buffer
+		 * @return This expression result
+		 */
+		public ExpressionResult flush(final StringBuilder result) {
+			if(result!=null && loaded.get()) result.append(toString());
+			appendPut();
+			return this;
+		}
+		
+		
+		/**
+		 * Flushes the current ER value to the buffer
+		 * @param timestamp The timestamp to attach to the flushed ER
+		 * @param result Appends the rendered expression result into the passed buffer
+		 * @return This expression result
+		 */
+		public ExpressionResult flush(final long timestamp, final StringBuilder result) {
+			if(result!=null && loaded.get()) result.append(toString());
+			appendPut(timestamp);
+			return this;
+		}
+		
+		
+		/**
+		 * Flushes the current ER value to the buffer and then flushes to the endpoint
+		 */
+		public void deepFlush() {
+			flush();
+			if(filterDups) {
+				dupCheck.clear();
+			}
+			if(buffer.readableBytes()>0) {
+				flushTarget.deepFlush();
+			}		
+		}
+		
+		private StringBuilder getSB() {
+			StringBuilder b = SB.get();
+			b.setLength(0);
+			return b;
+		}
+		
+		/**
+		 * Resets this result
+		 * @return this result in a reset state
+		 */
+		public ExpressionResult reset() {
+			metricName = null;
+			tags.clear();			
+			return this;
+		}
+		
+		/**
+		 * Sets the metric name for this result
+		 * @param name The metric name to set
+		 * @return this result
+		 */
+		public ExpressionResult metric(final String name) {
+			if(name==null || name.trim().isEmpty()) throw new IllegalArgumentException("The passed meric name was null or empty");
+			metricName = clean(name);
+			return this;
+		}
+		
+		/**
+		 * Sets the result value as a long
+		 * @param value The long value
+		 * @return this result
+		 */
+		public ExpressionResult value(final long value) {
+			lValue = value;
+			doubleValue = false;
+			loaded.set(true);
+			return this;
+		}
+		
+		/**
+		 * Sets the result value as a double
+		 * @param value The double value
+		 * @return this result
+		 */
+		public ExpressionResult value(final double value) {
+			dValue = value;
+			doubleValue = true;
+			loaded.set(true);
+			return this;
+		}
+		
+		/**
+		 * Accepts an opaque object and attempts to convert the string value of it to a double or a long and applies it
+		 * @param value The opaque value whose {@link #toString()} should render the intended number
+		 * @return this result
+		 */
+		public ExpressionResult value(final Object value) {
+			if(value==null) throw new IllegalArgumentException("The passed value was null");
+			if(value instanceof Number) {
+				if(value instanceof Double || value instanceof Float || value instanceof BigDecimal) {
+					value(((Number)value).doubleValue());
+				} else {
+					value(((Number)value).longValue());
+				}
+			} else {
+				String valStr = value.toString().trim();
+				if(valStr.isEmpty()) throw new IllegalArgumentException("The passed value [" + value + "] evaluated to an empty string");
+				if("null".equals(valStr)) throw new IllegalArgumentException("The passed value [" + value + "] evaluated to a null");
+				final int index = valStr.indexOf('.'); 
+				if(index != -1) {
+					if(valStr.substring(index+1).replace("0", "").isEmpty()) {
+						value(Long.parseLong(valStr.substring(0, index)));
+					} else {
+						value(Double.parseDouble(valStr));
+					}							
+				} else {
+					value(Long.parseLong(valStr));
+				}
+			}
+			return this;
+		}
+		
+		
+		/**
+		 * Populates this ExpressionResult from the passed ObjectName stringy.
+		 * @param cs The ObjectName stringy
+		 * @return this result
+		 */
+		public ExpressionResult objectName(final CharSequence cs) {
+			if(cs==null) throw new IllegalArgumentException("The passed CharSequence was null");
+			return objectName(JMXHelper.objectName(cs));
+		}
+		
+		/**
+		 * Populates this ExpressionResult from the passed ObjectName.
+		 * @param on The ObjectName
+		 * @return this result
+		 */
+		public ExpressionResult objectName(final ObjectName on) {
+			if(on==null) throw new IllegalArgumentException("The passed ObjectName was null");
+			metric(on.getDomain());
+			tags(on.getKeyPropertyList());
+			loaded.set(true);
+			return this;
+		}
+		
+		/**
+		 * Appends a tag to this result
+		 * @param key The tag key
+		 * @param value The tag value
+		 * @return this result
+		 */
+		public ExpressionResult tag(final String key, final String value) {
+			if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
+			if(value==null || value.trim().isEmpty()) throw new IllegalArgumentException("The passed value was null or empty");
+			tags.put(clean(key), clean(value));
+			return this;
+		}
+		
+		/**
+		 * Appends a map of tags to this result
+		 * @param tags The map of tags to add
+		 * @return this result
+		 */
+		public ExpressionResult tags(final Map<String, String> tags) {
+			if(tags==null) throw new IllegalArgumentException("The passed tag map was null");
+			for(final Map.Entry<String, String> tag: tags.entrySet()) {
+				this.tags.put(clean(tag.getKey()), clean(tag.getValue()));
+			}		
+			return this;
+		}
+		
+		/**
+		 * Appends an OpenTSDB telnet put text line to submit this result to the passed buffer.
+		 * @param timestamp The timestamp in ms.
+		 * @return this expression result
+		 */
+		public ExpressionResult appendPut(final long timestamp) {
+			if(loaded.compareAndSet(true, false)) {
+				if(filterDups) {
+					final String key = rootTags.toString() + tags.toString() + metricName.toString() + timestamp;
+					if(dupCheck.add(key)) {
+						buffer.writeBytes(renderPut(timestamp).getBytes());
+					}
+				} else {
+					buffer.writeBytes(renderPut(timestamp).getBytes());
+				}
+				reset();
+			}
+			return this;
+		}
+		
+		/**
+		 * Appends an OpenTSDB telnet put text line to submit this result for the current timestamp to the passed buffer.
+		 * @return this expression result
+		 */
+		public ExpressionResult appendPut() {
+			appendPut(time());		
+			return this;
+		}
+		
+
+		/**
+		 * Renders an OpenTSDB telnet put text line to submit this result for the current timestamp 
+		 * @return the rendered metric put command
+		 */
+		public String renderPut() {
+			return renderPut(time());
+		}	
+		
+		/**
+		 * Renders an OpenTSDB telnet put text line to submit this result 
+		 * @param timestamp The timestamp of the metric in ms.
+		 * @return the rendered metric put command
+		 */
+		public String renderPut(final long timestamp) {
+			// put $metric $now $value host=$HOST
+			StringBuilder b = getSB()
+					.append("put ")
+					.append(clean(metricName)).append(" ")
+					.append(timestamp).append(" ");
+			if(doubleValue) {
+				b.append(dValue);
+			} else {
+				b.append(lValue);
+			}
+			b.append(" ");
+			for(final Map.Entry<String, String> tag: rootTags.entrySet()) {
+				b.append(clean(tag.getKey())).append("=").append(clean(tag.getValue())).append(" ");
+			}		
+			for(final Map.Entry<String, String> tag: tags.entrySet()) {
+				b.append(clean(tag.getKey())).append("=").append(clean(tag.getValue())).append(" ");
+			}
+			
+			return b.deleteCharAt(b.length()-1).append(EOL).toString();
+		}
+		
+		public String toString() {
+			StringBuilder b = new StringBuilder(clean(metricName)).append(":");
+			for(final Map.Entry<String, String> tag: rootTags.entrySet()) {
+				b.append(clean(tag.getKey())).append("=").append(clean(tag.getValue())).append(",");
+			}		
+			for(final Map.Entry<String, String> tag: tags.entrySet()) {
+				b.append(clean(tag.getKey())).append("=").append(clean(tag.getValue())).append(",");
+			}
+			b.deleteCharAt(b.length()-1);
+			b.append("/").append(doubleValue ? dValue : lValue);
+			return b.toString();
+			
+		}
+		
+		
+		/**
+		 * Indicates if the ER is tracking and filter dups.
+		 * @return true if the ER is tracking and filter dups, false otherwise
+		 */
+		public boolean isFilterDups() {
+			return filterDups;
+		}	
+
+	}
+	
+
 
 }

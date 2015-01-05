@@ -25,6 +25,7 @@
 package com.heliosapm.jmx.util.helpers;
 
 import java.lang.management.ManagementFactory;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.cache.Cache;
@@ -213,6 +214,21 @@ public class CacheService {
 	public <T> T get(final Object key, final T defaultValue, final Class<T> type) {
 		T t = (T)simpleStateCache.asMap().get(key);
 		return t!=null ? t : defaultValue; 
+	}
+	
+	/**
+	 * Returns the state object saved under the passed key
+	 * @param key The key
+	 * @param type The type of the state object stored
+	 * @param callable The value loader used if the value is not found in cache
+	 * @return the cached value
+	 */
+	public <T> T get(final Object key, final Class<T> type, final Callable<T> callable) {
+		try {
+			return (T) simpleStateCache.get(key, callable);
+		} catch (Exception ex) {
+			throw new RuntimeException("Failed to get cached value for [" + key + "]", ex);
+		}
 	}
 
 	/**

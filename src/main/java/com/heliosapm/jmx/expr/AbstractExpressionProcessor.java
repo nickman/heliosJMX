@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
 
 import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.CacheService;
-import com.heliosapm.opentsdb.ExpressionResult;
+import com.heliosapm.opentsdb.TSDBSubmitterImpl.ExpressionResult;
 import com.heliosapm.script.StateService;
 
 /**
