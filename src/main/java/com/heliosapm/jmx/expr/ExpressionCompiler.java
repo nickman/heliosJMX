@@ -29,6 +29,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -61,6 +62,7 @@ import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.heliosapm.jmx.batch.aggregate.AggregateFunction;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
 import com.heliosapm.opentsdb.TSDBSubmitter;
 import com.heliosapm.opentsdb.TSDBSubmitterConnection;
@@ -110,9 +112,10 @@ public class ExpressionCompiler {
 	public static final Pattern FULL_EXPR = Pattern.compile("(.*?)\\s*?\\->(.*?)");
 	public static final Pattern TOKEN_PATTERN = Pattern.compile("\\{(.*?)(?::(.*?))?\\}");
 	public static final Pattern LOOPERS_PATTERN = Pattern.compile("foreach\\((.*?)\\)\\s+" + FULL_EXPR.pattern());
+	public static final Pattern LOOPERS_ALL_PATTERN = Pattern.compile("forall\\((.*?)\\)\\[(.*?)\\]\\s+" + FULL_EXPR.pattern());
 	public static final Pattern LOOPER_INSTANCE_PATTERN = Pattern.compile("\\{iter(\\d+)\\}");
 	public static final Pattern LOOPER_SPLITTER = Pattern.compile("\\|");
-	public static final Pattern FREPL = Pattern.compile("(\\$4\\[\\d+\\])");
+	public static final Pattern FREPL = Pattern.compile("(\\$4\\[(\\d+)\\])");
 	
 	
 	/*
@@ -223,12 +226,29 @@ public class ExpressionCompiler {
 		throw new RuntimeException("Failed to find method named [" + name + "] in CtClass [" + clazz.getName() + "]");
 	}
 	
+	/**
+	 * Indicates if the passed expression is a looper
+	 * @param fullExpression The expression to test
+	 * @return true if the expression is a looper, false otherwise
+	 */
 	private boolean isLooper(final String fullExpression) {
-		return LOOPERS_PATTERN.matcher(fullExpression).matches();
+		if(fullExpression==null || fullExpression.trim().isEmpty()) return false;
+		return LOOPERS_PATTERN.matcher(fullExpression).matches() || LOOPERS_ALL_PATTERN.matcher(fullExpression).matches();
 	}
 	
+//	/**
+//	 * Builds and returns the looper all source code block, returning null if no loopers are found
+//	 * @param fullExpression The full expression
+//	 * @param looperDecodes The looper tokens are placed in here
+//	 * @return the looper source code block or null
+//	 */
+//	protected String buildLooperAllCode(final String fullExpression, final LinkedHashMap<String, String> looperDecodes) {
+//		
+//	}
+	
+	
 	/**
-	 * Builds and returns the looper source code block, returning null if no loopers are found
+	 * Builds and returns the looper each source code block, returning null if no loopers are found
 	 * @param fullExpression The full expression
 	 * @param looperDecodes The looper tokens are placed in here
 	 * @return the looper source code block or null
@@ -240,16 +260,29 @@ public class ExpressionCompiler {
 		// true for an iterator, false for a map
 		final LinkedHashMap<String, Boolean> looperTypes = new LinkedHashMap<String, Boolean>(); 
 		int looperSeq = 0;
+		// true for an all looper, false for an each
+		final boolean looperAll = LOOPERS_ALL_PATTERN.matcher(fullExpression).matches();
 		
 
-		final Matcher fullExpressionMatcher = LOOPERS_PATTERN.matcher(fullExpression);
+		final Matcher fullExpressionMatcher = looperAll ? LOOPERS_ALL_PATTERN.matcher(fullExpression) : LOOPERS_PATTERN.matcher(fullExpression);
 		if(!fullExpressionMatcher.matches()) throw new RuntimeException("Invalid expression: [" + fullExpression + "]");
 		final String looperExpr = fullExpressionMatcher.group(1);
+		final String looperAggregators = looperAll ? fullExpressionMatcher.group(2) : null;
+		final AggregateFunction[] aggregations = looperAll ? AggregateFunction.forNames(looperAggregators) : null;
+		if(looperAll && (aggregations==null || aggregations.length==0)) throw new RuntimeException("Invalid forall aggregation list [" + looperAggregators + "] in expression: [" + fullExpression + "]");
+		if(looperAll) {
+			for(AggregateFunction af: aggregations) {
+				if(af.numeric) {
+					openLooperCode.append("\n\tfinal Map<String, List<Number>> %sAggrMap = new HashMap<String, List<Number>>();");
+				}
+				// TODO:  Handle JSON aggregations
+			}
+		}
 		
 		// =======================================================================
 		// Collect looper directives
 		// =======================================================================
-		final String[] looperExprs = looperExpr.split(",");  //  split(",") -->  a, b:c, d
+		final String[] looperExprs = looperExpr.split(",");  //  split(",") -->  a, b:c, d:<e:f>
 		final List<String> trimmedLoopers = new ArrayList<String>(looperExprs.length);
 		for(int i = 0; i < looperExprs.length; i++) {
 			if(looperExprs[i]==null) continue;
@@ -267,8 +300,10 @@ public class ExpressionCompiler {
 		}
 		if(!looperTypes.isEmpty()) {
 			final StringBuilder looperValuesBuff = new StringBuilder();
-			for(String s: looperTypes.keySet()) {
-				looperValuesBuff.append(s).append(",");
+			int expectedArgsCount = 0;
+			for(Map.Entry<String, Boolean> entry : looperTypes.entrySet()) {
+				looperValuesBuff.append(entry.getKey()).append(",");
+				expectedArgsCount += (entry.getValue() ? 1 : 2);
 			}
 			final String looperValuesSig = looperValuesBuff.deleteCharAt(looperValuesBuff.length()-1).toString().replace(':', ',');
 			openLooperCode.append("\n\t{\nif($4.length != %s) throw new RuntimeException(\"Expecting %s vargs but got only \" + $4.length);", looperTypes.size(), looperTypes.size());
@@ -329,8 +364,15 @@ public class ExpressionCompiler {
 			indent[0] = '\n';
 			openLooperCode.append(new String(indent)).append("final String[] _sargs_ = new String[]{%s};", looperValuesSig);
 			openLooperCode.append(new String(indent)).append("final boolean _dname_ = doName($1, $2, $3, _sargs_);");
-			openLooperCode.append(new String(indent)).append("final boolean _dvalue_ = doValue($1, $2, $3, _sargs_);");			
-			openLooperCode.append(new String(indent)).append("if(_dname_ && _dvalue_) { er.flush(erBuff); erBuff.append(EOL);}");			
+			openLooperCode.append(new String(indent)).append("final boolean _dvalue_ = doValue($1, $2, $3, _sargs_);");	
+			
+			if(looperAll) {
+				// openLooperCode.append("\n\tfinal Map<String, List<Number>> %sAggrMap = new HashMap<String, List<Number>>();");
+				
+			} else {
+				openLooperCode.append(new String(indent)).append("if(_dname_ && _dvalue_) { er.flush(erBuff); erBuff.append(EOL);}");
+			}
+
 			openLooperCode.append(new String(indent)).append("log.debug(\"dn:{}, dv:{}, ARGS:{}\", new Object[]{ \"\"+_dname_, \"\"+_dvalue_, _sargs_});");
 			
 			closeLooperCode.append("\n\treturn erBuff;\n}");
@@ -338,6 +380,22 @@ public class ExpressionCompiler {
 		} else {
 			return null;
 		}		
+	}
+	
+	
+	
+	/**
+	 * Tests the passed entry to see if it is a looper variable, and adds it's index to the passed map if it is.
+	 * @param variableNames The variable name map to add to
+	 * @param entry The entry to test
+	 */
+	protected void addVariableName(final Map<Integer, String> variableNames, final Map.Entry<String, String> entry) {
+		final String v = entry.getValue();
+		if(v==null || v.trim().isEmpty()) return;
+		final Matcher m = FREPL.matcher(v);
+		if(!m.matches()) return;
+		final int key = Integer.parseInt(m.group(2));
+		variableNames.put(key, entry.getKey().replace("{", "").replace("}", ""));
 	}
 	
 	/**
@@ -348,12 +406,14 @@ public class ExpressionCompiler {
 	 */
 	private Constructor<ExpressionProcessor> build(final String preLoopFullExpression, final ExpressionResult er) {
 		final LinkedHashMap<String, String> looperVariableDecodes = new LinkedHashMap<String, String>();
+		final HashMap<Integer, String> looperVariableNames = new HashMap<Integer, String>();
 		final String looperCodeBlock = buildLooperCode(preLoopFullExpression, looperVariableDecodes); 
 		final boolean isLooper = looperCodeBlock!=null;
 		final String fullExpression;
 		if(isLooper && !looperVariableDecodes.isEmpty()) {
 			String tmp = preLoopFullExpression;
 			for(Map.Entry<String, String> entry: looperVariableDecodes.entrySet()) {
+				addVariableName(looperVariableNames, entry);
 				final String token = entry.getKey();
 				final String replacement = entry.getValue();
 				tmp = tmp.replace(token, replacement);
@@ -410,7 +470,7 @@ public class ExpressionCompiler {
 			// Collect name directives
 			// =======================================================================
 
-			processName(nameExpr, codeBuffer);
+			processName(nameExpr, codeBuffer, looperVariableNames);
 			codeBuffer.append("\n\ter.objectName(nBuff);\n\treturn true;}");
 			log.info("Generated Name Code for Expr [{}]:\n{}", fullExpression, codeBuffer);
 
@@ -429,7 +489,7 @@ public class ExpressionCompiler {
 			// =======================================================================
 			// Collect value directives
 			// =======================================================================
-			processValue(valueExpr, codeBuffer);
+			processValue(valueExpr, codeBuffer, looperVariableNames);
 			codeBuffer.append("\n\ter.value(nBuff);\n\treturn true;}");
 			log.info("Generated Value Code:\n{}", codeBuffer);
 			
@@ -492,23 +552,23 @@ public class ExpressionCompiler {
 	
 	
 	
-	protected void processName(final String fullExpression, final CodeBuilder nameCode) {
+	protected void processName(final String fullExpression, final CodeBuilder nameCode, final Map<Integer, String> variableNames) {
 		String[] metricAndTags = NAME_TAG_SPLITTER.split(fullExpression);
 		if(metricAndTags.length!=2) throw new RuntimeException("Expression [" + fullExpression + "] did not split to 2 segments");
 		if(metricAndTags[0]==null || metricAndTags[0].trim().isEmpty()) throw new RuntimeException("MetricName segment in [" + fullExpression + "] was null or empty");
 		if(metricAndTags[1]==null || metricAndTags[1].trim().isEmpty()) throw new RuntimeException("Tags segment in [" + fullExpression + "] was null or empty");
 		metricAndTags[0] = metricAndTags[0].trim();
 		metricAndTags[1] = metricAndTags[1].trim();		
-		build(metricAndTags[0], nameCode);
+		build(metricAndTags[0], nameCode, variableNames);
 		nameCode.append("\n\tnBuff.append(\":\");");		
-		build(metricAndTags[1], nameCode);		
+		build(metricAndTags[1], nameCode, variableNames);		
 //		nameCode.append("\n\targsRepl(nBuff, $4);");
 	}
 	
-	protected void processValue(final String valueExpression, final CodeBuilder valueCode) {
+	protected void processValue(final String valueExpression, final CodeBuilder valueCode, final Map<Integer, String> variableNames) {
 		if(valueExpression==null || valueExpression.trim().isEmpty()) throw new RuntimeException("Value Expression was null or empty");
 		String valueExpr = valueExpression.trim();
-		build(valueExpr, valueCode);				
+		build(valueExpr, valueCode, variableNames);				
 	}
 	
 	public static void main(String[] args) {
@@ -634,7 +694,7 @@ public class ExpressionCompiler {
 	 * @param nameSegment The name portion of the raw expression
 	 * @param nameCode The code builder 
 	 */
-	protected void build(final String nameSegment, final CodeBuilder nameCode) {
+	protected void build(final String nameSegment, final CodeBuilder nameCode, final Map<Integer, String> variableNames) {
         int lstart = 0;
         int matcherStart = 0;
         int matcherEnd = 0;
@@ -645,7 +705,7 @@ public class ExpressionCompiler {
 			if(matcherStart > lstart) {
 				nameCode.append("\n\tnBuff.append(\"").append(nameSegment.substring(lstart, matcherStart)).append("\");");				
 			}
-			resolveDirective(m.group(), nameCode);
+			resolveDirective(m.group(), nameCode, variableNames);
 			lstart = matcherEnd;
 		}		
 		if(lstart < nameSegment.length()) {
@@ -655,10 +715,10 @@ public class ExpressionCompiler {
 	}
 	
 	
-	protected void resolveDirective(final String directive, final CodeBuilder nameCode) {
+	protected void resolveDirective(final String directive, final CodeBuilder nameCode, final Map<Integer, String> variableNames) {
 		for(DirectiveCodeProvider provider: providers) {
 			if(provider.match(directive)) {
-				provider.generate(directive, nameCode);
+				provider.generate(directive, nameCode, variableNames);
 				break;
 			}
 		}

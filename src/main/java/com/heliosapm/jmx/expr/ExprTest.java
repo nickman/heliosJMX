@@ -4,6 +4,7 @@ import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import com.heliosapm.jmx.util.helpers.CacheService;
 import com.heliosapm.jmx.util.helpers.JMXHelper;
+import com.heliosapm.jmx.util.helpers.SystemClock;
 import com.heliosapm.opentsdb.TSDBSubmitter;
 import com.heliosapm.opentsdb.TSDBSubmitterConnection;
 import com.heliosapm.opentsdb.TSDBSubmitterImpl.ExpressionResult;
@@ -28,6 +30,13 @@ class ExprTest {
 	/** Static class logger */
 	protected static final Logger log = LoggerFactory.getLogger(ExprTest.class);
 
+    /** The Classloading MXBean OjectName */
+    static final ObjectName CLASSLOADING_ON = JMXHelper.objectName("java.lang:type=ClassLoading");
+    /** The Compilation MXBean OjectName */
+    static final ObjectName COMPILATION_ON = JMXHelper.objectName("java.lang:type=Compilation");
+    /** The Memory MXBean OjectName */
+    static final ObjectName MEMORY_ON = JMXHelper.objectName("java.lang:type=Memory");
+	
 
         static final String[] testcases = new String[] {
         "'Tumblr' is an amazing app",
@@ -53,11 +62,18 @@ class ExprTest {
 
     public static void main (String[] args) {
     	log.info("JMX Expression Compiler Test");
-    	ExprTest etHbase = new ExprTest("service:jmx:attach:///[.*HMaster.*]", "hserval", "HBaseMaster");
-    	etHbase.traceJVMStats();
-    	ExprTest etLocal = new ExprTest("service:jmx:local:///DefaultDomain", "hserval", "ExprTest");
-    	etLocal.traceJVMStats();
-    	System.exit(-1);
+    	final Set<ExprTest> exprTests = new HashSet<ExprTest>();
+    	exprTests.add(new ExprTest("service:jmx:attach:///[.*HMaster.*]", "hserval", "HBaseMaster"));
+    	exprTests.add(new ExprTest("service:jmx:local:///DefaultDomain", "hserval", "ExprTest"));
+//    	exprTests.add(new ExprTest("service:jmx:tunnel://tpsolaris:8006/ssh/jmxmp:u=nwhitehe,p=mysol!1", "tpsolaris", "GroovyEngine"));
+    	//etLocal.traceJVMStats();
+    	while(true) {
+    		for(ExprTest ex: exprTests) {
+    			ex.traceJVMStats();
+    		}
+    		SystemClock.sleep(5000);
+    	}
+//    	System.exit(-1);
     	
     }
     
@@ -70,6 +86,7 @@ class ExprTest {
     private String agentId = null;
     private final Set<ObjectName> gcNames;
     private final Set<ObjectName> memPoolNames;
+    private Map<ObjectName, Map<String, Object>> targetObjectNames = null;
     
     public ExprTest(final String jmxUrl, final String host, final String app) {
     	Thread t = new Thread("ExprTest Closer") {
@@ -87,7 +104,22 @@ class ExprTest {
     	tsdbSub = tsdbConn.submitter().addRootTag("host", host).addRootTag("app", app).setLogTraces(true).setTraceInSeconds(true);
     	er = tsdbSub.newExpressionResult(); 
     	gcNames = new HashSet<ObjectName>(Arrays.asList(JMXHelper.query(mbeanServer, ManagementFactory.GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE + ",*", null)));
-    	memPoolNames = new HashSet<ObjectName>(Arrays.asList(JMXHelper.query(mbeanServer, ManagementFactory.MEMORY_POOL_MXBEAN_DOMAIN_TYPE + ",*", null)));
+    	memPoolNames = new HashSet<ObjectName>(Arrays.asList(JMXHelper.query(mbeanServer, ManagementFactory.MEMORY_POOL_MXBEAN_DOMAIN_TYPE + ",*", null)));    	
+    	targetObjectNames = JMXHelper.getMBeanAttributeMap(mbeanServer, JMXHelper.objectName("java.*:*"), "/");
+//    	for(Map.Entry<ObjectName, Map<String, Object>> entry: targetObjectNames.entrySet()) {
+//    		final ObjectName on = entry.getKey();
+//    		final Set<String> numericAttrs = new HashSet<String>();
+//    		for(Map.Entry<String, Object> data : entry.getValue().entrySet()) {
+//    			final String key = data.getKey();
+//    			final Object value = data.getValue();
+//    			if(value==null) continue;
+//    			if(Number.class.isAssignableFrom(value.getClass())) {
+//    				numericAttrs.add(key.split("/")[0]);
+//    			}
+//    		}
+//    		CacheService.getInstance().put(agentId + on, numericAttrs.toArray(new String[numericAttrs.size()]));
+//    	}
+    	log.info("Loaded [{}]", jmxUrl);
     }
     
     public void flush() {
@@ -97,7 +129,11 @@ class ExprTest {
     public void traceJVMStats() {
     	traceBasicNumerics(agentId, mbeanServer, er, CLASSLOADING_ON);
     	traceBasicNumerics(agentId, mbeanServer, er, COMPILATION_ON);
+    	traceBasicNumerics(agentId, mbeanServer, er, MEMORY_ON);
     	for(ObjectName on: gcNames) {
+    		traceBasicNumerics(agentId, mbeanServer, er, on);
+    	}
+    	for(ObjectName on: memPoolNames) {
     		traceBasicNumerics(agentId, mbeanServer, er, on);
     	}
     	
@@ -110,45 +146,41 @@ class ExprTest {
     }
     
     static final List<String> REF_VAR = Collections.unmodifiableList(new ArrayList<String>(0));
-    
-    static final ObjectName CLASSLOADING_ON = JMXHelper.objectName("java.lang:type=ClassLoading");
-    
-    static final ObjectName COMPILATION_ON = JMXHelper.objectName("java.lang:type=Compilation");
-    static final String[] COMPILATION_ATTRS = {"TotalCompilationTime"};
-    static final List<String> COMPILATION_ATTR_LIST = Collections.unmodifiableList(new ArrayList<String>(Arrays.asList(COMPILATION_ATTRS)));
+    static final Map<String, String> MAP_REF_VAR = Collections.unmodifiableMap(new HashMap<String, String>(0));
     
     
-    public static String[] getNumericAttrs(final String agentId, final MBeanServerConnection mbeanServer, final ObjectName on) {
-    	return CacheService.getInstance().get(agentId + on, String[].class, new Callable<String[]>() {
-    		@Override
-    		public String[] call() throws Exception {    			
-    			return JMXHelper.getNumericAttributeNames(on, mbeanServer);
-    		}
-    	}); 
-    }
     
     @SuppressWarnings("unchecked")
-	public static List<String> getNumericAttrList(final String agentId, final MBeanServerConnection mbeanServer, final ObjectName on) {    	
-    	return CacheService.getInstance().get(agentId + on + "List", REF_VAR.getClass(), new Callable<List<String>>() {
+	public static Map<String, String> getNumericAttrs(final String agentId, final MBeanServerConnection mbeanServer, final ObjectName on) {
+    	return CacheService.getInstance().get(agentId + on, MAP_REF_VAR.getClass(), new Callable<Map<String, String>>() {
     		@Override
-    		public List<String> call() throws Exception {    			
-    			return new ArrayList<String>(Arrays.asList(getNumericAttrs(agentId, mbeanServer, on)));
+    		public Map<String, String> call() throws Exception {    	
+    			Map<String, String> names = new HashMap<String, String>();
+    			for(Map.Entry<String, Object> entry: JMXHelper.getMBeanAttributeMap(mbeanServer,on, "/").get(on).entrySet()) {
+	    			final String key = entry.getKey();
+	    			final Object value = entry.getValue();
+	    			if(value==null) continue;
+	    			if(Number.class.isAssignableFrom(value.getClass())) {
+	    				names.put(key.split("/")[0], key);
+	    			}
+    				
+    			}
+    			System.out.println("\n\tATTRS for [" + on + "/" + agentId + "]:" + names.toString());
+    			return names;
     		}
     	}); 
     }
     
     
-    public static void traceBasicNumerics(final String agentId, final MBeanServerConnection mbeanServer, final ExpressionResult er, final ObjectName on) {    	    	
-    	final Map<String, Object> attrs = JMXHelper.getAttributes(on, mbeanServer, getNumericAttrs(agentId, mbeanServer, on));
-    	ExpressionProcessor ep = ExpressionCompiler.getInstance().get("foreach(clAttr) {domain}.classload.{clAttr}::{allkeys}->{attr:{clAttr}}", er);
-    	ep.process(agentId, attrs, on, getNumericAttrList(agentId, mbeanServer, on));    	
+    public static final String BASIC_NUMERIC_JMX_ATTRS = "foreach(sk:lk) {domain}.{key:type}.{sk}::{allkeys}->{attr:{lk}}";
+    
+    public static void traceBasicNumerics(final String agentId, final MBeanServerConnection mbeanServer, final ExpressionResult er, final ObjectName on) {
+    	Map<String, String> jkeys = getNumericAttrs(agentId, mbeanServer, on);    	
+    	final Map<String, Object> attrs = JMXHelper.getMBeanAttributeMap(mbeanServer, on, "/", jkeys.keySet().toArray(new String[jkeys.size()])).get(on);
+    	ExpressionProcessor ep = ExpressionCompiler.getInstance().get(BASIC_NUMERIC_JMX_ATTRS, er);
+    	ep.process(agentId, attrs, on, jkeys);    	
     }
     
-    public static void traceCompilation(final String agentId, final MBeanServerConnection mbeanServer, final ExpressionResult er) {
-    	final Map<String, Object> attrs = JMXHelper.getAttributes(COMPILATION_ON, mbeanServer, COMPILATION_ATTRS);
-    	ExpressionProcessor ep = ExpressionCompiler.getInstance().get("foreach(clAttr) {domain}.compilation.{clAttr}::{allkeys}->{attr:{clAttr}}", er);
-    	ep.process(agentId, attrs, COMPILATION_ON, COMPILATION_ATTR_LIST);    	
-    }
     
 }
 

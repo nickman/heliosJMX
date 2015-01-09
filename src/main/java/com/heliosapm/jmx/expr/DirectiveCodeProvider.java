@@ -24,6 +24,8 @@
  */
 package com.heliosapm.jmx.expr;
 
+import java.util.Map;
+
 
 
 /**
@@ -47,8 +49,9 @@ public interface DirectiveCodeProvider {
 	 * </ul>
 	 * @param directive The directive to generate the code for
 	 * @param code The code buffer to append to
+	 * @param argNames A mapping of variable names to args indexes
 	 */
-	public void generate(final String directive, final CodeBuilder code);
+	public void generate(final String directive, final CodeBuilder code, final Map<Integer, String> argNames);
 	
 	/**
 	 * Indicates if the passed directive should be processed by this provider

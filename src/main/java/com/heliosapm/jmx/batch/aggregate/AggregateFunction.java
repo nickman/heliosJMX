@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -13,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 
 
@@ -31,51 +34,54 @@ import java.util.concurrent.TimeUnit;
 
 public enum AggregateFunction implements IAggregator {
 	/** Calculates the sum of the returned values */
-	SUM(new SumAggregator(false)),
+	SUM("sum", new SumAggregator(false)),
 	/** Calculates the sum of the returned values (strict) */
-	STRSUM(new SumAggregator(true)),
+	STRSUM(true, "ssum", new SumAggregator(true)),
 	/** Returns the number of items in the result set */
-	COUNT(new CountAggregator(false)),
+	COUNT("count", new CountAggregator(false)),
 	/** Returns the number of items in the result set (strict) */
-	STRCOUNT(new CountAggregator(true)),
+	STRCOUNT(true, "scount", new CountAggregator(true)),
 	
 	/** Returns the average of the returned values */
-	AVG(new AverageAggregator(false)),
+	AVG("avg", new AverageAggregator(false)),
 	/** Returns the average of the returned values (strict) */
-	STRAVG(new AverageAggregator(true)),
+	STRAVG(true, "savg", new AverageAggregator(true)),
 	/** Returns the minimum value */
-	MIN(new MinAggregator(false)),
+	MIN("min", new MinAggregator(false)),
 	/** Returns the minimum value (strict)*/
-	STRMIN(new MinAggregator(true)),
+	STRMIN(true, "smin", new MinAggregator(true)),
 	
 	/** Returns the maximum value */
-	MAX(new MaxAggregator(false)),
+	MAX("max", new MaxAggregator(false)),
 	/** Returns the maximum value (strict)*/
-	STRMAX(new MaxAggregator(true)),
-	
-	/** Returns the number of distinct items based on {@link Object#equals(Object)}  */
-	DISTINCT(new DistinctAggregator()),
-	/** Returns a json group with each unique item and a count of the occurences */
-	GROUP(new GroupAggregator()),
-	/** Returns a JSON composite of Min, Max, Average and Count */
-	MMAC(new MinMaxAvgCntAggregator(false)),
-	/** Returns a JSON composite of Min, Max, Average and Count (strict) */
-	STRMMAC(new MinMaxAvgCntAggregator(true)),
-	
+	STRMAX(true, "smax", new MaxAggregator(true)),
+		
 	/** Returns the average delta of the sequence of passed items */
-	DELTA_ALL(new Delta(false)),	
+	DELTA_ALL("delta", new Delta(false)),	
 	/** Returns the delta of the most recent 2 of the passed items */
-	DELTA_LAST(new Delta(true)),
+	DELTA_LAST("deltal", new Delta(true)),
 	
 	/** Returns the average rate per second from the sequence of passed items */
-	PS_RATE_ALL(new Rate(false, TimeUnit.SECONDS)),	
+	PS_RATE_ALL("rate", new Rate(false, TimeUnit.SECONDS)),	
 	/** Returns the rate per second from the most recent 2 of the passed items */
-	PS_RATE_LAST(new Rate(false, TimeUnit.SECONDS)),
+	PS_RATE_LAST("ratel", new Rate(false, TimeUnit.SECONDS)),
 
 	/** Returns the average rate per milli-second from the sequence of passed items */
-	PMS_RATE_ALL(new Rate(false, TimeUnit.MILLISECONDS)),	
+	PMS_RATE_ALL("msrate", new Rate(false, TimeUnit.MILLISECONDS)),	
 	/** Returns the rate per milli-second from the most recent 2 of the passed items */
-	PMS_RATE_LAST(new Rate(false, TimeUnit.MILLISECONDS));
+	PMS_RATE_LAST("msratel", new Rate(false, TimeUnit.MILLISECONDS)),
+	
+	/** Returns the number of distinct items based on {@link Object#equals(Object)}  */
+	DISTINCT("dist", new DistinctAggregator()),
+	
+	
+	/** Returns a json group with each unique item and a count of the occurences */
+	GROUP(false, "grp", new GroupAggregator()),
+	/** Returns a JSON composite of Min, Max, Average and Count */
+	MMAC(false, "mmac", new MinMaxAvgCntAggregator(false)),
+	/** Returns a JSON composite of Min, Max, Average and Count (strict) */
+	STRMMAC(true, false, "smmac", new MinMaxAvgCntAggregator(true));
+
 	
 //	  /**
 //	   * Jackson de/serializer initialized, configured and shared
@@ -101,15 +107,50 @@ public enum AggregateFunction implements IAggregator {
 	
 
 	/**
-	 * Creates a new AggregateFunction
+	 * Creates a new numeric return AggregateFunction
+	 * @param name The aggregate short name
 	 * @param aggr The entry's aggregator
 	 */
-	private AggregateFunction(IAggregator aggr) {
-		this.aggr = aggr;
+	private AggregateFunction(final String name, final IAggregator aggr) {
+		this(true, name, aggr);
 	}
 	
+	/**
+	 * Creates a new AggregateFunction
+	 * @param numeric true for numeric returns, false for JSON
+	 * @param name The aggregate short name
+	 * @param aggr The entry's aggregator
+	 */
+	private AggregateFunction(final boolean numeric, final String name, final IAggregator aggr) {
+		this(false, true, name, aggr);
+	}
+	
+	/**
+	 * Creates a new AggregateFunction
+	 * @param strict true if the numeric aggregator is strict
+	 * @param numeric true for numeric returns, false for JSON
+	 * @param name The aggregate short name
+	 * @param aggr The entry's aggregator
+	 */
+	private AggregateFunction(final boolean strict, final boolean numeric, final String name, final IAggregator aggr) {
+		this.aggr = aggr;
+		this.name = name;
+		this.numeric = numeric;
+		this.strict = strict;
+		
+	}
+	
+
+	
 	/** The enum entry's aggregator implementation */
-	private final IAggregator aggr;
+	public final IAggregator aggr;
+	/** The enum entry's short name */
+	public final String name;
+	/** Indicates if the enum entry's aggregator implementation returns a number */
+	public final boolean numeric;
+	/** Indicates if the enum entry's numeric aggregator implementation is strict */
+	public final boolean strict;
+	
 	
 	/**
 	 * {@inheritDoc}
@@ -136,15 +177,60 @@ public enum AggregateFunction implements IAggregator {
 	}
 	
 	/**
-	 * Retrieves an AggregateFunction by name, returning null for no match
-	 * @param name The name of the function to apply
-	 * @return the named AggregateFunction or null if one was not found
+	 * Indicates if the passed name is a valid AggregateFunction. Applies trim and toUpper to the name first.
+	 * @param name The name of the function
+	 * @return true if the passed name is a valid AggregateFunction, false otherwise
 	 */
-	public static AggregateFunction getAggregateFunction(CharSequence name) {
+	public static boolean isName(CharSequence name) {
+		if(name==null) throw new IllegalArgumentException("The passed AggregateFunction name was null", new Throwable());
 		try {
-			return forName(name);
+			AggregateFunction.valueOf(name.toString().trim().toUpperCase());
+			return true;
 		} catch (Exception e) {
-			return null;
+			return false;
+		}
+	}
+	
+	
+	/** Comma split pattern */
+	public static final Pattern COMMA_SPLITTER = Pattern.compile(",");
+	/** Empty array const */
+	public static final AggregateFunction[] EMPTY_ARR = {};
+	
+	/** A map of AggregateFunction keyed by the short names */
+	public static final Map<String, AggregateFunction> NAME2ENUM;
+	
+	static {
+		final AggregateFunction[] values = AggregateFunction.values();
+		Map<String, AggregateFunction> tmp = new HashMap<String, AggregateFunction>(values.length);
+		for(AggregateFunction af: values) {
+			tmp.put(af.name, af);
+		}
+		NAME2ENUM = Collections.unmodifiableMap(tmp);
+	}
+	
+	/**
+	 * Retrieves the AggregateFunctions by short name or enum name, returning an empty array for no match
+	 * @param name The comma separated values to decode
+	 * @return an array (possibly zero length) of matching AggregateFunctions
+	 */
+	public static AggregateFunction[] forNames(CharSequence name) {
+		if(name==null || name.toString().trim().isEmpty()) return EMPTY_ARR;
+		try {
+			final Set<AggregateFunction> set = EnumSet.noneOf(AggregateFunction.class);
+			String[] names = COMMA_SPLITTER.split(name.toString().replace(" ", ""));
+			for(String s: names) {
+				if(isName(s)) set.add(valueOf(s.trim().toUpperCase()));
+				else {
+					AggregateFunction af = NAME2ENUM.get(s.trim().toLowerCase());
+					if(af!=null) {
+						set.add(af);
+					}
+				}
+			}
+			return set.toArray(new AggregateFunction[set.size()]);
+		} catch (Exception e) {
+			return EMPTY_ARR;
 		}
 	}
 	

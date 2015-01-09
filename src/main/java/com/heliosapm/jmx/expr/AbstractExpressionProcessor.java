@@ -24,8 +24,10 @@
  */
 package com.heliosapm.jmx.expr;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,6 +39,7 @@ import javax.script.CompiledScript;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.heliosapm.jmx.batch.aggregate.AggregateFunction;
 import com.heliosapm.jmx.util.helpers.ArrayUtils;
 import com.heliosapm.jmx.util.helpers.CacheService;
 import com.heliosapm.opentsdb.TSDBSubmitterImpl.ExpressionResult;
@@ -142,6 +145,51 @@ public abstract class AbstractExpressionProcessor implements ExpressionProcessor
 			int pos = buff.indexOf(tok);
 			buff.replace(pos, pos + tok.length(), args[index]);
 		}
+	}
+	
+	public static void appendAggregate(final String key, final Map<String, List<Number>> aggrMap, final AggregateFunction aggrFx, final Object value) {
+		
+	}
+	
+	public static Number toNumber(final Object value, final boolean strict) {
+		if(value==null) {
+			if(strict) throw new IllegalArgumentException("The passed value was null");
+			return null;
+		}
+		if(value instanceof Number) {
+			return (Number)value;
+		} else {
+			String valStr = value.toString().trim();
+			if(valStr.isEmpty()) {
+				if(strict) throw new IllegalArgumentException("The passed value [" + value + "] evaluated to an empty string");
+				return null;
+			}
+			if("null".equals(valStr)) {
+				if(strict) throw new IllegalArgumentException("The passed value [" + value + "] evaluated to a null");
+				return null;
+			}
+			final int index = valStr.indexOf('.'); 
+			if(index != -1) {
+				try {
+					if(valStr.substring(index+1).replace("0", "").isEmpty()) {
+						return Long.parseLong(valStr.substring(0, index));				
+					} else {
+						return Double.parseDouble(valStr);
+					}
+				} catch (Exception ex) {
+					if(strict) throw new IllegalArgumentException("Failed to parse the passed value [" + value + "] to a number");
+					return null;
+				}
+			} else {
+				try {
+					return Long.parseLong(valStr);
+				} catch (Exception ex) {
+					if(strict) throw new IllegalArgumentException("Failed to parse the passed value [" + value + "] to a number");
+					return null;
+				}					
+			}
+		}
+		
 	}
 	
 	

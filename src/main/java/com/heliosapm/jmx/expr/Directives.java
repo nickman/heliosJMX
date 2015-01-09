@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
@@ -93,7 +94,7 @@ public class Directives {
 		final CacheService cache = CacheService.getInstance();
 
 		@Override
-		public void generate(final String directive, final CodeBuilder code) {
+		public void generate(final String directive, final CodeBuilder code, final Map<Integer, String> argNames) {
 			Matcher m = ELAPSED_EXPR.matcher(directive);
 			// "\\{elapsed(?:\\((.*?)\\))?\\}"
 			m.matches();
@@ -138,7 +139,7 @@ public class Directives {
 		final StateService state = StateService.getInstance();
 		
 		@Override
-		public void generate(final String directive, final CodeBuilder code) {
+		public void generate(final String directive, final CodeBuilder code, final Map<Integer, String> argNames) {
 			Matcher m = EVAL_EXPR.matcher(directive);
 			//   "\\{eval(.*?):(?:d\\((.*?)\\):)?(.*)\\}"
 			m.matches();
@@ -156,6 +157,13 @@ public class Directives {
 			code.append("\n\tb.put(\"attrValues\", $2);");
 			code.append("\n\tb.put(\"objectName\", $3);");
 			code.append("\n\tb.put(\"javax.script.argv\", $4);");
+			if(argNames!=null && !argNames.isEmpty()) {
+				for(Map.Entry<Integer, String> entry: argNames.entrySet()) {
+					final int index = entry.getKey();
+					final String name = entry.getValue();
+					code.append("\n\tb.put(\"%s\", $4[%s]);", name, index);
+				}
+			}
 			code.append("\n\tb.put(\"exResult\", er);");			
 			code.append("\n\ttry {");
 			if(defaultValue!=null && !defaultValue.trim().isEmpty()) {
@@ -192,7 +200,7 @@ public class Directives {
 	public static class ObjectNameKeyValueDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final CodeBuilder code) {
+		public void generate(final String directive, final CodeBuilder code, final Map<Integer, String> argNames) {
 			// "\\{keyval:(.*?)\\}"
 			code.append("\n\tif($3==null) return false;");
 			Matcher m = KEY_EXPR.matcher(directive);
@@ -230,7 +238,7 @@ public class Directives {
 	public static class ObjectNameKeyDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final CodeBuilder code) {
+		public void generate(final String directive, final CodeBuilder code, final Map<Integer, String> argNames) {
 			code.append("\n\tif($3==null) return false;");
 			
 			Matcher m = KEY_EXPR.matcher(directive);
@@ -268,7 +276,7 @@ public class Directives {
 	public static class AttributeDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final CodeBuilder code) {
+		public void generate(final String directive, final CodeBuilder code, final Map<Integer, String> argNames) {
 			Matcher m = ATTR_EXPR.matcher(directive);
 			// "\\{attr:(.*?)\\}"
 			m.matches();
@@ -304,7 +312,7 @@ public class Directives {
 	public static class AllKeysDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final CodeBuilder code) {
+		public void generate(final String directive, final CodeBuilder code, final Map<Integer, String> argNames) {
 			code.append("\n\tif($3==null) return false;");
 			code.append("\n\tnBuff.append($3.getKeyPropertyListString());");  // \n\treturn true;
 		}
@@ -327,7 +335,7 @@ public class Directives {
 	public static class ArrayDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final CodeBuilder code) {
+		public void generate(final String directive, final CodeBuilder code, final Map<Integer, String> argNames) {
 			final Set<String> values = new LinkedHashSet<String>();
 			Matcher m = ARR_EXPR.matcher(directive);
 			m.matches();
@@ -366,6 +374,7 @@ public class Directives {
 	}
 	
 	
+	
 	/**
 	 * <p>Title: DomainDirective</p>
 	 * <p>Description: Directive processor that acquires the ObjectName domain</p>
@@ -376,7 +385,7 @@ public class Directives {
 	public static class DomainDirective implements DirectiveCodeProvider {
 		
 		@Override
-		public void generate(final String directive, final CodeBuilder code) {
+		public void generate(final String directive, final CodeBuilder code, final Map<Integer, String> argNames) {
 			code.append("\n\tif($3==null || $3.isDomainPattern()) return false;");
 			code.append("\n\tnBuff.append($3.getDomain());");
 //			code.append("\n\treturn true;");

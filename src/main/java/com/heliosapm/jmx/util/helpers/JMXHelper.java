@@ -58,6 +58,10 @@ import javax.management.NotificationListener;
 import javax.management.ObjectName;
 import javax.management.QueryExp;
 import javax.management.openmbean.CompositeData;
+import javax.management.openmbean.CompositeType;
+import javax.management.openmbean.OpenMBeanAttributeInfo;
+import javax.management.openmbean.TabularData;
+import javax.management.openmbean.TabularType;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXConnectorServer;
@@ -870,7 +874,7 @@ public class JMXHelper {
 	public static Map<String, Object> getAttributes(ObjectName on, MBeanServerConnection server, String...attributes) {
 		try {
 			if(attributes==null || attributes.length<1) {
-				attributes = getAttributeNames(on, server);
+				attributes = getAttributeNames(on, server);				
 			}
 			Map<String, Object> attrs = new HashMap<String, Object>(attributes.length);
 			AttributeList attributeList = server.getAttributes(on, attributes);
@@ -1378,45 +1382,57 @@ while(m.find()) {
 	public static Map<ObjectName, Map<String, Object>> getMBeanAttributeMap(MBeanServerConnection server, ObjectName objectName, String delimeter, String...attributeNames) {
 		if(server==null) throw new RuntimeException("MBeanServerConnection was null", new Throwable());
 		if(objectName==null) throw new RuntimeException("ObjectName was null", new Throwable());
-		if(attributeNames==null || attributeNames.length<1) throw new RuntimeException("Attribute names array was null or zero length", new Throwable());
-		String[] rootNames = new String[attributeNames.length];
-		Map<String, String> compoundNames = new HashMap<String, String>();
-		for(int i = 0; i < attributeNames.length; i++) {
-			String rootKey = null;
-			if(attributeNames[i].contains(delimeter)) {
-				String[] fragments = attributeNames[i].split(Pattern.quote(delimeter));
-				rootKey = fragments[0];
-				compoundNames.put(rootKey, attributeNames[i]);
-			} else {
-				rootKey = attributeNames[i];
-			}
-			rootNames[i] = rootKey;
+		if(attributeNames==null || attributeNames.length<1) {
+			attributeNames = new String[]{"*"};
 		}
+//		String[] rootNames = new String[attributeNames.length];
+//		Map<String, String> compoundNames = new HashMap<String, String>();
+//		for(int i = 0; i < attributeNames.length; i++) {
+//			String rootKey = null;
+//			if(attributeNames[i].contains(delimeter)) {
+//				String[] fragments = attributeNames[i].split(Pattern.quote(delimeter));
+//				rootKey = fragments[0];
+//				compoundNames.put(rootKey, attributeNames[i]);
+//			} else {
+//				rootKey = attributeNames[i];
+//			}
+//			rootNames[i] = rootKey;
+//		}
 		Map<ObjectName, Map<String, Object>> map = new HashMap<ObjectName, Map<String, Object>>();		
 		try {
 			for(ObjectName on: server.queryNames(objectName, null)) {
 				AttributeList attrs = null;
 				try {
-					attrs = server.getAttributes(on, rootNames);
+					String[] anames = null;
+					if(attributeNames!=null && attributeNames.length==1 && "*".equals(attributeNames[0])) {
+						anames = getAttributeNames(on, server);
+					} else {
+						anames = attributeNames;
+					}
+					attrs = server.getAttributes(on, anames);
 					if(attrs.size()<1) continue;
 				} catch (Exception e) {
 					continue;
 				}
 				Map<String, Object> attrMap = new HashMap<String, Object>();
 				map.put(on, attrMap);
+				final MBeanInfo mbeanInfo = getMBeanInfo(server, on);
+				final Map<String, MBeanAttributeInfo> attrInfos = indexAttributes(mbeanInfo);
 				for(Attribute attr: attrs.asList()) {
 					Object value = attr.getValue();
 					if(value==null) continue;
 					String name = attr.getName();
-					if(value instanceof CompositeData && compoundNames.containsKey(name)) {
+					MBeanAttributeInfo attrInfo = attrInfos.get(name);
+					if(value instanceof CompositeData || value instanceof TabularData) {
 						try {
-							name = compoundNames.get(name);
-							value = extractCompositeData((CompositeData)value, delimeter, name);
+							Map<String, Object> indexedData = indexOpenData(name, value, delimeter, attrInfo);
+							attrMap.putAll(indexedData);
 						} catch (Exception e) {
 							continue;
 						}
+					} else {
+						attrMap.put(name, value);
 					}
-					attrMap.put(name, value);
 				}
 			}
 		} catch (Exception e) {
@@ -1504,10 +1520,65 @@ while(m.find()) {
 		return value;
 	}
 	
+	/**
+	 * Indexes the attributes of the passed MBeanInfo by name
+	 * @param mbeanInfo The MBeanInfo to index the attributes for
+	 * @return A map of MBeanAttributeInfo keyed by name
+	 */
+	public static Map<String, MBeanAttributeInfo> indexAttributes(final MBeanInfo mbeanInfo) {
+		if(mbeanInfo==null) return Collections.emptyMap();
+		final MBeanAttributeInfo[] infos = mbeanInfo.getAttributes();
+		final Map<String, MBeanAttributeInfo> map = new HashMap<String, MBeanAttributeInfo>(infos.length);
+		for(MBeanAttributeInfo info: infos) {
+			map.put(info.getName(), info);
+		}
+		return map;
+	}
+	
+	/**
+	 * Indexes the passed OpenData instance
+	 * @param name The attribute name
+	 * @param openData The OpenData instance
+	 * @param delimiter The composite key delimiter
+	 * @param attrInfo The MBeanAttributeInfo for the source MBean 
+	 * @return a map of values keyed by the composite key
+	 */
+	public static Map<String, Object> indexOpenData(final String name, final Object openData, String delimiter, final MBeanAttributeInfo attrInfo) {
+		if(openData==null) return Collections.emptyMap();
+		if(delimiter==null) delimiter = "/";		
+		final Map<String, Object> indexMap = new HashMap<String, Object>();
+		if(openData instanceof CompositeData) {
+			CompositeData cd = (CompositeData)openData;
+			CompositeType ct = cd.getCompositeType();
+			for(String key: ct.keySet()) {
+				indexMap.put(name + delimiter + key , cd.get(key));
+			}			
+		} else if(openData instanceof TabularData) {
+			TabularData td = (TabularData)openData;
+			TabularType tt = td.getTabularType();
+			CompositeType ct = tt.getRowType();			
+			@SuppressWarnings("unchecked")
+			Set<List<?>> keySets = (Set<List<?>>) td.keySet();
+			for(List<?> keyset: keySets) {
+				StringBuilder compositeKey = new StringBuilder(name).append(delimiter);
+				for(Object k: keyset) {
+					compositeKey.append(k).append(delimiter);
+				}
+				CompositeData cd = td.get(keyset.toArray());				
+				for(String key: ct.keySet()) {
+					indexMap.put(compositeKey.toString() + key, cd.get(key));
+				}
+			}
+		} else  {
+			System.err.println("\n\t!!!!!!!!!!!!!!!!\n\tUnhandled OpenType for [" + name + "]:" + openData.getClass().getName() + "\n\t!!!!!!!!!!!!!!!!\n");
+		}
+		return indexMap;
+	}
+	
 	
 	
 	/**
-	 * An regex pattern to parse A[X/Y/Z...] 
+	 * A regex pattern to parse A[X/Y/Z...] 
 	 */
 	public static final Pattern OBJECT_NAME_ATTR_PATTERN = Pattern.compile("(\\S+)\\[(\\S+)\\]"); 
 	

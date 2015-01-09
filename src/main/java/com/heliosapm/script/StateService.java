@@ -132,7 +132,8 @@ public class StateService extends NotificationBroadcasterSupport implements Stat
 	
 	/** A set of javascript helper source code file names */
 	public static final Set<String> JS_HELPERS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
-			"math.js", "helpers.js"
+			//"math.js", 
+			"helpers.js"
 	)));
 	/** The script engine manager */
 	private final ScriptEngineManager sem;
