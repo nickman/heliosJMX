@@ -27,7 +27,7 @@ mbs = null;
 try {
 	if(jmxConnector!=null) {
 		if(jmxConn==null) {
-			jmxConn = jmxConnector.get(['HOST' : 'localhost', 'PORT' : 8006, 'KEYPHR' : 'helios']);			
+			jmxConn = jmxConnector.get(['HOST' : 'localhost', 'PORT' : 8006, 'KEYPHR' : 'helios', 'SVRKEY' : false]);			
 
 		}
 		mbs = jmxConn.getMBeanServerConnection();
@@ -38,7 +38,7 @@ try {
 
 	if(shellFactory!=null) {
 		if(shell==null) {
-			shell = shellFactory.get(['HOST' : 'localhost', 'KEYPHR' : 'helios']);
+			shell = shellFactory.get(['HOST' : 'localhost', 'KEYPHR' : 'helios', 'SVRKEY' : false]);
 		}
 		//println "Injected shellFactory: $shellFactory  -->  ${shell}   -  ${System.identityHashCode(shellFactory)}";
 		//println "UPTIME: ${shell.exec('uptime')} \n\t --------> ${System.identityHashCode(shell)} WOOT !"

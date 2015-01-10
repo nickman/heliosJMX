@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.LinkedHashSet;
@@ -40,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -60,6 +62,11 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.MetricRegistry;
+import com.github.sps.metrics.OpenTsdbReporter;
+import com.github.sps.metrics.opentsdb.OpenTsdb;
 import com.heliosapm.filewatcher.ScriptFileWatcher;
 import com.heliosapm.jmx.config.Configuration;
 import com.heliosapm.jmx.config.ConfigurationManager;
@@ -114,6 +121,16 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	/** The version number of this deployment */
 	protected final AtomicInteger version = new AtomicInteger(0);
 	
+	/** The deployed script metric registry */
+	protected static final MetricRegistry metrics = new MetricRegistry();
+	
+	static {
+		final JmxReporter reporter = JmxReporter.forRegistry(metrics).build();
+		reporter.start();
+		final OpenTsdbReporter tsdbReporter = OpenTsdbReporter.forRegistry(metrics).build(OpenTsdb.getInstance());
+		tsdbReporter.start(5, TimeUnit.SECONDS);
+	}
+	
 	/** The config change listener */
 	protected final NotificationListener configChangeListener = new NotificationListener() {
 		@Override
@@ -163,6 +180,8 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 	/** The deployment's JMX ObjectName */
 	protected final ObjectName objectName;
 	
+	protected final Histogram execElapsedTimes;
+	
 	
 	/** The descriptors of the JMX notifications emitted by this service */
 	private static final MBeanNotificationInfo[] notificationInfos = new MBeanNotificationInfo[] {
@@ -211,7 +230,9 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 			config.registerInternalListener(this);
 		}
 		checksum = URLHelper.adler32(URLHelper.toURL(sourceFile));
-		lastModified = URLHelper.getLastModified(URLHelper.toURL(sourceFile));				
+		lastModified = URLHelper.getLastModified(URLHelper.toURL(sourceFile));		
+		execElapsedTimes = metrics.histogram(MetricRegistry.name("name=" + shortName, "fx=execution"));
+		
 	}
 	
 	/**
@@ -425,7 +446,8 @@ public abstract class AbstractDeployedScript<T> extends NotificationBroadcasterS
 				final Object ret = doExecute();
 				execCount.incrementAndGet();
 				lastExecTime.set(now);
-				long elapsed = System.currentTimeMillis() - now;
+				long elapsed = System.currentTimeMillis() - now;				
+				execElapsedTimes.update(elapsed);
 				lastExecElapsed.set(elapsed);
 				log.debug("Elapsed: [{}] ms.", elapsed);
 				return (T) ret;
